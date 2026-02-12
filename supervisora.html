@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Supervisora - Multifundas</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/supervisora.css">
+    <link rel="stylesheet" href="css/coco-dashboard.css">
+</head>
+<body>
+    <div class="supervisora-container">
+        <!-- Header -->
+        <header class="supervisora-header">
+            <div class="header-left">
+                <a href="index.html" class="back-link">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
+                <h1><i class="fas fa-industry"></i> Panel Supervisora</h1>
+                <span class="header-badge">En Vivo</span>
+            </div>
+            <div class="header-center">
+                <div class="stats-bar">
+                    <div class="stat-item">
+                        <span class="stat-value" id="statActivos">0</span>
+                        <span class="stat-label">Activos</span>
+                    </div>
+                    <div class="stat-item warning">
+                        <span class="stat-value" id="statInactivos">0</span>
+                        <span class="stat-label">Inactivos</span>
+                    </div>
+                    <div class="stat-item success">
+                        <span class="stat-value" id="statPiezasHoy">0</span>
+                        <span class="stat-label">Piezas Hoy</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="statEficiencia">0%</span>
+                        <span class="stat-label">Eficiencia</span>
+                    </div>
+                </div>
+            </div>
+            <div class="header-right">
+                <!-- Toggle Día/Noche -->
+                <div class="theme-toggle" onclick="toggleTheme()">
+                    <div class="theme-toggle-track" id="themeTrack">
+                        <i class="fas fa-sun theme-icon-sun"></i>
+                        <i class="fas fa-moon theme-icon-moon"></i>
+                        <div class="theme-toggle-thumb" id="themeThumb"></div>
+                    </div>
+                </div>
+                <button class="btn-icon" onclick="toggleModoTV()" title="Modo TV" id="btnModoTV">
+                    <i class="fas fa-tv"></i>
+                </button>
+                <button class="btn-icon" onclick="toggleFullscreen()" title="Pantalla completa">
+                    <i class="fas fa-expand"></i>
+                </button>
+                <button class="btn-icon" onclick="refreshData()" title="Actualizar">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <button class="btn-icon" onclick="mostrarModalEnviarMensaje()" title="Enviar mensaje a operadoras">
+                    <i class="fas fa-comment-dots"></i>
+                </button>
+                <button class="btn-icon notif-btn" onclick="toggleNotificaciones()" title="Notificaciones" id="btnNotificaciones">
+                    <i class="fas fa-bell"></i>
+                    <span class="notif-badge" id="notifBadge">0</span>
+                </button>
+                <button class="btn btn-inventario" onclick="showInventarioGeneralSupervisora()" title="Inventario de Piezas">
+                    <i class="fas fa-warehouse"></i> Inventario
+                </button>
+                <a href="layout-editor.html" class="btn btn-outline">
+                    <i class="fas fa-edit"></i> Editar Layout
+                </a>
+            </div>
+        </header>
+
+        <!-- Navegación de secciones - Panel Inteligente Coco -->
+        <nav class="coco-nav">
+            <button class="nav-tab active" onclick="showSection('planta')" data-section="planta">
+                <i class="fas fa-industry"></i>
+                <span>Vista Planta</span>
+            </button>
+            <button class="nav-tab" onclick="showSection('dashboard')" data-section="dashboard">
+                <i class="fas fa-chart-line"></i>
+                <span>Mi Dashboard</span>
+            </button>
+            <button class="nav-tab" onclick="showSection('calendario')" data-section="calendario">
+                <i class="fas fa-calendar-alt"></i>
+                <span>Calendario</span>
+            </button>
+            <button class="nav-tab" onclick="showSection('reportes')" data-section="reportes">
+                <i class="fas fa-file-chart-line"></i>
+                <span>Reportes</span>
+            </button>
+            <button class="nav-tab" onclick="showSection('asistente')" data-section="asistente">
+                <i class="fas fa-robot"></i>
+                <span>Asistente IA</span>
+            </button>
+            <button class="nav-tab" onclick="showSection('tiempos-muertos')" data-section="tiempos-muertos">
+                <i class="fas fa-pause-circle"></i>
+                <span>Tiempos Muertos</span>
+            </button>
+        </nav>
+
+        <!-- Sección: Vista Planta (existente) -->
+        <div id="section-planta" class="coco-section active">
+            <!-- Main Content -->
+            <div class="supervisora-main">
+            <!-- Sidebar izquierdo - Pedidos del dia (ampliado) -->
+            <aside class="sidebar-left expanded">
+                <div class="sidebar-section pedidos-section">
+                    <div class="section-header">
+                        <h3><i class="fas fa-clipboard-list"></i> Pedidos del Dia</h3>
+                        <span class="pedidos-count" id="pedidosCount">0</span>
+                    </div>
+                    <div class="pedidos-filter">
+                        <button class="filter-btn active" onclick="filterPedidos('todos')" data-filter="todos">Todos</button>
+                        <button class="filter-btn" onclick="filterPedidos('urgente')" data-filter="urgente">Urgentes</button>
+                        <button class="filter-btn" onclick="filterPedidos('enProceso')" data-filter="enProceso">En Proceso</button>
+                    </div>
+                    <div id="pedidosList" class="pedidos-list-expanded">
+                        <!-- Se carga dinamicamente -->
+                    </div>
+                </div>
+
+                <div class="sidebar-section operadores-section">
+                    <div class="section-header">
+                        <h3><i class="fas fa-users"></i> Operadores</h3>
+                        <span class="operadores-count" id="operadoresCount">0</span>
+                    </div>
+                    <div id="operadoresList" class="operadores-list">
+                        <!-- Se carga dinamicamente -->
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Area central - Mapa de planta -->
+            <main class="plant-area">
+                <div class="plant-toolbar">
+                    <div class="toolbar-left">
+                        <span class="toolbar-title">
+                            <i class="fas fa-map"></i> Mapa de Planta
+                        </span>
+                    </div>
+                    <div class="toolbar-right">
+                        <button class="zoom-btn" onclick="zoomOut()">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <span class="zoom-level" id="zoomLevel">100%</span>
+                        <button class="zoom-btn" onclick="zoomIn()">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <button class="zoom-btn" onclick="resetZoom()">
+                            <i class="fas fa-compress-arrows-alt"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="plant-map-container">
+                    <div class="plant-map" id="plantMap">
+                        <!-- Se carga desde el layout guardado -->
+                    </div>
+                </div>
+
+                <!-- Leyenda -->
+                <div class="plant-legend">
+                    <span class="legend-item"><span class="dot activo"></span> Activo</span>
+                    <span class="legend-item"><span class="dot pausado"></span> Pausado</span>
+                    <span class="legend-item"><span class="dot inactivo"></span> Inactivo</span>
+                    <span class="legend-item"><span class="dot adelantado"></span> Adelantado</span>
+                    <span class="legend-item"><span class="dot retrasado"></span> Retrasado</span>
+                </div>
+            </main>
+
+            <!-- Sidebar derecho - Detalle -->
+            <aside class="sidebar-right">
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-info-circle"></i> Detalle Estacion</h3>
+                    <div id="estacionDetalle" class="estacion-detalle">
+                        <div class="no-selection">
+                            <i class="fas fa-mouse-pointer"></i>
+                            <p>Selecciona una estacion para ver detalles</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-tasks"></i> Procesos Activos</h3>
+                    <div id="procesosActivos" class="procesos-list">
+                        <!-- Se carga dinamicamente -->
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-bell"></i> Alertas</h3>
+                    <div id="alertasList" class="alertas-list">
+                        <!-- Se carga dinamicamente -->
+                    </div>
+                </div>
+            </aside>
+        </div>
+        </div>
+        <!-- Fin Sección Vista Planta -->
+
+        <!-- Sección: Dashboard Personalizado de Coco -->
+        <div id="section-dashboard" class="coco-section">
+            <div class="coco-dashboard-container">
+                <!-- Se carga dinámicamente desde coco-dashboard.js -->
+            </div>
+        </div>
+
+        <!-- Sección: Calendario de Producción -->
+        <div id="section-calendario" class="coco-section">
+            <div class="coco-calendario-container">
+                <!-- Se carga dinámicamente desde coco-dashboard.js -->
+            </div>
+        </div>
+
+        <!-- Sección: Reportes de Operadoras -->
+        <div id="section-reportes" class="coco-section">
+            <div class="coco-reportes-container">
+                <!-- Se carga dinámicamente desde coco-dashboard.js -->
+            </div>
+        </div>
+
+        <!-- Sección: Asistente IA de Coco -->
+        <div id="section-asistente" class="coco-section">
+            <div class="coco-asistente-container">
+                <!-- Se carga dinámicamente desde coco-dashboard.js -->
+            </div>
+        </div>
+
+        <!-- Sección: Tiempos Muertos -->
+        <div id="section-tiempos-muertos" class="coco-section">
+            <div class="coco-tiempos-muertos-container">
+                <!-- Se carga dinámicamente desde coco-dashboard.js -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Modal</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-footer" id="modalFooter"></div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toastContainer"></div>
+
+    <!-- Panel de Notificaciones -->
+    <div class="notificaciones-panel" id="notificacionesPanel">
+        <div class="notif-panel-header">
+            <h4><i class="fas fa-bell"></i> Notificaciones</h4>
+            <div class="notif-panel-actions">
+                <button class="btn-link" onclick="marcarTodasLeidas()">Marcar todas leídas</button>
+                <button class="btn-icon-sm" onclick="toggleNotificaciones()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+        <div class="notif-panel-body" id="notifPanelBody">
+            <!-- Se carga dinámicamente -->
+        </div>
+        <div class="notif-panel-footer">
+            <button class="btn btn-sm btn-outline" onclick="limpiarNotificaciones()">
+                <i class="fas fa-trash"></i> Limpiar todo
+            </button>
+        </div>
+    </div>
+
+    <!-- Indicador Modo TV -->
+    <div class="modo-tv-indicator" id="modoTVIndicator">
+        <div class="tv-indicator-content">
+            <i class="fas fa-tv"></i>
+            <span>Modo TV Activo</span>
+            <button class="btn btn-sm" onclick="toggleModoTV()">Salir</button>
+        </div>
+    </div>
+
+    <!-- Librería para exportar PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- Scripts -->
+    <script src="js/data.js"></script>
+    <script src="js/supervisora.js"></script>
+    <script src="js/coco-dashboard.js"></script>
+</body>
+</html>

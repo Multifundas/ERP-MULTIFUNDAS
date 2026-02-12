@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Panel Operadora - Multifundas</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/operadora.css">
+</head>
+<body>
+    <!-- ========================================
+         PANTALLA DE LOGIN
+         ======================================== -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <div class="login-header">
+                <div class="login-logo">
+                    <i class="fas fa-industry"></i>
+                </div>
+                <h1>Multifundas</h1>
+                <p>Panel de Operadora</p>
+                <div class="estacion-badge">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <span id="loginEstacion">Estación</span>
+                </div>
+            </div>
+
+            <div class="login-form">
+                <div id="loginError" class="login-error">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>Error de autenticación</span>
+                </div>
+
+                <div class="input-group">
+                    <label>Número de Empleado</label>
+                    <div class="input-field" onclick="enfocarCampo('numEmpleado')">
+                        <i class="fas fa-id-card"></i>
+                        <input type="text" id="numEmpleado" readonly placeholder="Ej: 101">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>PIN (4 dígitos)</label>
+                    <div class="input-field" onclick="enfocarCampo('pinInput')">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="pinInput" readonly placeholder="****" maxlength="4">
+                    </div>
+                </div>
+
+                <!-- Teclado numérico -->
+                <div class="numeric-keypad">
+                    <div class="keypad-row">
+                        <button class="key-btn" onclick="agregarDigito('1')">1</button>
+                        <button class="key-btn" onclick="agregarDigito('2')">2</button>
+                        <button class="key-btn" onclick="agregarDigito('3')">3</button>
+                    </div>
+                    <div class="keypad-row">
+                        <button class="key-btn" onclick="agregarDigito('4')">4</button>
+                        <button class="key-btn" onclick="agregarDigito('5')">5</button>
+                        <button class="key-btn" onclick="agregarDigito('6')">6</button>
+                    </div>
+                    <div class="keypad-row">
+                        <button class="key-btn" onclick="agregarDigito('7')">7</button>
+                        <button class="key-btn" onclick="agregarDigito('8')">8</button>
+                        <button class="key-btn" onclick="agregarDigito('9')">9</button>
+                    </div>
+                    <div class="keypad-row">
+                        <button class="key-btn key-action" onclick="limpiarCampo()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        <button class="key-btn" onclick="agregarDigito('0')">0</button>
+                        <button class="key-btn key-action" onclick="borrarDigito()">
+                            <i class="fas fa-backspace"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button class="btn-login" onclick="iniciarSesion()">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Iniciar Turno
+                </button>
+            </div>
+
+            <button class="btn-config" onclick="mostrarConfigEstacion()" title="Configurar estación">
+                <i class="fas fa-cog"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- ========================================
+         PANEL PRINCIPAL
+         ======================================== -->
+    <div id="panelOperadora" class="panel-operadora" style="display: none;">
+        <!-- Header -->
+        <header class="panel-header">
+            <div class="header-left">
+                <div class="user-info">
+                    <div class="user-avatar" id="userAvatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="user-details">
+                        <span class="user-name" id="userName">Operadora</span>
+                        <span class="user-station" id="headerEstacion">E1 - Estación</span>
+                    </div>
+                </div>
+            </div>
+            <div class="header-center">
+                <div class="clock-display">
+                    <span class="current-time" id="currentTime">10:45</span>
+                    <span class="turno-time">Turno: <span id="turnoTime">0h 0m</span></span>
+                </div>
+            </div>
+            <div class="header-right">
+                <!-- Indicador de conexión -->
+                <div class="conexion-indicador online" id="conexionIndicador">
+                    <i class="fas fa-wifi"></i>
+                </div>
+                <button class="btn-header btn-motivacion" onclick="mostrarPanelMotivacion()" title="Motivación">
+                    <i class="fas fa-fire"></i>
+                </button>
+                <button class="btn-header btn-reportes" onclick="mostrarMisReportes()" title="Mis Reportes">
+                    <i class="fas fa-chart-bar"></i>
+                </button>
+                <button class="btn-header" onclick="mostrarHistorialDias()" title="Mi Historial">
+                    <i class="fas fa-calendar-alt"></i>
+                </button>
+                <button class="btn-header" onclick="mostrarRankingPersonal()" title="Ranking">
+                    <i class="fas fa-trophy"></i>
+                </button>
+                <button class="btn-header" onclick="toggleSonidos()" title="Sonidos" id="btnSonidos">
+                    <i class="fas fa-volume-up"></i>
+                </button>
+                <button class="btn-header" onclick="mostrarInstrucciones()" title="Instrucciones">
+                    <i class="fas fa-book"></i>
+                </button>
+                <button class="btn-header" onclick="llamarCoco()" title="Llamar a Coco">
+                    <i class="fas fa-headset"></i>
+                </button>
+                <button class="btn-header btn-logout" onclick="cerrarSesion()" title="Cerrar sesión">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Contenido principal -->
+        <main class="panel-main">
+            <!-- Columna 1: Información del Pedido -->
+            <section class="panel-column col-pedido">
+                <div class="column-header">
+                    <h2><i class="fas fa-clipboard-list"></i> Mi Pedido</h2>
+                </div>
+
+                <div class="pedido-card" id="pedidoCard">
+                    <div class="pedido-header">
+                        <span class="pedido-id" id="pedidoId">#---</span>
+                        <span class="pedido-prioridad" id="pedidoPrioridad">Normal</span>
+                    </div>
+
+                    <div class="pedido-cliente" id="pedidoCliente">
+                        <i class="fas fa-building"></i>
+                        <span>Sin pedido asignado</span>
+                    </div>
+
+                    <div class="pedido-producto">
+                        <div class="producto-imagen" id="productoImagen" onclick="ampliarImagen()">
+                            <i class="fas fa-image"></i>
+                            <span>Sin imagen</span>
+                        </div>
+                        <div class="producto-nombre" id="productoNombre">---</div>
+                    </div>
+
+                    <!-- Proceso asignado -->
+                    <div class="proceso-asignado" id="procesoAsignado" style="display: none;">
+                        <div class="proceso-asignado-icono">
+                            <i class="fas fa-cog fa-spin"></i>
+                        </div>
+                        <div class="proceso-asignado-info">
+                            <span class="proceso-label">Tu proceso:</span>
+                            <span class="proceso-nombre" id="procesoNombreTexto">---</span>
+                        </div>
+                    </div>
+
+                    <!-- Cola de procesos con opción de simultaneidad -->
+                    <div class="cola-procesos-container" id="colaProcesosContainer" style="display: none;">
+                        <!-- Se carga dinámicamente desde JS -->
+                    </div>
+
+                    <div class="pedido-detalles" id="pedidoDetalles">
+                        <!-- Se carga dinámicamente según el área -->
+                    </div>
+
+                    <div class="pedido-meta">
+                        <div class="meta-item">
+                            <label>Meta:</label>
+                            <span id="pedidoMeta">0 piezas</span>
+                        </div>
+                        <div class="meta-item">
+                            <label>Entrega:</label>
+                            <span id="pedidoEntrega">---</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sin pedido asignado -->
+                <div class="sin-pedido" id="sinPedido" style="display: none;">
+                    <i class="fas fa-inbox"></i>
+                    <h3>Sin pedido asignado</h3>
+                    <p>Espera a que Coco te asigne un pedido</p>
+                    <div class="sin-pedido-actions">
+                        <button class="btn btn-secondary" onclick="refrescarAsignacion()">
+                            <i class="fas fa-sync-alt"></i> Verificar asignación
+                        </button>
+                        <button class="btn btn-primary" onclick="llamarCoco()">
+                            <i class="fas fa-headset"></i> Llamar a Coco
+                        </button>
+                    </div>
+                    <p class="sin-pedido-info" id="sinPedidoInfo">
+                        <small>Estación: <span id="sinPedidoEstacion">---</span></small>
+                    </p>
+                </div>
+            </section>
+
+            <!-- ========================================
+                 SECCIÓN MULTI-PEDIDOS (CALIDAD/EMPAQUE)
+                 Solo visible para estaciones E1, E2, etc.
+                 ======================================== -->
+            <section class="panel-column col-multi-pedidos" id="colMultiPedidos" style="display: none;">
+                <div class="column-header">
+                    <h2><i class="fas fa-boxes"></i> Pedidos Activos</h2>
+                    <div class="header-actions-multi">
+                        <span class="pedidos-count-badge" id="pedidosCountBadge">0</span>
+                        <button class="btn-refresh-multi" onclick="refrescarAsignacionMulti()" title="Actualizar pedidos">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenedor de tarjetas de pedidos -->
+                <div class="multi-pedidos-container" id="multiPedidosContainer">
+                    <!-- Las tarjetas se generan dinámicamente -->
+                    <div class="sin-pedidos-multi" id="sinPedidosMulti">
+                        <i class="fas fa-inbox"></i>
+                        <h3>Sin pedidos asignados</h3>
+                        <p>Los pedidos se asignarán automáticamente cuando costura inicie el último proceso</p>
+                        <button class="btn btn-secondary" onclick="refrescarAsignacionMulti()">
+                            <i class="fas fa-sync-alt"></i> Verificar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sección de captura rápida para pedido seleccionado -->
+                <div class="captura-rapida-multi" id="capturaRapidaMulti" style="display: none;">
+                    <div class="captura-rapida-header">
+                        <h3><i class="fas fa-hand-pointer"></i> Captura Rápida</h3>
+                        <span class="pedido-seleccionado-badge" id="pedidoSeleccionadoBadge">#---</span>
+                    </div>
+                    <div class="captura-rapida-botones">
+                        <button class="btn-captura-rapida" onclick="capturarRapidoMultiSeleccionado(1)">+1</button>
+                        <button class="btn-captura-rapida" onclick="capturarRapidoMultiSeleccionado(5)">+5</button>
+                        <button class="btn-captura-rapida" onclick="capturarRapidoMultiSeleccionado(10)">+10</button>
+                        <button class="btn-captura-rapida" onclick="capturarRapidoMultiSeleccionado(25)">+25</button>
+                        <button class="btn-captura-rapida" onclick="capturarRapidoMultiSeleccionado(50)">+50</button>
+                    </div>
+                    <div class="captura-rapida-custom">
+                        <input type="number" id="cantidadCustomMulti" placeholder="Cantidad" min="1">
+                        <button class="btn btn-success" onclick="capturarCustomMulti()">
+                            <i class="fas fa-plus"></i> Capturar
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Columna 2: Captura de Producción -->
+            <section class="panel-column col-captura">
+                <div class="column-header">
+                    <h2><i class="fas fa-cubes"></i> Captura de Piezas</h2>
+                </div>
+
+                <!-- Temporizador de Proceso -->
+                <div class="temporizador-proceso" id="temporizadorProceso">
+                    <div class="temporizador-header">
+                        <span class="temporizador-label">Tiempo en proceso</span>
+                        <span class="temporizador-estado" id="estadoProceso">
+                            <i class="fas fa-circle estado-gris"></i> Sin iniciar
+                        </span>
+                    </div>
+
+                    <div class="temporizador-display" id="tiempoProcesoDisplay">
+                        <span class="tiempo-horas">00</span>
+                        <span class="tiempo-separador">:</span>
+                        <span class="tiempo-minutos">00</span>
+                        <span class="tiempo-separador">:</span>
+                        <span class="tiempo-segundos">00</span>
+                    </div>
+
+                    <div class="temporizador-controles">
+                        <!-- Botón INICIAR (visible cuando no ha iniciado) -->
+                        <button class="btn-temporizador btn-iniciar" id="btnIniciar" onclick="iniciarProceso()">
+                            <i class="fas fa-play"></i>
+                            <span>INICIAR</span>
+                        </button>
+
+                        <!-- Botón PAUSAR (visible cuando está trabajando) -->
+                        <button class="btn-temporizador btn-pausar" id="btnPausar" onclick="mostrarMotivoPausa()" style="display: none;">
+                            <i class="fas fa-pause"></i>
+                            <span>PAUSAR</span>
+                        </button>
+
+                        <!-- Botón REANUDAR (visible cuando está en pausa) -->
+                        <button class="btn-temporizador btn-reanudar" id="btnReanudar" onclick="reanudarProceso()" style="display: none;">
+                            <i class="fas fa-play"></i>
+                            <span>REANUDAR</span>
+                        </button>
+
+                        <!-- Botón FINALIZAR (visible siempre que haya iniciado) -->
+                        <button class="btn-temporizador btn-finalizar" id="btnFinalizar" onclick="finalizarProceso()" style="display: none;">
+                            <i class="fas fa-stop"></i>
+                            <span>FINALIZAR</span>
+                        </button>
+                    </div>
+
+                    <!-- Indicador de pausa activa -->
+                    <div class="pausa-activa" id="pausaActiva" style="display: none;">
+                        <div class="pausa-activa-icono" id="pausaActivaIcono">
+                            <i class="fas fa-pause"></i>
+                        </div>
+                        <div class="pausa-activa-info">
+                            <span class="pausa-motivo" id="pausaActivaMotivo">En pausa</span>
+                            <span class="pausa-tiempo" id="pausaActivaTiempo">00:00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Indicador de Desempeño en Tiempo Real -->
+                <div class="indicador-desempeno" id="indicadorDesempeno" style="display: none;">
+                    <div class="desempeno-header">
+                        <span class="desempeno-label">Tu desempeño</span>
+                        <span class="desempeno-nivel" id="desempenoNivel">
+                            <i class="fas fa-circle"></i> ---
+                        </span>
+                    </div>
+                    <div class="desempeno-barra-container">
+                        <div class="desempeno-barra" id="desempenoBarra">
+                            <div class="desempeno-barra-fill" id="desempenoBarraFill"></div>
+                            <div class="desempeno-marcador" id="desempenoMarcador">
+                                <span class="marcador-valor" id="desempenoValor">0%</span>
+                            </div>
+                        </div>
+                        <div class="desempeno-escala">
+                            <span class="escala-item critico">0%</span>
+                            <span class="escala-item bajo">50%</span>
+                            <span class="escala-item normal">70%</span>
+                            <span class="escala-item bien">85%</span>
+                            <span class="escala-item meta">100%</span>
+                            <span class="escala-item excelente">120%+</span>
+                        </div>
+                    </div>
+                    <div class="desempeno-mensaje" id="desempenoMensaje">
+                        <i class="fas fa-lightbulb"></i>
+                        <span>Inicia tu proceso para ver tu desempeño</span>
+                    </div>
+                </div>
+
+                <!-- Progreso circular -->
+                <div class="progress-container">
+                    <div class="progress-main-area">
+                        <div class="progress-circle" id="progressCircle">
+                            <svg viewBox="0 0 200 200">
+                                <circle class="progress-bg" cx="100" cy="100" r="90"></circle>
+                                <circle class="progress-bar" cx="100" cy="100" r="90" id="progressBar"></circle>
+                            </svg>
+                            <div class="progress-content">
+                                <span class="progress-value" id="progressValue">0</span>
+                                <span class="progress-separator">/</span>
+                                <span class="progress-total" id="progressTotal">0</span>
+                                <span class="progress-label">piezas</span>
+                            </div>
+                        </div>
+
+                        <!-- Otras operadoras trabajando en el mismo proceso -->
+                        <div class="otras-operadoras-container" id="otrasOperadorasContainer" style="display: none;">
+                            <div class="otras-operadoras-lista" id="otrasOperadorasLista">
+                                <!-- Se llena dinámicamente -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gran Total cuando hay múltiples operadoras -->
+                    <div class="gran-total-container" id="granTotalContainer" style="display: none;">
+                        <div class="gran-total-header">
+                            <i class="fas fa-users"></i>
+                            <span>Total del equipo</span>
+                        </div>
+                        <div class="gran-total-progress">
+                            <div class="gran-total-bar">
+                                <div class="gran-total-fill" id="granTotalFill"></div>
+                            </div>
+                            <div class="gran-total-numeros">
+                                <span class="gran-total-actual" id="granTotalActual">0</span>
+                                <span class="gran-total-separator">/</span>
+                                <span class="gran-total-meta" id="granTotalMeta">0</span>
+                                <span class="gran-total-label">piezas</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="progress-stats">
+                        <div class="stat-item">
+                            <label>Meta:</label>
+                            <span id="metaPorMinuto">0</span>
+                            <small>pzas/min</small>
+                        </div>
+                        <div class="stat-item">
+                            <label>Actual:</label>
+                            <span id="actualPorMinuto">0</span>
+                            <small>pzas/min</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Captura de cantidad -->
+                <div class="captura-section">
+                    <div class="cantidad-input-container">
+                        <button class="btn-cantidad btn-minus" onclick="ajustarCantidad(-1)">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <div class="cantidad-display">
+                            <input type="number" id="cantidadCaptura" value="0" min="0" readonly>
+                        </div>
+                        <button class="btn-cantidad btn-plus" onclick="ajustarCantidad(1)">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+
+                    <!-- Botones rápidos -->
+                    <div class="cantidad-rapida">
+                        <button class="btn-rapido" onclick="setCantidad(5)">+5</button>
+                        <button class="btn-rapido" onclick="setCantidad(10)">+10</button>
+                        <button class="btn-rapido" onclick="setCantidad(25)">+25</button>
+                        <button class="btn-rapido" onclick="setCantidad(50)">+50</button>
+                    </div>
+
+                    <button class="btn-capturar" onclick="capturarPiezas()">
+                        <i class="fas fa-check-circle"></i>
+                        Registrar Piezas
+                    </button>
+                </div>
+
+                <!-- Recordatorio de hora -->
+                <div class="recordatorio-hora" id="recordatorioHora">
+                    <i class="fas fa-clock"></i>
+                    <span>Última captura: <strong id="ultimaCapturaHora">---</strong></span>
+                </div>
+
+                <!-- Historial reciente -->
+                <div class="historial-capturas">
+                    <h4><i class="fas fa-history"></i> Últimas capturas</h4>
+                    <div class="historial-list" id="historialCapturas">
+                        <p class="sin-capturas">Sin capturas hoy</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Columna 3: Problemas y Acciones -->
+            <section class="panel-column col-acciones">
+                <div class="column-header">
+                    <h2><i class="fas fa-exclamation-triangle"></i> Reportar</h2>
+                </div>
+
+                <!-- Botones de problemas -->
+                <div class="problemas-grid">
+                    <button class="btn-problema" onclick="reportarProblema('sin_material')">
+                        <i class="fas fa-box-open"></i>
+                        <span>Sin Material</span>
+                    </button>
+                    <button class="btn-problema" onclick="reportarProblema('maquina')">
+                        <i class="fas fa-tools"></i>
+                        <span>Máquina</span>
+                    </button>
+                    <button class="btn-problema" onclick="reportarProblema('instrucciones')">
+                        <i class="fas fa-question-circle"></i>
+                        <span>Dudas</span>
+                    </button>
+                    <button class="btn-problema" onclick="reportarProblema('calidad')">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span>Calidad</span>
+                    </button>
+                    <button class="btn-problema" onclick="reportarProblema('otro')">
+                        <i class="fas fa-ellipsis-h"></i>
+                        <span>Otro</span>
+                    </button>
+                </div>
+
+                <!-- Resumen del día -->
+                <div class="resumen-dia">
+                    <h4><i class="fas fa-chart-bar"></i> Mi Día</h4>
+                    <div class="resumen-stats">
+                        <div class="resumen-item">
+                            <i class="fas fa-cubes"></i>
+                            <div class="resumen-data">
+                                <span class="resumen-value" id="resumenPiezas">0</span>
+                                <span class="resumen-label">piezas</span>
+                            </div>
+                        </div>
+                        <div class="resumen-item">
+                            <i class="fas fa-clock"></i>
+                            <div class="resumen-data">
+                                <span class="resumen-value" id="resumenTiempo">0h 0m</span>
+                                <span class="resumen-label">trabajado</span>
+                            </div>
+                        </div>
+                        <div class="resumen-item">
+                            <i class="fas fa-percentage"></i>
+                            <div class="resumen-data">
+                                <span class="resumen-value" id="resumenEficiencia">0%</span>
+                                <span class="resumen-label">eficiencia</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Acciones adicionales -->
+                <div class="acciones-adicionales">
+                    <button class="btn-accion" onclick="solicitarDescanso()">
+                        <i class="fas fa-coffee"></i>
+                        <span>Descanso</span>
+                    </button>
+                    <button class="btn-accion" onclick="llamarCoco()">
+                        <i class="fas fa-headset"></i>
+                        <span>Llamar Coco</span>
+                    </button>
+                </div>
+
+                <!-- Estado de problema activo -->
+                <div class="problema-activo" id="problemaActivo" style="display: none;">
+                    <div class="problema-activo-header">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span>Problema Reportado</span>
+                    </div>
+                    <div class="problema-activo-body">
+                        <span id="problemaActivoTipo">---</span>
+                        <span id="problemaActivoTiempo">Hace 0 min</span>
+                    </div>
+                    <p>Coco ha sido notificada</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ========================================
+         MODAL GENÉRICO
+         ======================================== -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Modal</h3>
+                <button class="modal-close" onclick="cerrarModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-footer" id="modalFooter"></div>
+        </div>
+    </div>
+
+    <!-- ========================================
+         MODAL DE ETIQUETAS DE EMPAQUE
+         ======================================== -->
+    <div class="modal-overlay modal-etiqueta-overlay" id="modalEtiquetaOverlay" style="display: none;">
+        <div class="modal modal-etiqueta">
+            <div class="modal-header">
+                <h3><i class="fas fa-tag"></i> Generar Etiqueta de Empaque</h3>
+                <button class="modal-close" onclick="cerrarModalEtiqueta()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalEtiquetaBody">
+                <!-- Se genera dinámicamente -->
+            </div>
+            <div class="modal-footer" id="modalEtiquetaFooter">
+                <button class="btn btn-secondary" onclick="cerrarModalEtiqueta()">Cancelar</button>
+                <button class="btn btn-primary" onclick="generarEtiqueta()">
+                    <i class="fas fa-print"></i> Generar e Imprimir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preview de etiqueta para imprimir (oculto) -->
+    <div id="etiquetaPrintContainer" style="display: none;"></div>
+
+    <!-- Toast de confirmación -->
+    <div id="toastContainer"></div>
+
+    <!-- Container para feedback motivacional -->
+    <div id="feedbackContainer" class="feedback-container"></div>
+
+    <!-- Celebración de logros especiales -->
+    <div class="logro-celebracion" id="logroCelebracion" style="display: none;">
+        <div class="logro-content">
+            <div class="logro-icono" id="logroIcono">
+                <i class="fas fa-trophy"></i>
+            </div>
+            <h3 id="logroTitulo">¡Logro desbloqueado!</h3>
+            <p id="logroMensaje">¡Felicidades!</p>
+            <button onclick="cerrarLogroCelebracion()">
+                <i class="fas fa-check"></i> ¡Genial!
+            </button>
+        </div>
+        <div class="confetti-container" id="confettiContainer"></div>
+    </div>
+
+    <!-- Micro feedback en captura -->
+    <div class="micro-feedback" id="microFeedback" style="display: none;">
+        <span class="micro-feedback-text" id="microFeedbackText">+10</span>
+        <i class="fas fa-arrow-up micro-feedback-icon"></i>
+    </div>
+
+    <!-- Celebración de meta -->
+    <div class="celebracion" id="celebracion">
+        <div class="celebracion-content">
+            <i class="fas fa-trophy"></i>
+            <h2>¡Meta Cumplida!</h2>
+            <p>Excelente trabajo</p>
+        </div>
+    </div>
+
+    <!-- Visor de imagen ampliada -->
+    <div class="imagen-viewer" id="imagenViewer" onclick="cerrarImagenViewer()">
+        <img src="" alt="Producto" id="imagenViewerImg">
+    </div>
+
+    <!-- Visor de cámara para problemas -->
+    <div class="camara-container" id="camaraContainer" style="display: none;">
+        <div class="camara-header">
+            <h3><i class="fas fa-camera"></i> Tomar Foto del Problema</h3>
+            <button class="btn-cerrar-camara" onclick="cerrarCamara()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="camara-preview">
+            <video id="cameraVideo" autoplay playsinline></video>
+            <canvas id="cameraCanvas" style="display: none;"></canvas>
+            <img id="fotoCapturada" style="display: none;">
+        </div>
+        <div class="camara-controles">
+            <button class="btn-capturar-foto" id="btnCapturarFoto" onclick="capturarFoto()">
+                <i class="fas fa-camera"></i>
+            </button>
+            <button class="btn-usar-foto" id="btnUsarFoto" onclick="usarFoto()" style="display: none;">
+                <i class="fas fa-check"></i> Usar foto
+            </button>
+            <button class="btn-repetir-foto" id="btnRepetirFoto" onclick="repetirFoto()" style="display: none;">
+                <i class="fas fa-redo"></i> Repetir
+            </button>
+        </div>
+    </div>
+
+    <!-- Notificación de mensaje de Coco -->
+    <div class="mensaje-coco-overlay" id="mensajeCocoOverlay" style="display: none;">
+        <div class="mensaje-coco-notif" id="mensajeCocoNotif">
+            <div class="mensaje-coco-header">
+                <i class="fas fa-user-tie"></i>
+                <span>Mensaje de Coco</span>
+            </div>
+            <div class="mensaje-coco-body" id="mensajeCocoBody">
+                <!-- Contenido del mensaje -->
+            </div>
+            <div class="mensaje-coco-actions">
+                <button onclick="cerrarMensajeCoco()">
+                    <i class="fas fa-check"></i> Entendido
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sonidos del sistema (usando Web Audio API, no archivos externos) -->
+    <script>
+        // Sistema de sonidos usando Web Audio API
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+        const SONIDOS = {
+            iniciar: { freq: 880, duration: 0.15, type: 'sine' },
+            pausar: { freq: 440, duration: 0.2, type: 'sine' },
+            reanudar: { freq: 660, duration: 0.15, type: 'sine' },
+            captura: { freq: 1047, duration: 0.1, type: 'sine' },
+            meta: { freq: [523, 659, 784], duration: 0.2, type: 'sine' },
+            notificacion: { freq: 587, duration: 0.3, type: 'triangle' },
+            error: { freq: 200, duration: 0.3, type: 'sawtooth' },
+            finalizar: { freq: [784, 659, 523], duration: 0.15, type: 'sine' }
+        };
+
+        function reproducirSonido(tipo) {
+            if (localStorage.getItem('sonidos_habilitados') === 'false') return;
+
+            const sonido = SONIDOS[tipo];
+            if (!sonido) return;
+
+            try {
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+
+                const freqs = Array.isArray(sonido.freq) ? sonido.freq : [sonido.freq];
+
+                freqs.forEach((freq, i) => {
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+
+                    oscillator.frequency.value = freq;
+                    oscillator.type = sonido.type;
+
+                    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime + (i * sonido.duration));
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + (i * sonido.duration) + sonido.duration);
+
+                    oscillator.start(audioContext.currentTime + (i * sonido.duration));
+                    oscillator.stop(audioContext.currentTime + (i * sonido.duration) + sonido.duration);
+                });
+            } catch (e) {
+                console.log('Audio no disponible');
+            }
+        }
+    </script>
+
+    <!-- Scripts -->
+    <script src="../js/data.js"></script>
+    <script src="js/operadora-auth.js"></script>
+    <script src="js/operadora-modules.js"></script>
+    <script src="js/operadora.js"></script>
+</body>
+</html>

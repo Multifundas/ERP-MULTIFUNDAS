@@ -1,0 +1,1482 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor de Layout - Planta Multifundas</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #3b82f6;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --gray: #64748b;
+            --bg: #f1f5f9;
+            --card: #ffffff;
+            --border: #e2e8f0;
+            --text: #1e293b;
+            --text-muted: #64748b;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Layout principal */
+        .editor-container {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            height: 100vh;
+        }
+
+        /* Header */
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+            color: white;
+        }
+
+        .editor-header h1 {
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: white;
+            color: var(--primary);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        /* Main area */
+        .editor-main {
+            display: grid;
+            grid-template-columns: 250px 1fr 280px;
+            gap: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* Toolbar izquierdo */
+        .toolbar-left {
+            background: var(--card);
+            border-right: 1px solid var(--border);
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .toolbar-section {
+            margin-bottom: 20px;
+        }
+
+        .toolbar-section h3 {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        .element-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 12px;
+            background: var(--bg);
+            border: 2px dashed var(--border);
+            border-radius: 10px;
+            cursor: pointer;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+        }
+
+        .element-btn:hover {
+            border-color: var(--primary);
+            background: #eff6ff;
+        }
+
+        .element-btn .icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .element-btn.costura .icon { background: #dbeafe; color: #2563eb; }
+        .element-btn.mesa .icon { background: #d1fae5; color: #059669; }
+        .element-btn.area .icon { background: #fef3c7; color: #d97706; }
+        .element-btn.estacion .icon { background: #f3e8ff; color: #9333ea; }
+
+        .element-btn .info {
+            text-align: left;
+        }
+
+        .element-btn .info strong {
+            display: block;
+            font-size: 0.85rem;
+        }
+
+        .element-btn .info span {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        /* Canvas central */
+        .canvas-container {
+            background: #e2e8f0;
+            overflow: auto;
+            position: relative;
+        }
+
+        .canvas-wrapper {
+            min-width: 100%;
+            min-height: 100%;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #layoutCanvas {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            position: relative;
+            background-image:
+                linear-gradient(to right, #f1f5f9 1px, transparent 1px),
+                linear-gradient(to bottom, #f1f5f9 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* Elementos en el canvas */
+        .layout-element {
+            position: absolute;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            cursor: move;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: box-shadow 0.2s;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        .layout-element:hover {
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+
+        .layout-element.selected {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+        }
+
+        .layout-element.costura {
+            background: linear-gradient(135deg, #eff6ff, #dbeafe);
+            border-color: #93c5fd;
+        }
+
+        .layout-element.mesa {
+            background: linear-gradient(135deg, #f0fdf4, #d1fae5);
+            border-color: #6ee7b7;
+        }
+
+        .layout-element.area {
+            background: linear-gradient(135deg, #fffbeb, #fef3c7);
+            border-color: #fcd34d;
+        }
+
+        .layout-element.estacion {
+            background: linear-gradient(135deg, #faf5ff, #f3e8ff);
+            border-color: #c4b5fd;
+        }
+
+        .element-id {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text);
+            background: rgba(255,255,255,0.8);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-bottom: 2px;
+        }
+
+        .element-name {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 0 5px;
+            word-break: break-word;
+        }
+
+        /* Resize handles */
+        .resize-handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: var(--primary);
+            border: 2px solid white;
+            border-radius: 50%;
+            display: none;
+        }
+
+        .layout-element.selected .resize-handle {
+            display: block;
+        }
+
+        .resize-handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+        .resize-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+        .resize-handle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
+        .resize-handle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
+
+        /* Panel derecho - Propiedades */
+        .properties-panel {
+            background: var(--card);
+            border-left: 1px solid var(--border);
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .properties-panel h3 {
+            font-size: 0.9rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .no-selection {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+        }
+
+        .no-selection i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            opacity: 0.3;
+        }
+
+        .property-group {
+            margin-bottom: 15px;
+        }
+
+        .property-group label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .property-group input,
+        .property-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .property-group input:focus,
+        .property-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .property-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .property-row label {
+            font-size: 0.65rem;
+            margin-bottom: 3px;
+        }
+
+        .delete-btn {
+            width: 100%;
+            padding: 12px;
+            background: #fef2f2;
+            color: var(--danger);
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .delete-btn:hover {
+            background: #fee2e2;
+        }
+
+        /* Lista de elementos */
+        .elements-list {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .elements-list h4 {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+
+        .element-list-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            background: var(--bg);
+            border-radius: 6px;
+            margin-bottom: 5px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        .element-list-item:hover {
+            background: #e2e8f0;
+        }
+
+        .element-list-item.selected {
+            background: #dbeafe;
+            color: var(--primary);
+        }
+
+        .element-list-item .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .element-list-item .dot.costura { background: #3b82f6; }
+        .element-list-item .dot.mesa { background: #10b981; }
+        .element-list-item .dot.area { background: #f59e0b; }
+        .element-list-item .dot.estacion { background: #9333ea; }
+
+        /* Canvas size controls */
+        .canvas-size-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 10px;
+            background: var(--bg);
+            border-radius: 8px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .canvas-size-controls label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .canvas-size-controls input {
+            width: 70px;
+            padding: 5px 8px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 1.1rem;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* Toast */
+        #toastContainer {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 2000;
+        }
+
+        .toast {
+            padding: 12px 20px;
+            background: #1e293b;
+            color: white;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.success { background: var(--success); }
+        .toast.error { background: var(--danger); }
+        .toast.warning { background: var(--warning); }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Zoom controls */
+        .zoom-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+            background: white;
+            padding: 5px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .zoom-btn {
+            width: 35px;
+            height: 35px;
+            border: none;
+            background: var(--bg);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .zoom-btn:hover {
+            background: #e2e8f0;
+        }
+
+        .zoom-level {
+            padding: 0 10px;
+            display: flex;
+            align-items: center;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        /* Link al ERP */
+        .back-link {
+            color: white;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+
+        .back-link:hover {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="editor-container">
+        <!-- Header -->
+        <header class="editor-header">
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <a href="index.html" class="back-link">
+                    <i class="fas fa-arrow-left"></i> ERP
+                </a>
+                <h1><i class="fas fa-drafting-compass"></i> Editor de Layout - Planta</h1>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="importLayout()">
+                    <i class="fas fa-file-import"></i> Importar
+                </button>
+                <button class="btn btn-secondary" onclick="exportLayout()">
+                    <i class="fas fa-file-export"></i> Exportar
+                </button>
+                <button class="btn btn-primary" onclick="previewLayout()">
+                    <i class="fas fa-eye"></i> Vista Previa
+                </button>
+                <button class="btn btn-success" onclick="saveLayout()">
+                    <i class="fas fa-save"></i> Guardar
+                </button>
+            </div>
+        </header>
+
+        <!-- Main -->
+        <div class="editor-main">
+            <!-- Toolbar izquierdo -->
+            <div class="toolbar-left">
+                <div class="toolbar-section">
+                    <h3>Agregar Elementos</h3>
+
+                    <div class="element-btn costura" onclick="addElement('costura')">
+                        <div class="icon"><i class="fas fa-cog"></i></div>
+                        <div class="info">
+                            <strong>Maquina Costura</strong>
+                            <span>80x80 px</span>
+                        </div>
+                    </div>
+
+                    <div class="element-btn mesa" onclick="addElement('mesa')">
+                        <div class="icon"><i class="fas fa-table"></i></div>
+                        <div class="info">
+                            <strong>Mesa Grande</strong>
+                            <span>200x150 px</span>
+                        </div>
+                    </div>
+
+                    <div class="element-btn area" onclick="addElement('area')">
+                        <div class="icon"><i class="fas fa-vector-square"></i></div>
+                        <div class="info">
+                            <strong>Area de Trabajo</strong>
+                            <span>150x100 px</span>
+                        </div>
+                    </div>
+
+                    <div class="element-btn estacion" onclick="addElement('estacion')">
+                        <div class="icon"><i class="fas fa-desktop"></i></div>
+                        <div class="info">
+                            <strong>Estacion</strong>
+                            <span>100x80 px</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="toolbar-section">
+                    <h3>Tamano del Canvas</h3>
+                    <div class="canvas-size-controls">
+                        <label>Ancho:</label>
+                        <input type="number" id="canvasWidth" value="1200" onchange="resizeCanvas()">
+                        <label>Alto:</label>
+                        <input type="number" id="canvasHeight" value="700" onchange="resizeCanvas()">
+                    </div>
+                </div>
+
+                <div class="toolbar-section">
+                    <h3>Acciones</h3>
+                    <button class="btn btn-secondary" onclick="clearCanvas()" style="width: 100%; margin-bottom: 8px;">
+                        <i class="fas fa-trash"></i> Limpiar Todo
+                    </button>
+                    <button class="btn btn-secondary" onclick="duplicateSelected()" style="width: 100%;">
+                        <i class="fas fa-copy"></i> Duplicar Seleccion
+                    </button>
+                </div>
+            </div>
+
+            <!-- Canvas central -->
+            <div class="canvas-container">
+                <div class="canvas-wrapper">
+                    <div id="layoutCanvas"></div>
+                </div>
+
+                <div class="zoom-controls">
+                    <button class="zoom-btn" onclick="zoomOut()"><i class="fas fa-minus"></i></button>
+                    <span class="zoom-level" id="zoomLevel">100%</span>
+                    <button class="zoom-btn" onclick="zoomIn()"><i class="fas fa-plus"></i></button>
+                    <button class="zoom-btn" onclick="resetZoom()"><i class="fas fa-compress"></i></button>
+                </div>
+            </div>
+
+            <!-- Panel propiedades -->
+            <div class="properties-panel">
+                <h3><i class="fas fa-sliders-h"></i> Propiedades</h3>
+
+                <div id="propertiesContent">
+                    <div class="no-selection">
+                        <i class="fas fa-mouse-pointer"></i>
+                        <p>Selecciona un elemento para ver sus propiedades</p>
+                    </div>
+                </div>
+
+                <!-- Lista de elementos -->
+                <div class="elements-list">
+                    <h4><i class="fas fa-list"></i> Elementos (<span id="elementCount">0</span>)</h4>
+                    <div id="elementsList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Modal</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-footer" id="modalFooter"></div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toastContainer"></div>
+
+    <script>
+        // ========================================
+        // ESTADO GLOBAL
+        // ========================================
+
+        const editorState = {
+            elements: [],
+            selectedId: null,
+            canvasWidth: 1200,
+            canvasHeight: 700,
+            zoom: 1,
+            nextId: 1,
+            isDragging: false,
+            isResizing: false,
+            dragOffset: { x: 0, y: 0 },
+            resizeHandle: null
+        };
+
+        // Configuracion de tipos de elementos
+        const elementTypes = {
+            costura: { width: 80, height: 80, prefix: 'C', name: 'Costura' },
+            mesa: { width: 200, height: 150, prefix: 'MESA', name: 'Mesa' },
+            area: { width: 150, height: 100, prefix: 'AREA', name: 'Area' },
+            estacion: { width: 100, height: 80, prefix: 'EST', name: 'Estacion' }
+        };
+
+        // Colores disponibles
+        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#64748b'];
+
+        // ========================================
+        // INICIALIZACION
+        // ========================================
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initCanvas();
+            loadSavedLayout();
+            initKeyboardShortcuts();
+        });
+
+        function initCanvas() {
+            const canvas = document.getElementById('layoutCanvas');
+            canvas.style.width = editorState.canvasWidth + 'px';
+            canvas.style.height = editorState.canvasHeight + 'px';
+
+            // Click en canvas para deseleccionar
+            canvas.addEventListener('click', (e) => {
+                if (e.target === canvas) {
+                    selectElement(null);
+                }
+            });
+        }
+
+        function initKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+                // Delete - eliminar seleccion
+                if (e.key === 'Delete' && editorState.selectedId) {
+                    deleteElement(editorState.selectedId);
+                }
+
+                // Ctrl+D - duplicar
+                if (e.ctrlKey && e.key === 'd') {
+                    e.preventDefault();
+                    duplicateSelected();
+                }
+
+                // Ctrl+S - guardar
+                if (e.ctrlKey && e.key === 's') {
+                    e.preventDefault();
+                    saveLayout();
+                }
+
+                // Escape - deseleccionar
+                if (e.key === 'Escape') {
+                    selectElement(null);
+                    closeModal();
+                }
+
+                // Flechas para mover elemento seleccionado
+                if (editorState.selectedId && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                    e.preventDefault();
+                    moveSelectedElement(e.key, e.shiftKey ? 20 : 5);
+                }
+            });
+        }
+
+        function moveSelectedElement(direction, amount) {
+            const element = editorState.elements.find(el => el.id === editorState.selectedId);
+            if (!element) return;
+
+            switch (direction) {
+                case 'ArrowUp': element.y = Math.max(0, element.y - amount); break;
+                case 'ArrowDown': element.y = Math.min(editorState.canvasHeight - element.height, element.y + amount); break;
+                case 'ArrowLeft': element.x = Math.max(0, element.x - amount); break;
+                case 'ArrowRight': element.x = Math.min(editorState.canvasWidth - element.width, element.x + amount); break;
+            }
+
+            const el = document.getElementById('el-' + element.id);
+            if (el) {
+                el.style.left = element.x + 'px';
+                el.style.top = element.y + 'px';
+            }
+            updateProperties();
+        }
+
+        // ========================================
+        // AGREGAR ELEMENTOS
+        // ========================================
+
+        function addElement(type) {
+            const config = elementTypes[type];
+            const canvas = document.getElementById('layoutCanvas');
+
+            // Generar ID unico
+            const prefix = config.prefix;
+            let idNumber = 1;
+            const existingIds = editorState.elements
+                .filter(el => el.type === type)
+                .map(el => parseInt(el.id.replace(prefix, '')) || 0);
+
+            while (existingIds.includes(idNumber)) {
+                idNumber++;
+            }
+
+            const elementId = prefix + idNumber;
+
+            // Posicion inicial (centro del canvas visible)
+            const container = document.querySelector('.canvas-container');
+            const scrollLeft = container.scrollLeft;
+            const scrollTop = container.scrollTop;
+
+            const element = {
+                id: elementId,
+                type: type,
+                name: config.name + ' ' + idNumber,
+                x: Math.round((scrollLeft + 300) / editorState.zoom),
+                y: Math.round((scrollTop + 200) / editorState.zoom),
+                width: config.width,
+                height: config.height,
+                color: colors[editorState.elements.length % colors.length],
+                operadorId: null,
+                operadorNombre: ''
+            };
+
+            editorState.elements.push(element);
+            renderElement(element);
+            updateElementsList();
+            selectElement(elementId);
+
+            showToast(`${config.name} agregada: ${elementId}`, 'success');
+        }
+
+        function renderElement(element) {
+            const canvas = document.getElementById('layoutCanvas');
+
+            // Verificar si ya existe y eliminarlo
+            const existing = document.getElementById('el-' + element.id);
+            if (existing) existing.remove();
+
+            const el = document.createElement('div');
+            el.id = 'el-' + element.id;
+            el.className = `layout-element ${element.type}`;
+            el.style.left = element.x + 'px';
+            el.style.top = element.y + 'px';
+            el.style.width = element.width + 'px';
+            el.style.height = element.height + 'px';
+
+            el.innerHTML = `
+                <span class="element-id">${element.id}</span>
+                <span class="element-name">${element.name}</span>
+                <div class="resize-handle se" data-handle="se"></div>
+                <div class="resize-handle sw" data-handle="sw"></div>
+                <div class="resize-handle ne" data-handle="ne"></div>
+                <div class="resize-handle nw" data-handle="nw"></div>
+            `;
+
+            // Event listeners
+            el.addEventListener('mousedown', (e) => handleElementMouseDown(e, element.id));
+            el.addEventListener('dblclick', () => editElementProperties(element.id));
+
+            // Resize handles
+            el.querySelectorAll('.resize-handle').forEach(handle => {
+                handle.addEventListener('mousedown', (e) => handleResizeStart(e, element.id, handle.dataset.handle));
+            });
+
+            canvas.appendChild(el);
+        }
+
+        // ========================================
+        // SELECCION Y DRAG
+        // ========================================
+
+        function selectElement(elementId) {
+            // Deseleccionar anterior
+            document.querySelectorAll('.layout-element.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            document.querySelectorAll('.element-list-item.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+
+            editorState.selectedId = elementId;
+
+            if (elementId) {
+                const el = document.getElementById('el-' + elementId);
+                if (el) el.classList.add('selected');
+
+                const listItem = document.querySelector(`.element-list-item[data-id="${elementId}"]`);
+                if (listItem) listItem.classList.add('selected');
+
+                showProperties(elementId);
+            } else {
+                showNoSelection();
+            }
+        }
+
+        function handleElementMouseDown(e, elementId) {
+            if (e.target.classList.contains('resize-handle')) return;
+
+            e.preventDefault();
+            selectElement(elementId);
+
+            const element = editorState.elements.find(el => el.id === elementId);
+            if (!element) return;
+
+            editorState.isDragging = true;
+
+            const canvas = document.getElementById('layoutCanvas');
+            const canvasRect = canvas.getBoundingClientRect();
+
+            editorState.dragOffset = {
+                x: e.clientX - canvasRect.left - element.x * editorState.zoom,
+                y: e.clientY - canvasRect.top - element.y * editorState.zoom
+            };
+
+            document.addEventListener('mousemove', handleDrag);
+            document.addEventListener('mouseup', handleDragEnd);
+        }
+
+        function handleDrag(e) {
+            if (!editorState.isDragging || !editorState.selectedId) return;
+
+            const element = editorState.elements.find(el => el.id === editorState.selectedId);
+            if (!element) return;
+
+            const canvas = document.getElementById('layoutCanvas');
+            const canvasRect = canvas.getBoundingClientRect();
+
+            let newX = Math.round((e.clientX - canvasRect.left - editorState.dragOffset.x) / editorState.zoom);
+            let newY = Math.round((e.clientY - canvasRect.top - editorState.dragOffset.y) / editorState.zoom);
+
+            // Snap to grid (20px)
+            newX = Math.round(newX / 20) * 20;
+            newY = Math.round(newY / 20) * 20;
+
+            // Limitar al canvas
+            newX = Math.max(0, Math.min(newX, editorState.canvasWidth - element.width));
+            newY = Math.max(0, Math.min(newY, editorState.canvasHeight - element.height));
+
+            element.x = newX;
+            element.y = newY;
+
+            const el = document.getElementById('el-' + element.id);
+            if (el) {
+                el.style.left = newX + 'px';
+                el.style.top = newY + 'px';
+            }
+
+            updateProperties();
+        }
+
+        function handleDragEnd() {
+            editorState.isDragging = false;
+            document.removeEventListener('mousemove', handleDrag);
+            document.removeEventListener('mouseup', handleDragEnd);
+        }
+
+        // ========================================
+        // RESIZE
+        // ========================================
+
+        function handleResizeStart(e, elementId, handle) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            editorState.isResizing = true;
+            editorState.resizeHandle = handle;
+            editorState.selectedId = elementId;
+
+            const element = editorState.elements.find(el => el.id === elementId);
+            editorState.resizeStart = {
+                x: e.clientX,
+                y: e.clientY,
+                width: element.width,
+                height: element.height,
+                elementX: element.x,
+                elementY: element.y
+            };
+
+            document.addEventListener('mousemove', handleResize);
+            document.addEventListener('mouseup', handleResizeEnd);
+        }
+
+        function handleResize(e) {
+            if (!editorState.isResizing) return;
+
+            const element = editorState.elements.find(el => el.id === editorState.selectedId);
+            if (!element) return;
+
+            const dx = (e.clientX - editorState.resizeStart.x) / editorState.zoom;
+            const dy = (e.clientY - editorState.resizeStart.y) / editorState.zoom;
+            const handle = editorState.resizeHandle;
+
+            let newWidth = editorState.resizeStart.width;
+            let newHeight = editorState.resizeStart.height;
+            let newX = editorState.resizeStart.elementX;
+            let newY = editorState.resizeStart.elementY;
+
+            if (handle.includes('e')) {
+                newWidth = Math.max(40, editorState.resizeStart.width + dx);
+            }
+            if (handle.includes('w')) {
+                newWidth = Math.max(40, editorState.resizeStart.width - dx);
+                newX = editorState.resizeStart.elementX + (editorState.resizeStart.width - newWidth);
+            }
+            if (handle.includes('s')) {
+                newHeight = Math.max(40, editorState.resizeStart.height + dy);
+            }
+            if (handle.includes('n')) {
+                newHeight = Math.max(40, editorState.resizeStart.height - dy);
+                newY = editorState.resizeStart.elementY + (editorState.resizeStart.height - newHeight);
+            }
+
+            // Snap to grid
+            newWidth = Math.round(newWidth / 20) * 20;
+            newHeight = Math.round(newHeight / 20) * 20;
+            newX = Math.round(newX / 20) * 20;
+            newY = Math.round(newY / 20) * 20;
+
+            element.width = newWidth;
+            element.height = newHeight;
+            element.x = newX;
+            element.y = newY;
+
+            const el = document.getElementById('el-' + element.id);
+            if (el) {
+                el.style.width = newWidth + 'px';
+                el.style.height = newHeight + 'px';
+                el.style.left = newX + 'px';
+                el.style.top = newY + 'px';
+            }
+
+            updateProperties();
+        }
+
+        function handleResizeEnd() {
+            editorState.isResizing = false;
+            document.removeEventListener('mousemove', handleResize);
+            document.removeEventListener('mouseup', handleResizeEnd);
+        }
+
+        // ========================================
+        // PROPIEDADES
+        // ========================================
+
+        function showNoSelection() {
+            document.getElementById('propertiesContent').innerHTML = `
+                <div class="no-selection">
+                    <i class="fas fa-mouse-pointer"></i>
+                    <p>Selecciona un elemento para ver sus propiedades</p>
+                </div>
+            `;
+        }
+
+        function showProperties(elementId) {
+            const element = editorState.elements.find(el => el.id === elementId);
+            if (!element) return;
+
+            document.getElementById('propertiesContent').innerHTML = `
+                <div class="property-group">
+                    <label>ID (unico)</label>
+                    <input type="text" id="propId" value="${element.id}" onchange="updateElementId('${element.id}', this.value)">
+                </div>
+
+                <div class="property-group">
+                    <label>Nombre</label>
+                    <input type="text" id="propName" value="${element.name}" onchange="updateElementProp('${element.id}', 'name', this.value)">
+                </div>
+
+                <div class="property-group">
+                    <label>Tipo</label>
+                    <select id="propType" onchange="changeElementType('${element.id}', this.value)">
+                        <option value="costura" ${element.type === 'costura' ? 'selected' : ''}>Maquina Costura</option>
+                        <option value="mesa" ${element.type === 'mesa' ? 'selected' : ''}>Mesa</option>
+                        <option value="area" ${element.type === 'area' ? 'selected' : ''}>Area</option>
+                        <option value="estacion" ${element.type === 'estacion' ? 'selected' : ''}>Estacion</option>
+                    </select>
+                </div>
+
+                <div class="property-group">
+                    <label>Posicion</label>
+                    <div class="property-row">
+                        <div>
+                            <label>X</label>
+                            <input type="number" id="propX" value="${element.x}" onchange="updateElementProp('${element.id}', 'x', parseInt(this.value))">
+                        </div>
+                        <div>
+                            <label>Y</label>
+                            <input type="number" id="propY" value="${element.y}" onchange="updateElementProp('${element.id}', 'y', parseInt(this.value))">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="property-group">
+                    <label>Tamano</label>
+                    <div class="property-row">
+                        <div>
+                            <label>Ancho</label>
+                            <input type="number" id="propWidth" value="${element.width}" onchange="updateElementProp('${element.id}', 'width', parseInt(this.value))">
+                        </div>
+                        <div>
+                            <label>Alto</label>
+                            <input type="number" id="propHeight" value="${element.height}" onchange="updateElementProp('${element.id}', 'height', parseInt(this.value))">
+                        </div>
+                    </div>
+                </div>
+
+                <button class="delete-btn" onclick="deleteElement('${element.id}')">
+                    <i class="fas fa-trash"></i> Eliminar Elemento
+                </button>
+            `;
+        }
+
+        function updateProperties() {
+            if (!editorState.selectedId) return;
+            const element = editorState.elements.find(el => el.id === editorState.selectedId);
+            if (!element) return;
+
+            const propX = document.getElementById('propX');
+            const propY = document.getElementById('propY');
+            const propWidth = document.getElementById('propWidth');
+            const propHeight = document.getElementById('propHeight');
+
+            if (propX) propX.value = element.x;
+            if (propY) propY.value = element.y;
+            if (propWidth) propWidth.value = element.width;
+            if (propHeight) propHeight.value = element.height;
+        }
+
+        function updateElementProp(elementId, prop, value) {
+            const element = editorState.elements.find(el => el.id === elementId);
+            if (!element) return;
+
+            element[prop] = value;
+            renderElement(element);
+            selectElement(elementId);
+            updateElementsList();
+        }
+
+        function changeElementType(elementId, newType) {
+            const element = editorState.elements.find(el => el.id === elementId);
+            if (!element) return;
+
+            element.type = newType;
+            renderElement(element);
+            selectElement(elementId);
+            updateElementsList();
+        }
+
+        function updateElementId(oldId, newId) {
+            // Validar que no exista
+            if (editorState.elements.some(el => el.id === newId && el.id !== oldId)) {
+                showToast('El ID ya existe', 'error');
+                document.getElementById('propId').value = oldId;
+                return;
+            }
+
+            const element = editorState.elements.find(el => el.id === oldId);
+            if (!element) return;
+
+            // Eliminar elemento visual antiguo
+            const oldEl = document.getElementById('el-' + oldId);
+            if (oldEl) oldEl.remove();
+
+            element.id = newId;
+            renderElement(element);
+            updateElementsList();
+            selectElement(newId);
+        }
+
+        // ========================================
+        // ELIMINAR Y DUPLICAR
+        // ========================================
+
+        function deleteElement(elementId) {
+            const index = editorState.elements.findIndex(el => el.id === elementId);
+            if (index === -1) return;
+
+            editorState.elements.splice(index, 1);
+
+            const el = document.getElementById('el-' + elementId);
+            if (el) el.remove();
+
+            selectElement(null);
+            updateElementsList();
+            showToast('Elemento eliminado', 'success');
+        }
+
+        function duplicateSelected() {
+            if (!editorState.selectedId) {
+                showToast('Selecciona un elemento primero', 'warning');
+                return;
+            }
+
+            const original = editorState.elements.find(el => el.id === editorState.selectedId);
+            if (!original) return;
+
+            const config = elementTypes[original.type];
+            let idNumber = 1;
+            const existingIds = editorState.elements
+                .filter(el => el.type === original.type)
+                .map(el => parseInt(el.id.replace(config.prefix, '')) || 0);
+
+            while (existingIds.includes(idNumber)) {
+                idNumber++;
+            }
+
+            const newElement = {
+                ...original,
+                id: config.prefix + idNumber,
+                name: original.name + ' (copia)',
+                x: original.x + 20,
+                y: original.y + 20
+            };
+
+            editorState.elements.push(newElement);
+            renderElement(newElement);
+            updateElementsList();
+            selectElement(newElement.id);
+
+            showToast('Elemento duplicado', 'success');
+        }
+
+        // ========================================
+        // LISTA DE ELEMENTOS
+        // ========================================
+
+        function updateElementsList() {
+            const container = document.getElementById('elementsList');
+            const count = document.getElementById('elementCount');
+
+            count.textContent = editorState.elements.length;
+
+            if (editorState.elements.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted); font-size: 0.8rem;">No hay elementos</p>';
+                return;
+            }
+
+            container.innerHTML = editorState.elements.map(el => `
+                <div class="element-list-item ${el.id === editorState.selectedId ? 'selected' : ''}"
+                     data-id="${el.id}"
+                     onclick="selectElement('${el.id}')">
+                    <span class="dot ${el.type}"></span>
+                    <span><strong>${el.id}</strong> - ${el.name}</span>
+                </div>
+            `).join('');
+        }
+
+        // ========================================
+        // CANVAS
+        // ========================================
+
+        function resizeCanvas() {
+            editorState.canvasWidth = parseInt(document.getElementById('canvasWidth').value) || 1200;
+            editorState.canvasHeight = parseInt(document.getElementById('canvasHeight').value) || 700;
+
+            const canvas = document.getElementById('layoutCanvas');
+            canvas.style.width = editorState.canvasWidth + 'px';
+            canvas.style.height = editorState.canvasHeight + 'px';
+        }
+
+        function clearCanvas() {
+            if (!confirm('Eliminar todos los elementos?')) return;
+
+            editorState.elements = [];
+            document.getElementById('layoutCanvas').innerHTML = '';
+            selectElement(null);
+            updateElementsList();
+            showToast('Canvas limpiado', 'success');
+        }
+
+        // ========================================
+        // ZOOM
+        // ========================================
+
+        function zoomIn() {
+            editorState.zoom = Math.min(2, editorState.zoom + 0.1);
+            applyZoom();
+        }
+
+        function zoomOut() {
+            editorState.zoom = Math.max(0.5, editorState.zoom - 0.1);
+            applyZoom();
+        }
+
+        function resetZoom() {
+            editorState.zoom = 1;
+            applyZoom();
+        }
+
+        function applyZoom() {
+            const canvas = document.getElementById('layoutCanvas');
+            canvas.style.transform = `scale(${editorState.zoom})`;
+            canvas.style.transformOrigin = 'top left';
+            document.getElementById('zoomLevel').textContent = Math.round(editorState.zoom * 100) + '%';
+        }
+
+        // ========================================
+        // GUARDAR / CARGAR
+        // ========================================
+
+        function saveLayout() {
+            const layoutData = {
+                version: '1.0',
+                canvasWidth: editorState.canvasWidth,
+                canvasHeight: editorState.canvasHeight,
+                elements: editorState.elements,
+                savedAt: new Date().toISOString()
+            };
+
+            localStorage.setItem('planta_layout', JSON.stringify(layoutData));
+            showToast('Layout guardado correctamente', 'success');
+        }
+
+        function loadSavedLayout() {
+            const saved = localStorage.getItem('planta_layout');
+            if (!saved) return;
+
+            try {
+                const data = JSON.parse(saved);
+
+                editorState.canvasWidth = data.canvasWidth || 1200;
+                editorState.canvasHeight = data.canvasHeight || 700;
+                editorState.elements = data.elements || [];
+
+                document.getElementById('canvasWidth').value = editorState.canvasWidth;
+                document.getElementById('canvasHeight').value = editorState.canvasHeight;
+                resizeCanvas();
+
+                editorState.elements.forEach(el => renderElement(el));
+                updateElementsList();
+
+                showToast('Layout cargado', 'success');
+            } catch (e) {
+                console.error('Error cargando layout:', e);
+            }
+        }
+
+        function exportLayout() {
+            const layoutData = {
+                version: '1.0',
+                canvasWidth: editorState.canvasWidth,
+                canvasHeight: editorState.canvasHeight,
+                elements: editorState.elements,
+                exportedAt: new Date().toISOString()
+            };
+
+            const blob = new Blob([JSON.stringify(layoutData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'layout_planta_' + new Date().toISOString().split('T')[0] + '.json';
+            a.click();
+            URL.revokeObjectURL(url);
+
+            showToast('Layout exportado', 'success');
+        }
+
+        function importLayout() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+
+                        if (!data.elements) {
+                            throw new Error('Formato invalido');
+                        }
+
+                        // Limpiar canvas actual
+                        document.getElementById('layoutCanvas').innerHTML = '';
+
+                        editorState.canvasWidth = data.canvasWidth || 1200;
+                        editorState.canvasHeight = data.canvasHeight || 700;
+                        editorState.elements = data.elements;
+
+                        document.getElementById('canvasWidth').value = editorState.canvasWidth;
+                        document.getElementById('canvasHeight').value = editorState.canvasHeight;
+                        resizeCanvas();
+
+                        editorState.elements.forEach(el => renderElement(el));
+                        updateElementsList();
+                        selectElement(null);
+
+                        showToast('Layout importado correctamente', 'success');
+                    } catch (err) {
+                        showToast('Error al importar: ' + err.message, 'error');
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+            input.click();
+        }
+
+        function previewLayout() {
+            // Guardar antes de previsualizar
+            saveLayout();
+            window.open('supervisora.html', '_blank');
+        }
+
+        // ========================================
+        // MODAL Y TOAST
+        // ========================================
+
+        function openModal(title, content, footer = '') {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalBody').innerHTML = content;
+            document.getElementById('modalFooter').innerHTML = footer;
+            document.getElementById('modalOverlay').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('active');
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'times' : type === 'warning' ? 'exclamation' : 'info'}-circle"></i> ${message}`;
+            container.appendChild(toast);
+
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function editElementProperties(elementId) {
+            selectElement(elementId);
+            // Enfocar el input de nombre
+            setTimeout(() => {
+                const nameInput = document.getElementById('propName');
+                if (nameInput) nameInput.focus();
+            }, 100);
+        }
+    </script>
+</body>
+</html>

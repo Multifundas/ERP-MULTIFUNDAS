@@ -1,0 +1,3164 @@
+// ========================================
+// PANEL INTELIGENTE DE COCO - DASHBOARD
+// ========================================
+
+// Estado del dashboard de Coco
+const cocoState = {
+    calendarioMes: new Date().getMonth(),
+    calendarioAnio: new Date().getFullYear(),
+    reportePeriodo: 'semana',
+    reporteAreaFiltro: 'todas',
+    reporteEstadoFiltro: 'todos',
+    dashboardAreaFiltro: 'todas',
+    asistenteAreaFiltro: 'todas',
+    diaSeleccionado: new Date(),
+    chatHistorial: []
+};
+
+// ========================================
+// FUNCIONES DE FILTRADO
+// ========================================
+
+function getAreasDisponibles() {
+    const maquinas = Object.values(supervisoraState.maquinas || {});
+    const areas = new Set();
+
+    maquinas.forEach(m => {
+        if (m.area) areas.add(m.area);
+        if (m.tipo) areas.add(m.tipo);
+    });
+
+    // Areas por defecto si no hay datos
+    if (areas.size === 0) {
+        return ['Corte', 'Costura', 'Acabado', 'Empaque', 'Control Calidad'];
+    }
+
+    return Array.from(areas);
+}
+
+function filtrarOperadorasPorArea(operadoras, area) {
+    if (area === 'todas') return operadoras;
+
+    return operadoras.filter(op => {
+        // Buscar en que estacion esta el operador
+        const maquinas = Object.values(supervisoraState.maquinas || {});
+        for (const m of maquinas) {
+            if (m.operadores && m.operadores.some(o => o.id === op.id)) {
+                return m.area === area || m.tipo === area;
+            }
+        }
+        // Si el operador tiene area asignada directamente
+        return op.area === area || op.especialidad === area;
+    });
+}
+
+function filtrarOperadorasPorEstado(operadoras, estado) {
+    if (estado === 'todos') return operadoras;
+
+    const maquinas = Object.values(supervisoraState.maquinas || {});
+
+    return operadoras.filter(op => {
+        // Verificar si esta activo (asignado a alguna estacion)
+        const estaActivo = maquinas.some(m =>
+            m.operadores && m.operadores.some(o => o.id === op.id)
+        );
+
+        if (estado === 'activos') return estaActivo;
+        if (estado === 'inactivos') return !estaActivo;
+        return true;
+    });
+}
+
+function cambiarFiltroArea(area) {
+    cocoState.reporteAreaFiltro = area;
+    renderCocoReportes();
+}
+
+function cambiarFiltroEstado(estado) {
+    cocoState.reporteEstadoFiltro = estado;
+    renderCocoReportes();
+}
+
+function cambiarFiltroDashboard(area) {
+    cocoState.dashboardAreaFiltro = area;
+    renderCocoDashboard();
+}
+
+function cambiarFiltroAsistente(area) {
+    cocoState.asistenteAreaFiltro = area;
+    renderCocoAsistente();
+}
+
+// Verificar que getIniciales existe (definida en supervisora.js)
+if (typeof getIniciales === 'undefined') {
+    window.getIniciales = function(nombre) {
+        if (!nombre) return '??';
+        const partes = nombre.trim().split(' ');
+        if (partes.length === 1) return partes[0].substring(0, 2).toUpperCase();
+        return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+    };
+}
+
+// ========================================
+// NAVEGACION DE SECCIONES
+// ========================================
+
+function showSection(seccion) {
+    // Ocultar todas las secciones
+    document.querySelectorAll('.coco-section').forEach(s => {
+        s.classList.remove('active');
+    });
+
+    // Mostrar la seccion seleccionada
+    const seccionEl = document.getElementById('section-' + seccion);
+    if (seccionEl) {
+        seccionEl.classList.add('active');
+    }
+
+    // Actualizar navegacion
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.section === seccion);
+    });
+
+    // Renderizar contenido de la seccion
+    switch(seccion) {
+        case 'dashboard':
+            renderCocoDashboard();
+            break;
+        case 'calendario':
+            renderCocoCalendario();
+            break;
+        case 'reportes':
+            renderCocoReportes();
+            break;
+        case 'asistente':
+            renderCocoAsistente();
+            break;
+        case 'tiempos-muertos':
+            renderTiemposMuertos();
+            break;
+    }
+}
+
+// ========================================
+// DASHBOARD PRINCIPAL DE COCO
+// ========================================
+
+function renderCocoDashboard() {
+    const container = document.querySelector('.coco-dashboard-container');
+    if (!container) return;
+
+    const hora = new Date().getHours();
+    const saludo = hora < 12 ? 'Buenos dias' : hora < 18 ? 'Buenas tardes' : 'Buenas noches';
+
+    // Obtener estadisticas del dia
+    const stats = calcularEstadisticasDia();
+    const alertas = generarAlertasInteligentes();
+    const areaFiltro = cocoState.dashboardAreaFiltro;
+    const areas = getAreasDisponibles();
+
+    // Obtener top operadoras con filtro
+    let topOperadoras = getTopOperadoras(10);
+    if (areaFiltro !== 'todas') {
+        topOperadoras = filtrarOperadorasPorArea(topOperadoras, areaFiltro);
+    }
+    topOperadoras = topOperadoras.slice(0, 5);
+
+    const pedidosUrgentes = getPedidosUrgentes();
+
+    container.innerHTML = `
+        <div class="coco-dashboard">
+            <!-- Header de bienvenida -->
+            <div class="coco-welcome">
+                <div class="welcome-content">
+                    <div class="welcome-avatar">
+                        <i class="fas fa-user-tie"></i>
+                    </div>
+                    <div class="welcome-text">
+                        <h1>${saludo}, <span class="coco-name">Coco</span> <span class="wave-emoji">👋</span></h1>
+                        <p class="welcome-date">${formatearFechaCompleta(new Date())}</p>
+                        <p class="welcome-summary">
+                            Tienes <strong>${stats.pedidosActivos}</strong> pedidos activos y
+                            <strong>${stats.operadorasActivas}</strong> operadoras trabajando.
+                            ${stats.eficienciaGeneral >= 90 ? '¡Excelente dia!' :
+                              stats.eficienciaGeneral >= 70 ? 'Vamos bien.' :
+                              'Hay areas de oportunidad.'}
+                        </p>
+                    </div>
+                </div>
+                <div class="welcome-quick-stats">
+                    <div class="quick-stat ${stats.eficienciaGeneral >= 90 ? 'excellent' : stats.eficienciaGeneral >= 70 ? 'good' : 'warning'}">
+                        <span class="quick-stat-value">${stats.eficienciaGeneral}%</span>
+                        <span class="quick-stat-label">Eficiencia</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Alertas Inteligentes -->
+            ${alertas.length > 0 ? `
+                <div class="coco-alertas-section">
+                    <h3><i class="fas fa-bell"></i> Atencion, Coco</h3>
+                    <div class="alertas-grid">
+                        ${alertas.map(alerta => `
+                            <div class="alerta-card ${alerta.tipo}">
+                                <div class="alerta-icon">
+                                    <i class="fas ${alerta.icono}"></i>
+                                </div>
+                                <div class="alerta-content">
+                                    <h4>${alerta.titulo}</h4>
+                                    <p>${alerta.mensaje}</p>
+                                </div>
+                                ${alerta.accion ? `
+                                    <button class="alerta-action" onclick="${alerta.accion}">
+                                        ${alerta.accionTexto}
+                                    </button>
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
+            <!-- Grid de metricas -->
+            <div class="coco-metrics-grid">
+                <div class="metric-card produccion">
+                    <div class="metric-header">
+                        <i class="fas fa-cubes"></i>
+                        <span>Produccion Hoy</span>
+                    </div>
+                    <div class="metric-value">${stats.piezasHoy.toLocaleString()}</div>
+                    <div class="metric-comparison ${stats.comparacionAyer >= 0 ? 'positive' : 'negative'}">
+                        <i class="fas fa-${stats.comparacionAyer >= 0 ? 'arrow-up' : 'arrow-down'}"></i>
+                        ${Math.abs(stats.comparacionAyer)}% vs ayer
+                    </div>
+                    <div class="metric-chart">
+                        ${renderMiniChart(stats.produccionPorHora)}
+                    </div>
+                </div>
+
+                <div class="metric-card operadoras">
+                    <div class="metric-header">
+                        <i class="fas fa-users"></i>
+                        <span>Operadoras</span>
+                    </div>
+                    <div class="metric-value">${stats.operadorasActivas}/${stats.operadorasTotal}</div>
+                    <div class="metric-breakdown">
+                        <span class="breakdown-item activo"><i class="fas fa-circle"></i> ${stats.operadorasActivas} activas</span>
+                        <span class="breakdown-item inactivo"><i class="fas fa-circle"></i> ${stats.operadorasInactivas} sin asignar</span>
+                    </div>
+                </div>
+
+                <div class="metric-card pedidos">
+                    <div class="metric-header">
+                        <i class="fas fa-clipboard-list"></i>
+                        <span>Pedidos del Dia</span>
+                    </div>
+                    <div class="metric-value">${stats.pedidosActivos}</div>
+                    <div class="metric-breakdown">
+                        <span class="breakdown-item urgente"><i class="fas fa-fire"></i> ${stats.pedidosUrgentes} urgentes</span>
+                        <span class="breakdown-item normal"><i class="fas fa-clock"></i> ${stats.pedidosNormales} normales</span>
+                    </div>
+                </div>
+
+                <div class="metric-card tiempo">
+                    <div class="metric-header">
+                        <i class="fas fa-clock"></i>
+                        <span>Entregas Hoy</span>
+                    </div>
+                    <div class="metric-value">${stats.entregasHoy}</div>
+                    <div class="metric-status ${stats.entregasEnRiesgo > 0 ? 'warning' : 'good'}">
+                        ${stats.entregasEnRiesgo > 0 ?
+                            `<i class="fas fa-exclamation-triangle"></i> ${stats.entregasEnRiesgo} en riesgo` :
+                            `<i class="fas fa-check-circle"></i> Todo a tiempo`
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Seccion de dos columnas -->
+            <div class="coco-two-columns">
+                <!-- Top Operadoras -->
+                <div class="coco-card top-operadoras">
+                    <div class="card-header">
+                        <h3><i class="fas fa-trophy"></i> Top Operadoras Hoy</h3>
+                        <div class="card-header-actions">
+                            <select class="mini-select" onchange="cambiarFiltroDashboard(this.value)">
+                                <option value="todas" ${areaFiltro === 'todas' ? 'selected' : ''}>Todas</option>
+                                ${areas.map(a => `<option value="${a}" ${areaFiltro === a ? 'selected' : ''}>${a}</option>`).join('')}
+                            </select>
+                            <button class="btn-link" onclick="showSection('reportes')">Ver todas</button>
+                        </div>
+                    </div>
+                    <div class="top-list">
+                        ${topOperadoras.length > 0 ? topOperadoras.map((op, idx) => `
+                            <div class="top-item ${idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : ''}">
+                                <div class="top-rank">${idx + 1}</div>
+                                <div class="top-avatar">${getIniciales(op.nombre)}</div>
+                                <div class="top-info">
+                                    <span class="top-name">${op.nombre}</span>
+                                    <span class="top-estacion">${op.estacion || 'Sin estacion'}</span>
+                                </div>
+                                <div class="top-stats">
+                                    <span class="top-piezas">${op.piezas} pzas</span>
+                                    <span class="top-eficiencia ${op.eficiencia >= 100 ? 'excellent' : ''}">${op.eficiencia}%</span>
+                                </div>
+                            </div>
+                        `).join('') : `
+                            <div class="empty-top">
+                                <i class="fas fa-users"></i>
+                                <p>No hay operadoras activas aun</p>
+                            </div>
+                        `}
+                    </div>
+                </div>
+
+                <!-- Pedidos Urgentes con Predicción -->
+                <div class="coco-card pedidos-urgentes">
+                    <div class="card-header">
+                        <h3><i class="fas fa-fire"></i> Pedidos que Requieren Atencion</h3>
+                    </div>
+                    <div class="urgentes-list">
+                        ${pedidosUrgentes.length > 0 ? pedidosUrgentes.map(pedido => {
+                            const prediccion = typeof predecirEntrega === 'function' ? predecirEntrega(pedido.id) : null;
+                            const estadoPrediccion = prediccion ? (prediccion.aTiempo ? 'a-tiempo' : (prediccion.margen > -12 ? 'en-riesgo' : 'atrasado')) : '';
+                            return `
+                            <div class="urgente-item">
+                                <div class="urgente-info">
+                                    <span class="urgente-id">#${pedido.id}</span>
+                                    <span class="urgente-cliente">${pedido.cliente}</span>
+                                    ${prediccion ? `
+                                    <span class="prediccion-badge ${estadoPrediccion}">
+                                        <i class="fas ${prediccion.aTiempo ? 'fa-check' : 'fa-exclamation-triangle'}"></i>
+                                        ${prediccion.aTiempo ? 'A tiempo' : `${Math.abs(prediccion.margen)}h ${prediccion.margen > 0 ? 'margen' : 'retraso'}`}
+                                    </span>
+                                    ` : ''}
+                                </div>
+                                <div class="urgente-progress">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill ${prediccion ? (prediccion.aTiempo ? 'good' : (estadoPrediccion === 'en-riesgo' ? 'warning' : 'danger')) : (pedido.progreso < 50 ? 'danger' : 'warning')}"
+                                             style="width: ${prediccion ? prediccion.porcentaje : pedido.progreso}%"></div>
+                                    </div>
+                                    <span>${prediccion ? prediccion.porcentaje : pedido.progreso}%</span>
+                                </div>
+                                <div class="urgente-entrega">
+                                    <i class="fas fa-clock"></i>
+                                    ${pedido.tiempoRestante}
+                                    ${prediccion && prediccion.horasRestantes > 0 ? `<small>(~${prediccion.horasRestantes}h trabajo)</small>` : ''}
+                                </div>
+                            </div>
+                        `}).join('') : `
+                            <div class="no-urgentes">
+                                <i class="fas fa-check-circle"></i>
+                                <p>¡Excelente, Coco! No hay pedidos urgentes en riesgo.</p>
+                            </div>
+                        `}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recomendacion rapida de IA -->
+            <div class="coco-ia-quick">
+                <div class="ia-quick-header">
+                    <div class="ia-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="ia-intro">
+                        <h4>Recomendacion del Asistente</h4>
+                        <p>Basado en el rendimiento historico</p>
+                    </div>
+                </div>
+                <div class="ia-quick-content">
+                    ${generarRecomendacionRapida()}
+                </div>
+                <button class="btn btn-primary" onclick="showSection('asistente')">
+                    <i class="fas fa-robot"></i> Ver mas recomendaciones
+                </button>
+            </div>
+
+            <!-- Acciones Rápidas -->
+            <div class="coco-card acciones-rapidas">
+                <div class="card-header">
+                    <h3><i class="fas fa-bolt"></i> Acciones Rapidas</h3>
+                </div>
+                <div class="acciones-grid">
+                    <button class="accion-btn" onclick="showSection('planta')">
+                        <i class="fas fa-map"></i>
+                        <span>Vista Planta</span>
+                    </button>
+                    <button class="accion-btn" onclick="showSection('reportes')">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Reportes</span>
+                    </button>
+                    <button class="accion-btn" onclick="typeof mostrarModalBackups === 'function' ? mostrarModalBackups() : showToast('Función no disponible', 'error')">
+                        <i class="fas fa-database"></i>
+                        <span>Backups</span>
+                    </button>
+                    <button class="accion-btn" onclick="typeof toggleModoTV === 'function' ? toggleModoTV() : showToast('Función no disponible', 'error')">
+                        <i class="fas fa-tv"></i>
+                        <span>Modo TV</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ========================================
+// FUNCIONES AUXILIARES DEL DASHBOARD
+// ========================================
+
+function calcularEstadisticasDia() {
+    const maquinas = Object.values(supervisoraState.maquinas);
+    const operadoras = supervisoraState.operadores || [];
+    const pedidos = supervisoraState.pedidosHoy || [];
+
+    // Contar operadoras activas (que estan en alguna estacion)
+    let operadorasActivas = 0;
+    maquinas.forEach(m => {
+        if (m.operadores && m.operadores.length > 0) {
+            operadorasActivas += m.operadores.length;
+        }
+    });
+
+    const piezasHoy = maquinas.reduce((sum, m) => sum + (m.piezasHoy || 0), 0);
+
+    return {
+        piezasHoy: piezasHoy,
+        operadorasActivas: operadorasActivas,
+        operadorasTotal: operadoras.length,
+        operadorasInactivas: Math.max(0, operadoras.length - operadorasActivas),
+        pedidosActivos: pedidos.length,
+        pedidosUrgentes: pedidos.filter(p => p.prioridad === 'alta' || p.prioridad === 'urgente').length,
+        pedidosNormales: pedidos.filter(p => p.prioridad !== 'alta' && p.prioridad !== 'urgente').length,
+        eficienciaGeneral: calcularEficienciaGeneral(),
+        entregasHoy: pedidos.filter(p => esEntregaHoy(p)).length,
+        entregasEnRiesgo: pedidos.filter(p => esEntregaEnRiesgo(p)).length,
+        comparacionAyer: calcularComparacionAyer(),
+        produccionPorHora: getProduccionPorHora()
+    };
+}
+
+function calcularEficienciaGeneral() {
+    const maquinas = Object.values(supervisoraState.maquinas);
+    const activas = maquinas.filter(m => m.operadores && m.operadores.length > 0);
+
+    if (activas.length === 0) return 0;
+
+    let totalEficiencia = 0;
+    activas.forEach(m => {
+        totalEficiencia += m.efectividad || 80; // Default 80% si no hay datos
+    });
+
+    return Math.round(totalEficiencia / activas.length);
+}
+
+function esEntregaHoy(pedido) {
+    if (!pedido.fechaEntrega) return false;
+    const hoy = new Date();
+    const entrega = new Date(pedido.fechaEntrega);
+    return entrega.toDateString() === hoy.toDateString();
+}
+
+function esEntregaEnRiesgo(pedido) {
+    if (!pedido.fechaEntrega) return false;
+    const progreso = pedido.progreso || calcularProgresoPedido(pedido);
+    const hoy = new Date();
+    const entrega = new Date(pedido.fechaEntrega);
+    const diasRestantes = Math.ceil((entrega - hoy) / (1000 * 60 * 60 * 24));
+
+    // En riesgo si quedan menos de 2 dias y progreso menor a 70%
+    return diasRestantes <= 2 && progreso < 70;
+}
+
+function calcularProgresoPedido(pedido) {
+    if (pedido.progreso) return pedido.progreso;
+    if (!pedido.productos || pedido.productos.length === 0) return 0;
+
+    const prod = pedido.productos[0];
+    const cantidad = prod.cantidad || 1;
+    const completadas = prod.completadas || 0;
+    return Math.round((completadas / cantidad) * 100);
+}
+
+function calcularComparacionAyer() {
+    const historial = getHistorialProduccion();
+    const ayer = new Date();
+    ayer.setDate(ayer.getDate() - 1);
+
+    const produccionAyer = historial
+        .filter(h => new Date(h.fecha).toDateString() === ayer.toDateString())
+        .reduce((sum, h) => sum + (h.piezas || 0), 0);
+
+    const produccionHoy = Object.values(supervisoraState.maquinas)
+        .reduce((sum, m) => sum + (m.piezasHoy || 0), 0);
+
+    if (produccionAyer === 0) return 0;
+    return Math.round(((produccionHoy - produccionAyer) / produccionAyer) * 100);
+}
+
+function getProduccionPorHora() {
+    // Simulacion de datos por hora (en produccion real se obtendrian del historial)
+    const horas = [];
+    const horaActual = new Date().getHours();
+
+    for (let i = 8; i <= horaActual && i <= 18; i++) {
+        horas.push({
+            hora: i,
+            piezas: Math.floor(Math.random() * 50) + 20
+        });
+    }
+
+    return horas;
+}
+
+function renderMiniChart(data) {
+    if (!data || data.length === 0) {
+        return '<div class="mini-chart-empty">Sin datos</div>';
+    }
+
+    const max = Math.max(...data.map(d => d.piezas));
+
+    return `
+        <div class="mini-chart">
+            ${data.map(d => `
+                <div class="mini-bar" style="height: ${(d.piezas / max) * 100}%" title="${d.hora}:00 - ${d.piezas} pzas"></div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function generarAlertasInteligentes() {
+    const alertas = [];
+    const maquinas = Object.values(supervisoraState.maquinas);
+    const pedidos = supervisoraState.pedidosHoy || [];
+    const operadores = supervisoraState.operadores || [];
+
+    // Operadoras sin asignar cuando hay pedidos urgentes
+    const sinAsignar = operadores.filter(op =>
+        !maquinas.some(m =>
+            m.operadores && m.operadores.some(o => o.id === op.id)
+        )
+    );
+
+    const pedidosUrgentes = pedidos.filter(p =>
+        (p.prioridad === 'alta' || p.prioridad === 'urgente') &&
+        calcularProgresoPedido(p) < 80
+    );
+
+    if (sinAsignar.length > 0 && pedidosUrgentes.length > 0) {
+        alertas.push({
+            tipo: 'warning',
+            icono: 'fa-user-plus',
+            titulo: `${sinAsignar.length} operadora${sinAsignar.length > 1 ? 's' : ''} sin asignar`,
+            mensaje: `Hay pedidos urgentes que necesitan mas manos. Te recomiendo asignar a ${sinAsignar[0].nombre}.`,
+            accion: `showSection('asistente')`,
+            accionTexto: 'Ver recomendacion'
+        });
+    }
+
+    // Estaciones activas sin proceso asignado
+    const sinProceso = maquinas.filter(m =>
+        m.operadores && m.operadores.length > 0 && !m.procesoNombre
+    );
+
+    if (sinProceso.length > 0) {
+        alertas.push({
+            tipo: 'info',
+            icono: 'fa-tasks',
+            titulo: `${sinProceso.length} estacion${sinProceso.length > 1 ? 'es' : ''} sin proceso`,
+            mensaje: `Las estaciones ${sinProceso.map(m => m.id).slice(0, 3).join(', ')}${sinProceso.length > 3 ? '...' : ''} tienen operadoras pero no proceso asignado.`,
+            accion: `selectEstacion('${sinProceso[0].id}')`,
+            accionTexto: 'Asignar proceso'
+        });
+    }
+
+    // Pedido en riesgo de entrega
+    const enRiesgo = pedidos.filter(p => esEntregaEnRiesgo(p));
+    if (enRiesgo.length > 0) {
+        alertas.push({
+            tipo: 'danger',
+            icono: 'fa-exclamation-triangle',
+            titulo: `¡Pedido #${enRiesgo[0].id} en riesgo!`,
+            mensaje: `Solo tiene ${calcularProgresoPedido(enRiesgo[0])}% de avance y la entrega es pronto. Considera reasignar recursos.`,
+            accion: `abrirDetalleProceso && abrirDetalleProceso(${enRiesgo[0].id})`,
+            accionTexto: 'Ver pedido'
+        });
+    }
+
+    return alertas;
+}
+
+function getTopOperadoras(limite) {
+    const ranking = [];
+
+    Object.entries(supervisoraState.maquinas).forEach(([estacionId, maquina]) => {
+        if (maquina.operadores && maquina.operadores.length > 0) {
+            maquina.operadores.forEach(op => {
+                ranking.push({
+                    id: op.id,
+                    nombre: op.nombre,
+                    estacion: estacionId,
+                    piezas: maquina.piezasHoy || 0,
+                    eficiencia: maquina.efectividad || calcularEficienciaOperadora(op.id)
+                });
+            });
+        }
+    });
+
+    return ranking
+        .sort((a, b) => b.piezas - a.piezas)
+        .slice(0, limite);
+}
+
+function calcularEficienciaOperadora(operadorId) {
+    const historial = getHistorialProduccion();
+    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+
+    // Buscar registros del operador
+    const registros = historial.filter(h => h.operadoraId == operadorId || h.operadorId == operadorId);
+
+    // Buscar eficiencia en estado_maquinas
+    for (const [estId, estado] of Object.entries(estadoMaquinas)) {
+        if (estado.operadoraId == operadorId && estado.efectividad) {
+            return Math.round(estado.efectividad);
+        }
+    }
+
+    // Buscar en supervisoraState.maquinas
+    for (const [estId, maquina] of Object.entries(supervisoraState.maquinas || {})) {
+        if (maquina.operadores && maquina.operadores.some(o => o.id == operadorId)) {
+            if (maquina.efectividad) return Math.round(maquina.efectividad);
+        }
+    }
+
+    // Calcular desde historial
+    if (registros.length === 0) return 85; // Default más realista
+
+    const eficiencias = registros.filter(r => r.eficiencia).map(r => r.eficiencia);
+    if (eficiencias.length === 0) {
+        // Calcular eficiencia basada en piezas vs meta
+        const conMeta = registros.filter(r => r.meta && r.meta > 0);
+        if (conMeta.length > 0) {
+            const eficiencia = conMeta.reduce((sum, r) => {
+                const piezas = r.cantidad || r.piezas || 0;
+                return sum + ((piezas / r.meta) * 100);
+            }, 0) / conMeta.length;
+            return Math.round(eficiencia);
+        }
+        return 85;
+    }
+
+    return Math.round(eficiencias.reduce((a, b) => a + b, 0) / eficiencias.length);
+}
+
+function getPedidosUrgentes() {
+    const pedidos = supervisoraState.pedidosHoy || [];
+
+    return pedidos
+        .filter(p => p.prioridad === 'alta' || p.prioridad === 'urgente' || esEntregaEnRiesgo(p))
+        .map(p => ({
+            id: p.id,
+            cliente: p.clienteNombre || 'Cliente',
+            progreso: calcularProgresoPedido(p),
+            tiempoRestante: calcularTiempoRestante(p)
+        }))
+        .slice(0, 5);
+}
+
+function calcularTiempoRestante(pedido) {
+    if (!pedido.fechaEntrega) return 'Sin fecha';
+
+    const ahora = new Date();
+    const entrega = new Date(pedido.fechaEntrega);
+    const diff = entrega - ahora;
+
+    if (diff < 0) return 'Vencido';
+
+    const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const horas = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+    if (dias > 0) return `${dias}d ${horas}h`;
+    return `${horas}h`;
+}
+
+function generarRecomendacionRapida() {
+    const recomendaciones = getRecomendacionesIA();
+
+    if (recomendaciones.asignaciones.length === 0) {
+        return `<p>Todo esta bajo control, Coco. Tu equipo esta trabajando eficientemente.</p>`;
+    }
+
+    const rec = recomendaciones.asignaciones[0];
+    return `
+        <div class="recomendacion-rapida">
+            <p><strong>${rec.titulo || 'Recomendacion de asignacion'}</strong></p>
+            <p>${rec.razon || `Considera asignar a ${rec.operadora} al proceso de ${rec.procesoSugerido}.`}</p>
+        </div>
+    `;
+}
+
+function formatearFechaCompleta(fecha) {
+    const opciones = {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    };
+    return fecha.toLocaleDateString('es-MX', opciones);
+}
+
+function formatearFecha(fechaStr) {
+    if (!fechaStr) return '-';
+    const fecha = new Date(fechaStr);
+    if (isNaN(fecha.getTime())) return '-';
+    return fecha.toLocaleDateString('es-MX', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+    });
+}
+
+// ========================================
+// CALENDARIO DE COCO
+// ========================================
+
+function renderCocoCalendario() {
+    const container = document.querySelector('.coco-calendario-container');
+    if (!container) return;
+
+    const ahora = new Date();
+    const mesActual = cocoState.calendarioMes;
+    const anioActual = cocoState.calendarioAnio;
+
+    const diasMes = getDiasMes(anioActual, mesActual);
+    const primerDia = new Date(anioActual, mesActual, 1).getDay();
+    const eventos = getEventosCalendario(anioActual, mesActual);
+
+    container.innerHTML = `
+        <div class="coco-calendario">
+            <div class="calendario-header">
+                <div class="calendario-nav">
+                    <button class="btn-icon" onclick="cambiarMes(-1)">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <h2>${getNombreMes(mesActual)} ${anioActual}</h2>
+                    <button class="btn-icon" onclick="cambiarMes(1)">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+                <div class="calendario-acciones">
+                    <button class="btn btn-outline" onclick="irAHoy()">
+                        <i class="fas fa-calendar-day"></i> Hoy
+                    </button>
+                    <button class="btn btn-primary" onclick="agregarEvento()">
+                        <i class="fas fa-plus"></i> Nuevo Evento
+                    </button>
+                </div>
+            </div>
+
+            <!-- Leyenda -->
+            <div class="calendario-leyenda">
+                <span class="leyenda-item"><span class="dot entrega"></span> Entrega</span>
+                <span class="leyenda-item"><span class="dot ausencia"></span> Ausencia</span>
+                <span class="leyenda-item"><span class="dot pedido"></span> Inicio Pedido</span>
+                <span class="leyenda-item"><span class="dot mantenimiento"></span> Mantenimiento</span>
+            </div>
+
+            <!-- Grid del calendario -->
+            <div class="calendario-grid">
+                <div class="calendario-dias-semana">
+                    <span>Dom</span><span>Lun</span><span>Mar</span><span>Mie</span>
+                    <span>Jue</span><span>Vie</span><span>Sab</span>
+                </div>
+                <div class="calendario-dias">
+                    ${renderDiasCalendario(anioActual, mesActual, diasMes, primerDia, eventos)}
+                </div>
+            </div>
+
+            <!-- Lista de eventos del dia seleccionado -->
+            <div class="calendario-detalle">
+                <h3><i class="fas fa-list"></i> Eventos del Dia Seleccionado</h3>
+                <div id="eventosDelDia">
+                    ${renderEventosDelDia(cocoState.diaSeleccionado, eventos)}
+                </div>
+            </div>
+
+            <!-- Proximas entregas -->
+            <div class="proximas-entregas">
+                <h3><i class="fas fa-truck"></i> Proximas Entregas</h3>
+                <div class="entregas-timeline">
+                    ${renderProximasEntregas()}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function getDiasMes(anio, mes) {
+    return new Date(anio, mes + 1, 0).getDate();
+}
+
+function getNombreMes(mes) {
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    return meses[mes];
+}
+
+function renderDiasCalendario(anio, mes, diasMes, primerDia, eventos) {
+    let html = '';
+    const hoy = new Date();
+
+    // Dias vacios antes del primer dia
+    for (let i = 0; i < primerDia; i++) {
+        html += '<div class="dia vacio"></div>';
+    }
+
+    // Dias del mes
+    for (let dia = 1; dia <= diasMes; dia++) {
+        const fecha = new Date(anio, mes, dia);
+        const esHoy = fecha.toDateString() === hoy.toDateString();
+        const esSeleccionado = fecha.toDateString() === cocoState.diaSeleccionado.toDateString();
+
+        const eventosDelDia = eventos.filter(e => {
+            const fechaEvento = new Date(e.fecha);
+            return fechaEvento.getDate() === dia && fechaEvento.getMonth() === mes;
+        });
+
+        const tieneEntrega = eventosDelDia.some(e => e.tipo === 'entrega');
+        const tieneAusencia = eventosDelDia.some(e => e.tipo === 'ausencia');
+        const tienePedido = eventosDelDia.some(e => e.tipo === 'pedido');
+        const tieneMantenimiento = eventosDelDia.some(e => e.tipo === 'mantenimiento');
+
+        html += `
+            <div class="dia ${esHoy ? 'hoy' : ''} ${esSeleccionado ? 'seleccionado' : ''} ${eventosDelDia.length > 0 ? 'con-eventos' : ''}"
+                 onclick="seleccionarDia(${anio}, ${mes}, ${dia})">
+                <span class="dia-numero">${dia}</span>
+                <div class="dia-eventos">
+                    ${tieneEntrega ? '<span class="evento-dot entrega"></span>' : ''}
+                    ${tieneAusencia ? '<span class="evento-dot ausencia"></span>' : ''}
+                    ${tienePedido ? '<span class="evento-dot pedido"></span>' : ''}
+                    ${tieneMantenimiento ? '<span class="evento-dot mantenimiento"></span>' : ''}
+                </div>
+                ${eventosDelDia.length > 1 ? `<span class="eventos-count">+${eventosDelDia.length}</span>` : ''}
+            </div>
+        `;
+    }
+
+    return html;
+}
+
+function getEventosCalendario(anio, mes) {
+    const eventos = [];
+    const pedidos = supervisoraState.pedidosHoy || [];
+
+    // Obtener entregas de pedidos
+    pedidos.forEach(pedido => {
+        if (pedido.fechaEntrega) {
+            const fecha = new Date(pedido.fechaEntrega);
+            if (fecha.getMonth() === mes && fecha.getFullYear() === anio) {
+                eventos.push({
+                    id: `entrega-${pedido.id}`,
+                    tipo: 'entrega',
+                    titulo: `Entrega Pedido #${pedido.id}`,
+                    descripcion: pedido.clienteNombre || 'Cliente',
+                    fecha: pedido.fechaEntrega,
+                    prioridad: pedido.prioridad
+                });
+            }
+        }
+    });
+
+    // Cargar eventos guardados (ausencias, mantenimiento, etc)
+    const eventosGuardados = JSON.parse(localStorage.getItem('calendario_eventos') || '[]');
+    eventos.push(...eventosGuardados.filter(e => {
+        const fecha = new Date(e.fecha);
+        return fecha.getMonth() === mes && fecha.getFullYear() === anio;
+    }));
+
+    return eventos;
+}
+
+function renderEventosDelDia(fecha, eventos) {
+    const eventosDelDia = eventos.filter(e => {
+        const fechaEvento = new Date(e.fecha);
+        return fechaEvento.toDateString() === fecha.toDateString();
+    });
+
+    if (eventosDelDia.length === 0) {
+        return '<p class="sin-eventos">No hay eventos para este dia</p>';
+    }
+
+    return eventosDelDia.map(e => `
+        <div class="evento-item ${e.tipo}">
+            <div class="evento-tipo-badge ${e.tipo}">${e.tipo}</div>
+            <div class="evento-info">
+                <strong>${e.titulo}</strong>
+                <span>${e.descripcion || ''}</span>
+            </div>
+            ${e.tipo !== 'entrega' ? `
+                <button class="btn-icon" onclick="eliminarEvento('${e.id}')" title="Eliminar">
+                    <i class="fas fa-trash"></i>
+                </button>
+            ` : ''}
+        </div>
+    `).join('');
+}
+
+function renderProximasEntregas() {
+    const pedidos = supervisoraState.pedidosHoy || [];
+    const hoy = new Date();
+
+    const proximasEntregas = pedidos
+        .filter(p => p.fechaEntrega && new Date(p.fechaEntrega) >= hoy)
+        .sort((a, b) => new Date(a.fechaEntrega) - new Date(b.fechaEntrega))
+        .slice(0, 5);
+
+    if (proximasEntregas.length === 0) {
+        return '<p class="sin-entregas">No hay entregas programadas</p>';
+    }
+
+    return proximasEntregas.map(p => {
+        const fecha = new Date(p.fechaEntrega);
+        const diasRestantes = Math.ceil((fecha - hoy) / (1000 * 60 * 60 * 24));
+
+        return `
+            <div class="entrega-timeline-item ${diasRestantes <= 2 ? 'urgente' : ''}">
+                <div class="timeline-fecha">
+                    <span class="timeline-dia">${fecha.getDate()}</span>
+                    <span class="timeline-mes">${getNombreMes(fecha.getMonth()).substring(0, 3)}</span>
+                </div>
+                <div class="timeline-linea"></div>
+                <div class="timeline-content">
+                    <span class="timeline-pedido">#${p.id} - ${p.clienteNombre || 'Cliente'}</span>
+                    <span class="timeline-restante">${diasRestantes === 0 ? 'Hoy' : diasRestantes === 1 ? 'Manana' : `En ${diasRestantes} dias`}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function cambiarMes(delta) {
+    cocoState.calendarioMes += delta;
+
+    if (cocoState.calendarioMes > 11) {
+        cocoState.calendarioMes = 0;
+        cocoState.calendarioAnio++;
+    } else if (cocoState.calendarioMes < 0) {
+        cocoState.calendarioMes = 11;
+        cocoState.calendarioAnio--;
+    }
+
+    renderCocoCalendario();
+}
+
+function irAHoy() {
+    const hoy = new Date();
+    cocoState.calendarioMes = hoy.getMonth();
+    cocoState.calendarioAnio = hoy.getFullYear();
+    cocoState.diaSeleccionado = hoy;
+    renderCocoCalendario();
+}
+
+function seleccionarDia(anio, mes, dia) {
+    cocoState.diaSeleccionado = new Date(anio, mes, dia);
+    renderCocoCalendario();
+}
+
+function agregarEvento() {
+    const operadores = supervisoraState.operadores || [];
+
+    const content = `
+        <div class="agregar-evento-form">
+            <div class="form-group">
+                <label>Tipo de Evento</label>
+                <select id="eventoTipo" class="form-control" onchange="actualizarFormEvento()">
+                    <option value="ausencia">Ausencia de Operadora</option>
+                    <option value="mantenimiento">Mantenimiento de Maquina</option>
+                    <option value="capacitacion">Capacitacion</option>
+                    <option value="otro">Otro</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="eventoOperadoraGroup">
+                <label>Operadora</label>
+                <select id="eventoOperadora" class="form-control">
+                    <option value="">-- Seleccionar --</option>
+                    ${operadores.map(op =>
+                        `<option value="${op.id}">${op.nombre}</option>`
+                    ).join('')}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Fecha</label>
+                <input type="date" id="eventoFecha" class="form-control" value="${new Date().toISOString().split('T')[0]}">
+            </div>
+
+            <div class="form-group">
+                <label>Titulo</label>
+                <input type="text" id="eventoTitulo" class="form-control" placeholder="Descripcion breve...">
+            </div>
+
+            <div class="form-group">
+                <label>Descripcion</label>
+                <textarea id="eventoDescripcion" class="form-control" rows="2" placeholder="Detalles adicionales..."></textarea>
+            </div>
+        </div>
+    `;
+
+    const footer = `
+        <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="guardarEvento()">
+            <i class="fas fa-save"></i> Guardar
+        </button>
+    `;
+
+    openModal('Agregar Evento al Calendario', content, footer);
+}
+
+function actualizarFormEvento() {
+    const tipo = document.getElementById('eventoTipo').value;
+    const operadoraGroup = document.getElementById('eventoOperadoraGroup');
+
+    if (tipo === 'ausencia' || tipo === 'capacitacion') {
+        operadoraGroup.style.display = 'block';
+    } else {
+        operadoraGroup.style.display = 'none';
+    }
+}
+
+function guardarEvento() {
+    const tipo = document.getElementById('eventoTipo').value;
+    const operadora = document.getElementById('eventoOperadora')?.value;
+    const fecha = document.getElementById('eventoFecha').value;
+    const titulo = document.getElementById('eventoTitulo').value;
+    const descripcion = document.getElementById('eventoDescripcion').value;
+
+    if (!fecha || !titulo) {
+        showToast('Por favor completa los campos requeridos', 'warning');
+        return;
+    }
+
+    const evento = {
+        id: 'evt-' + Date.now(),
+        tipo: tipo,
+        titulo: titulo,
+        descripcion: descripcion,
+        fecha: fecha,
+        operadoraId: operadora || null
+    };
+
+    // Guardar en localStorage
+    const eventos = JSON.parse(localStorage.getItem('calendario_eventos') || '[]');
+    eventos.push(evento);
+    localStorage.setItem('calendario_eventos', JSON.stringify(eventos));
+
+    closeModal();
+    showToast('Evento guardado correctamente', 'success');
+    renderCocoCalendario();
+}
+
+function eliminarEvento(eventoId) {
+    const eventos = JSON.parse(localStorage.getItem('calendario_eventos') || '[]');
+    const nuevosEventos = eventos.filter(e => e.id !== eventoId);
+    localStorage.setItem('calendario_eventos', JSON.stringify(nuevosEventos));
+
+    showToast('Evento eliminado', 'info');
+    renderCocoCalendario();
+}
+
+// ========================================
+// REPORTES DE COCO
+// ========================================
+
+// Estado para el tipo de reporte actual
+if (typeof cocoState !== 'undefined') {
+    cocoState.tipoReporte = cocoState.tipoReporte || 'operadoras';
+}
+
+function renderCocoReportes() {
+    const container = document.querySelector('.coco-reportes-container');
+    if (!container) return;
+
+    const tipoReporte = cocoState.tipoReporte || 'operadoras';
+    const periodoActual = cocoState.reportePeriodo;
+
+    container.innerHTML = `
+        <div class="coco-reportes">
+            <div class="reportes-header">
+                <h2><i class="fas fa-chart-bar"></i> Reportes y Análisis</h2>
+                <div class="reportes-filtros">
+                    <select class="form-control" onchange="cambiarPeriodoReporte(this.value)">
+                        <option value="hoy" ${periodoActual === 'hoy' ? 'selected' : ''}>Hoy</option>
+                        <option value="semana" ${periodoActual === 'semana' ? 'selected' : ''}>Esta Semana</option>
+                        <option value="mes" ${periodoActual === 'mes' ? 'selected' : ''}>Este Mes</option>
+                    </select>
+                    <button class="btn btn-outline" onclick="exportarReporte()">
+                        <i class="fas fa-download"></i> Exportar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Pestañas de tipos de reporte -->
+            <div class="reportes-tabs">
+                <button class="tab-reporte ${tipoReporte === 'operadoras' ? 'active' : ''}" onclick="cambiarTipoReporte('operadoras')">
+                    <i class="fas fa-users"></i> Por Operadora
+                </button>
+                <button class="tab-reporte ${tipoReporte === 'clientes' ? 'active' : ''}" onclick="cambiarTipoReporte('clientes')">
+                    <i class="fas fa-building"></i> Por Cliente
+                </button>
+                <button class="tab-reporte ${tipoReporte === 'procesos' ? 'active' : ''}" onclick="cambiarTipoReporte('procesos')">
+                    <i class="fas fa-cogs"></i> Por Proceso
+                </button>
+                <button class="tab-reporte ${tipoReporte === 'productos' ? 'active' : ''}" onclick="cambiarTipoReporte('productos')">
+                    <i class="fas fa-box"></i> Por Producto
+                </button>
+                <button class="tab-reporte ${tipoReporte === 'pedidos' ? 'active' : ''}" onclick="cambiarTipoReporte('pedidos')">
+                    <i class="fas fa-clipboard-list"></i> Por Pedido
+                </button>
+            </div>
+
+            <!-- Contenido del reporte -->
+            <div id="contenido-reporte-coco">
+                ${renderContenidoReporte(tipoReporte)}
+            </div>
+        </div>
+    `;
+}
+
+function cambiarTipoReporte(tipo) {
+    cocoState.tipoReporte = tipo;
+    renderCocoReportes();
+}
+
+function renderContenidoReporte(tipo) {
+    switch(tipo) {
+        case 'operadoras':
+            return renderReporteOperadoras();
+        case 'clientes':
+            return renderReporteClientes();
+        case 'procesos':
+            return renderReporteProcesos();
+        case 'productos':
+            return renderReporteProductos();
+        case 'pedidos':
+            return renderReportePedidos();
+        default:
+            return renderReporteOperadoras();
+    }
+}
+
+// Reporte por Operadoras (original)
+function renderReporteOperadoras() {
+    const todasOperadoras = getReporteOperadoras();
+    const periodoActual = cocoState.reportePeriodo;
+    const areaActual = cocoState.reporteAreaFiltro;
+    const estadoActual = cocoState.reporteEstadoFiltro;
+    const areas = getAreasDisponibles();
+
+    let operadoras = filtrarOperadorasPorArea(todasOperadoras, areaActual);
+    operadoras = filtrarOperadorasPorEstado(operadoras, estadoActual);
+
+    return `
+        <!-- Filtros adicionales -->
+        <div class="filtros-secundarios">
+            <select class="form-control" onchange="cambiarFiltroArea(this.value)">
+                <option value="todas" ${areaActual === 'todas' ? 'selected' : ''}>Todas las Áreas</option>
+                ${areas.map(a => `<option value="${a}" ${areaActual === a ? 'selected' : ''}>${a}</option>`).join('')}
+            </select>
+            <select class="form-control" onchange="cambiarFiltroEstado(this.value)">
+                <option value="todos" ${estadoActual === 'todos' ? 'selected' : ''}>Todos</option>
+                <option value="activos" ${estadoActual === 'activos' ? 'selected' : ''}>Activos</option>
+                <option value="inactivos" ${estadoActual === 'inactivos' ? 'selected' : ''}>Inactivos</option>
+            </select>
+            <span class="filtro-info">${operadoras.length} de ${todasOperadoras.length} operadoras</span>
+        </div>
+
+        <!-- Resumen General -->
+        <div class="reporte-resumen">
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-cubes"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${calcularTotalPiezas(periodoActual).toLocaleString()}</span>
+                    <span class="resumen-label">Piezas Totales</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-tachometer-alt"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${calcularPromedioEficiencia(periodoActual)}%</span>
+                    <span class="resumen-label">Eficiencia Promedio</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-user-check"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${operadoras.filter(o => o.eficiencia >= 100).length}</span>
+                    <span class="resumen-label">Superando Meta</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-medal"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${operadoras[0]?.nombre?.split(' ')[0] || '-'}</span>
+                    <span class="resumen-label">Mejor del Periodo</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráfico de barras -->
+        <div class="reporte-grafico">
+            <h3>Producción por Operadora</h3>
+            <div class="grafico-barras">
+                ${operadoras.length === 0 ? `
+                    <div style="text-align: center; padding: 40px; color: #94a3b8;">
+                        <i class="fas fa-chart-bar" style="font-size: 2.5rem; margin-bottom: 10px; display: block; opacity: 0.4;"></i>
+                        <p style="margin: 0;">No hay datos de producción</p>
+                    </div>
+                ` : operadoras.slice(0, 10).map(op => `
+                    <div class="barra-container">
+                        <div class="barra-label">${(op.nombre || 'NN').split(' ')[0]}</div>
+                        <div class="barra-wrapper">
+                            <div class="barra" style="width: ${operadoras[0]?.piezas > 0 ? ((op.piezas || 0) / operadoras[0].piezas) * 100 : 0}%">
+                                <span class="barra-valor">${op.piezas || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+
+        <!-- Tabla detallada -->
+        <div class="reporte-tabla">
+            <h3>Detalle por Operadora</h3>
+            <table class="tabla-reporte">
+                <thead>
+                    <tr>
+                        <th>Ranking</th>
+                        <th>Operadora</th>
+                        <th>Estación</th>
+                        <th>Piezas</th>
+                        <th>Eficiencia</th>
+                        <th>Tendencia</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${operadoras.length === 0 ? `
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 40px; color: #94a3b8;">
+                                <i class="fas fa-users" style="font-size: 2rem; margin-bottom: 10px; display: block; opacity: 0.5;"></i>
+                                <p style="margin: 0;">No hay operadoras registradas</p>
+                            </td>
+                        </tr>
+                    ` : operadoras.map((op, idx) => `
+                        <tr class="${op.eficiencia < 70 ? 'bajo-rendimiento' : op.eficiencia >= 100 ? 'alto-rendimiento' : ''}">
+                            <td><span class="ranking ${idx < 3 ? 'top' : ''}">${idx + 1}</span></td>
+                            <td>
+                                <div class="operadora-cell">
+                                    <span class="op-avatar">${getIniciales(op.nombre || 'NN')}</span>
+                                    <span class="op-nombre">${op.nombre || 'Sin nombre'}</span>
+                                </div>
+                            </td>
+                            <td>${op.estacion || '-'}</td>
+                            <td><strong>${(op.piezas || 0).toLocaleString()}</strong></td>
+                            <td>
+                                <span class="eficiencia-badge ${op.eficiencia >= 100 ? 'excelente' : op.eficiencia >= 80 ? 'buena' : 'baja'}">
+                                    ${op.eficiencia || 0}%
+                                </span>
+                            </td>
+                            <td>
+                                <span class="tendencia ${op.tendencia > 0 ? 'positiva' : op.tendencia < 0 ? 'negativa' : ''}">
+                                    <i class="fas fa-${op.tendencia > 0 ? 'arrow-up' : op.tendencia < 0 ? 'arrow-down' : 'minus'}"></i>
+                                    ${Math.abs(op.tendencia || 0)}%
+                                </span>
+                            </td>
+                            <td>
+                                <button class="btn-icon" onclick="verDetalleOperadora(${op.id})" title="Ver detalle">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Insights -->
+        <div class="reporte-insights">
+            <h3><i class="fas fa-lightbulb"></i> Insights</h3>
+            <div class="insights-list">
+                ${generarInsightsOperadoras(operadoras).map(insight => `
+                    <div class="insight-card ${insight.tipo}">
+                        <i class="fas ${insight.icono}"></i>
+                        <p>${insight.mensaje}</p>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// Reporte por Clientes
+function renderReporteClientes() {
+    const clientes = typeof db !== 'undefined' ? db.getClientes() : [];
+    const pedidos = typeof db !== 'undefined' ? db.getPedidos() : [];
+    const productos = typeof db !== 'undefined' ? db.getProductos() : [];
+    const historial = getHistorialProduccion();
+
+    // Agrupar producción por cliente
+    const resumenClientes = clientes.map(cliente => {
+        const pedidosCliente = pedidos.filter(p => p.clienteId === cliente.id);
+        let totalPiezas = 0;
+        let totalPedidos = pedidosCliente.length;
+        let productosMap = {};
+
+        pedidosCliente.forEach(pedido => {
+            (pedido.productos || []).forEach(prod => {
+                totalPiezas += prod.cantidad || 0;
+                const producto = productos.find(p => p.id === prod.productoId);
+                if (producto) {
+                    if (!productosMap[producto.id]) {
+                        productosMap[producto.id] = { nombre: producto.nombre, cantidad: 0 };
+                    }
+                    productosMap[producto.id].cantidad += prod.cantidad || 0;
+                }
+            });
+        });
+
+        return {
+            ...cliente,
+            totalPedidos,
+            totalPiezas,
+            productos: Object.values(productosMap).sort((a, b) => b.cantidad - a.cantidad)
+        };
+    }).filter(c => c.totalPedidos > 0).sort((a, b) => b.totalPiezas - a.totalPiezas);
+
+    const totalGeneral = resumenClientes.reduce((sum, c) => sum + c.totalPiezas, 0);
+
+    return `
+        <!-- Resumen -->
+        <div class="reporte-resumen">
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-building"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${resumenClientes.length}</span>
+                    <span class="resumen-label">Clientes Activos</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-clipboard-list"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${resumenClientes.reduce((sum, c) => sum + c.totalPedidos, 0)}</span>
+                    <span class="resumen-label">Pedidos Totales</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-cubes"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${totalGeneral.toLocaleString()}</span>
+                    <span class="resumen-label">Piezas Totales</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-star"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${resumenClientes[0]?.nombreComercial?.split(' ')[0] || '-'}</span>
+                    <span class="resumen-label">Cliente Principal</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráfico de clientes -->
+        <div class="reporte-grafico">
+            <h3>Producción por Cliente</h3>
+            <div class="grafico-barras">
+                ${resumenClientes.length === 0 ? `
+                    <div style="text-align: center; padding: 40px; color: #94a3b8;">
+                        <i class="fas fa-building" style="font-size: 2.5rem; margin-bottom: 10px; display: block; opacity: 0.4;"></i>
+                        <p style="margin: 0;">No hay datos de clientes</p>
+                    </div>
+                ` : resumenClientes.slice(0, 8).map(cliente => `
+                    <div class="barra-container">
+                        <div class="barra-label">${(cliente.nombreComercial || 'N/A').substring(0, 12)}</div>
+                        <div class="barra-wrapper">
+                            <div class="barra barra-cliente" style="width: ${totalGeneral > 0 ? (cliente.totalPiezas / resumenClientes[0].totalPiezas) * 100 : 0}%">
+                                <span class="barra-valor">${cliente.totalPiezas.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+
+        <!-- Detalle por cliente -->
+        <div class="reporte-tabla">
+            <h3>Detalle por Cliente</h3>
+            <table class="tabla-reporte">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Cliente</th>
+                        <th>Tipo</th>
+                        <th>Pedidos</th>
+                        <th>Piezas</th>
+                        <th>% Total</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${resumenClientes.length === 0 ? `
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 40px; color: #94a3b8;">
+                                <p style="margin: 0;">No hay clientes con pedidos</p>
+                            </td>
+                        </tr>
+                    ` : resumenClientes.map((cliente, idx) => `
+                        <tr>
+                            <td><span class="ranking ${idx < 3 ? 'top' : ''}">${idx + 1}</span></td>
+                            <td><strong>${cliente.nombreComercial || 'N/A'}</strong></td>
+                            <td>
+                                <span class="tipo-badge ${cliente.tipo === 'estrategico' ? 'estrategico' : ''}">${cliente.tipo || 'Regular'}</span>
+                            </td>
+                            <td>${cliente.totalPedidos}</td>
+                            <td><strong>${cliente.totalPiezas.toLocaleString()}</strong></td>
+                            <td>${totalGeneral > 0 ? Math.round((cliente.totalPiezas / totalGeneral) * 100) : 0}%</td>
+                            <td>
+                                <button class="btn-icon" onclick="verDetalleCliente(${cliente.id})" title="Ver detalle">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Ver detalle de cliente
+function verDetalleCliente(clienteId) {
+    const cliente = typeof db !== 'undefined' ? db.getCliente(clienteId) : null;
+    if (!cliente) return;
+
+    const pedidos = typeof db !== 'undefined' ? db.getPedidos().filter(p => p.clienteId === clienteId) : [];
+    const productos = typeof db !== 'undefined' ? db.getProductos() : [];
+    const personal = typeof db !== 'undefined' ? db.getPersonal() : [];
+
+    // Obtener IDs de pedidos del cliente
+    const pedidoIds = pedidos.map(p => p.id);
+
+    // Obtener historial de producción para estos pedidos
+    const historial = getHistorialProduccion().filter(h =>
+        pedidoIds.includes(h.pedidoId) || pedidoIds.some(id => id == h.pedidoId)
+    );
+
+    // Enriquecer historial
+    const historialEnriquecido = historial.map(h => {
+        let operadorNombre = h.operadoraNombre || h.operadorNombre || '';
+        if (!operadorNombre && (h.operadoraId || h.operadorId)) {
+            const op = personal.find(p => p.id == h.operadoraId || p.id == h.operadorId);
+            operadorNombre = op ? op.nombre : '';
+        }
+        const procesoNombre = h.procesoNombre || h.proceso || h.tipoProceso || h.nombreProceso || '';
+        return { ...h, operadorNombre, procesoNombre };
+    });
+
+    let productosMap = {};
+    pedidos.forEach(pedido => {
+        (pedido.productos || []).forEach(prod => {
+            const producto = productos.find(p => p.id === prod.productoId);
+            if (producto) {
+                if (!productosMap[producto.id]) {
+                    productosMap[producto.id] = { nombre: producto.nombre, cantidad: 0, pedidos: 0 };
+                }
+                productosMap[producto.id].cantidad += prod.cantidad || 0;
+                productosMap[producto.id].pedidos++;
+            }
+        });
+    });
+
+    const productosCliente = Object.values(productosMap).sort((a, b) => b.cantidad - a.cantidad);
+    const totalProducido = historial.reduce((sum, h) => sum + (h.cantidad || h.piezas || 0), 0);
+
+    const content = `
+        <div class="detalle-cliente">
+            <div class="detalle-cliente-header">
+                <h3>${cliente.nombreComercial}</h3>
+                <span class="tipo-badge ${cliente.tipo === 'estrategico' ? 'estrategico' : ''}">${cliente.tipo || 'Regular'}</span>
+            </div>
+
+            <div class="detalle-op-stats" style="margin: 20px 0;">
+                <div class="stat-item">
+                    <span class="stat-label">Pedidos</span>
+                    <span class="stat-value">${pedidos.length}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Productos</span>
+                    <span class="stat-value">${productosCliente.length}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Producido</span>
+                    <span class="stat-value">${totalProducido.toLocaleString()}</span>
+                </div>
+            </div>
+
+            <!-- Productos solicitados -->
+            <div class="detalle-op-historial" style="margin-bottom: 15px;">
+                <h4>Productos Solicitados</h4>
+                ${productosCliente.length === 0 ?
+                    '<p style="text-align: center; color: #94a3b8; padding: 15px;">Sin productos registrados</p>'
+                    : productosCliente.slice(0, 5).map(p => `
+                    <div class="historial-item" style="display: flex; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <span style="color: #e5e7eb;">${p.nombre}</span>
+                        <span style="color: #10b981; font-weight: 600;">${p.cantidad.toLocaleString()} pzas</span>
+                    </div>
+                `).join('')}
+            </div>
+
+            <!-- Historial de producción -->
+            <div class="detalle-op-historial">
+                <h4>Últimos Registros de Producción</h4>
+                ${historialEnriquecido.length === 0 ?
+                    '<p style="text-align: center; color: #94a3b8; padding: 15px;">Sin registros de producción</p>'
+                    : `
+                    <div class="historial-header" style="display: grid; grid-template-columns: 80px 50px 1fr 1fr; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #3d4a5c; margin-bottom: 5px;">
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Fecha</span>
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Pzas</span>
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Operador</span>
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Proceso</span>
+                    </div>
+                    ${historialEnriquecido.slice(0, 10).map(h => `
+                    <div style="display: grid; grid-template-columns: 80px 50px 1fr 1fr; gap: 8px; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); align-items: center;">
+                        <span style="color: #94a3b8; font-size: 0.75rem;">${formatearFecha(h.fecha)}</span>
+                        <span style="color: #10b981; font-weight: 600; font-size: 0.8rem;">${h.cantidad || h.piezas || 0}</span>
+                        <span style="color: #38bdf8; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${h.operadorNombre ? h.operadorNombre.split(' ')[0] : '-'}</span>
+                        <span style="color: #fbbf24; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${h.procesoNombre || '-'}</span>
+                    </div>
+                `).join('')}
+                `}
+            </div>
+        </div>
+    `;
+
+    openModal(`Cliente: ${cliente.nombreComercial}`, content, '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>');
+}
+
+// Reporte por Procesos
+function renderReporteProcesos() {
+    const historial = getHistorialProduccion();
+    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+
+    // Agrupar por proceso
+    const procesosMap = {};
+
+    // Desde historial
+    historial.forEach(h => {
+        const proceso = h.proceso || h.tipoProceso || 'Sin proceso';
+        if (!procesosMap[proceso]) {
+            procesosMap[proceso] = { nombre: proceso, piezas: 0, registros: 0, operadores: new Set() };
+        }
+        procesosMap[proceso].piezas += h.cantidad || h.piezas || 0;
+        procesosMap[proceso].registros++;
+        if (h.operadoraId || h.operadorId) {
+            procesosMap[proceso].operadores.add(h.operadoraId || h.operadorId);
+        }
+    });
+
+    // Desde asignaciones actuales
+    Object.values(asignaciones).forEach(asig => {
+        const proceso = asig.procesoActual || asig.proceso || 'Sin proceso';
+        if (!procesosMap[proceso]) {
+            procesosMap[proceso] = { nombre: proceso, piezas: 0, registros: 0, operadores: new Set() };
+        }
+        procesosMap[proceso].piezas += asig.piezasProducidas || 0;
+    });
+
+    const procesos = Object.values(procesosMap)
+        .map(p => ({ ...p, operadores: p.operadores.size }))
+        .sort((a, b) => b.piezas - a.piezas);
+
+    const totalPiezas = procesos.reduce((sum, p) => sum + p.piezas, 0);
+
+    return `
+        <!-- Resumen -->
+        <div class="reporte-resumen">
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-cogs"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${procesos.length}</span>
+                    <span class="resumen-label">Procesos Activos</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-cubes"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${totalPiezas.toLocaleString()}</span>
+                    <span class="resumen-label">Piezas Totales</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-trophy"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${procesos[0]?.nombre?.substring(0, 10) || '-'}</span>
+                    <span class="resumen-label">Proceso Líder</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráfico -->
+        <div class="reporte-grafico">
+            <h3>Producción por Proceso</h3>
+            <div class="grafico-barras">
+                ${procesos.length === 0 ? `
+                    <div style="text-align: center; padding: 40px; color: #94a3b8;">
+                        <i class="fas fa-cogs" style="font-size: 2.5rem; margin-bottom: 10px; display: block; opacity: 0.4;"></i>
+                        <p style="margin: 0;">No hay datos de procesos</p>
+                    </div>
+                ` : procesos.slice(0, 10).map(proceso => `
+                    <div class="barra-container">
+                        <div class="barra-label">${proceso.nombre.substring(0, 12)}</div>
+                        <div class="barra-wrapper">
+                            <div class="barra barra-proceso" style="width: ${procesos[0]?.piezas > 0 ? (proceso.piezas / procesos[0].piezas) * 100 : 0}%">
+                                <span class="barra-valor">${proceso.piezas.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+
+        <!-- Tabla -->
+        <div class="reporte-tabla">
+            <h3>Detalle por Proceso</h3>
+            <table class="tabla-reporte">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Proceso</th>
+                        <th>Piezas</th>
+                        <th>Registros</th>
+                        <th>Operadores</th>
+                        <th>% Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${procesos.length === 0 ? `
+                        <tr>
+                            <td colspan="6" style="text-align: center; padding: 40px; color: #94a3b8;">
+                                <p style="margin: 0;">No hay procesos registrados</p>
+                            </td>
+                        </tr>
+                    ` : procesos.map((proceso, idx) => `
+                        <tr>
+                            <td><span class="ranking ${idx < 3 ? 'top' : ''}">${idx + 1}</span></td>
+                            <td><strong>${proceso.nombre}</strong></td>
+                            <td><strong>${proceso.piezas.toLocaleString()}</strong></td>
+                            <td>${proceso.registros}</td>
+                            <td>${proceso.operadores}</td>
+                            <td>${totalPiezas > 0 ? Math.round((proceso.piezas / totalPiezas) * 100) : 0}%</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Reporte por Productos
+function renderReporteProductos() {
+    const productos = typeof db !== 'undefined' ? db.getProductos() : [];
+    const clientes = typeof db !== 'undefined' ? db.getClientes() : [];
+    const historial = getHistorialProduccion();
+    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+
+    // Agrupar producción por producto
+    const productosMap = {};
+
+    historial.forEach(h => {
+        const prodId = h.productoId;
+        if (prodId) {
+            if (!productosMap[prodId]) {
+                const prod = productos.find(p => p.id === prodId);
+                productosMap[prodId] = {
+                    id: prodId,
+                    nombre: prod?.nombre || 'Producto ' + prodId,
+                    cliente: clientes.find(c => c.id === prod?.clienteId)?.nombreComercial || 'N/A',
+                    piezas: 0,
+                    registros: 0
+                };
+            }
+            productosMap[prodId].piezas += h.cantidad || h.piezas || 0;
+            productosMap[prodId].registros++;
+        }
+    });
+
+    // Desde asignaciones
+    Object.values(asignaciones).forEach(asig => {
+        const prodId = asig.productoId;
+        if (prodId) {
+            if (!productosMap[prodId]) {
+                const prod = productos.find(p => p.id === prodId);
+                productosMap[prodId] = {
+                    id: prodId,
+                    nombre: prod?.nombre || 'Producto ' + prodId,
+                    cliente: clientes.find(c => c.id === prod?.clienteId)?.nombreComercial || 'N/A',
+                    piezas: 0,
+                    registros: 0
+                };
+            }
+            productosMap[prodId].piezas += asig.piezasProducidas || 0;
+        }
+    });
+
+    const productosArr = Object.values(productosMap).sort((a, b) => b.piezas - a.piezas);
+    const totalPiezas = productosArr.reduce((sum, p) => sum + p.piezas, 0);
+
+    return `
+        <!-- Resumen -->
+        <div class="reporte-resumen">
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-box"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${productosArr.length}</span>
+                    <span class="resumen-label">Productos en Producción</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-cubes"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${totalPiezas.toLocaleString()}</span>
+                    <span class="resumen-label">Piezas Totales</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-crown"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${productosArr[0]?.nombre?.substring(0, 10) || '-'}</span>
+                    <span class="resumen-label">Producto Líder</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráfico -->
+        <div class="reporte-grafico">
+            <h3>Producción por Producto</h3>
+            <div class="grafico-barras">
+                ${productosArr.length === 0 ? `
+                    <div style="text-align: center; padding: 40px; color: #94a3b8;">
+                        <i class="fas fa-box" style="font-size: 2.5rem; margin-bottom: 10px; display: block; opacity: 0.4;"></i>
+                        <p style="margin: 0;">No hay datos de productos</p>
+                    </div>
+                ` : productosArr.slice(0, 8).map(prod => `
+                    <div class="barra-container">
+                        <div class="barra-label">${prod.nombre.substring(0, 12)}</div>
+                        <div class="barra-wrapper">
+                            <div class="barra barra-producto" style="width: ${productosArr[0]?.piezas > 0 ? (prod.piezas / productosArr[0].piezas) * 100 : 0}%">
+                                <span class="barra-valor">${prod.piezas.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+
+        <!-- Tabla -->
+        <div class="reporte-tabla">
+            <h3>Detalle por Producto</h3>
+            <table class="tabla-reporte">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Producto</th>
+                        <th>Cliente</th>
+                        <th>Piezas</th>
+                        <th>Registros</th>
+                        <th>% Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${productosArr.length === 0 ? `
+                        <tr>
+                            <td colspan="6" style="text-align: center; padding: 40px; color: #94a3b8;">
+                                <p style="margin: 0;">No hay productos en producción</p>
+                            </td>
+                        </tr>
+                    ` : productosArr.map((prod, idx) => `
+                        <tr>
+                            <td><span class="ranking ${idx < 3 ? 'top' : ''}">${idx + 1}</span></td>
+                            <td><strong>${prod.nombre}</strong></td>
+                            <td>${prod.cliente}</td>
+                            <td><strong>${prod.piezas.toLocaleString()}</strong></td>
+                            <td>${prod.registros}</td>
+                            <td>${totalPiezas > 0 ? Math.round((prod.piezas / totalPiezas) * 100) : 0}%</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Reporte por Pedidos
+function renderReportePedidos() {
+    const pedidos = typeof db !== 'undefined' ? db.getPedidos() : [];
+    const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    const clientes = typeof db !== 'undefined' ? db.getClientes() : [];
+    const historial = getHistorialProduccion();
+
+    // Combinar pedidos
+    const todosPedidos = [...pedidos, ...pedidosActivos.filter(pa => !pedidos.find(p => p.id === pa.id))];
+
+    // Agrupar producción por pedido
+    const pedidosConProduccion = todosPedidos.map(pedido => {
+        const cliente = clientes.find(c => c.id === pedido.clienteId);
+        const produccionPedido = historial.filter(h => h.pedidoId === pedido.id || h.pedidoId == pedido.id);
+        const piezasProducidas = produccionPedido.reduce((sum, h) => sum + (h.cantidad || h.piezas || 0), 0);
+        const piezasTotal = (pedido.productos || []).reduce((sum, p) => sum + (p.cantidad || 0), 0);
+        const progreso = piezasTotal > 0 ? Math.round((piezasProducidas / piezasTotal) * 100) : 0;
+
+        return {
+            ...pedido,
+            clienteNombre: cliente?.nombreComercial || 'N/A',
+            piezasProducidas,
+            piezasTotal,
+            progreso: Math.min(progreso, 100)
+        };
+    }).filter(p => p.piezasTotal > 0).sort((a, b) => b.piezasProducidas - a.piezasProducidas);
+
+    const totalProducido = pedidosConProduccion.reduce((sum, p) => sum + p.piezasProducidas, 0);
+    const totalMeta = pedidosConProduccion.reduce((sum, p) => sum + p.piezasTotal, 0);
+
+    return `
+        <!-- Resumen -->
+        <div class="reporte-resumen">
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-clipboard-list"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${pedidosConProduccion.length}</span>
+                    <span class="resumen-label">Pedidos Activos</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-cubes"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${totalProducido.toLocaleString()}</span>
+                    <span class="resumen-label">Piezas Producidas</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-bullseye"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${totalMeta.toLocaleString()}</span>
+                    <span class="resumen-label">Meta Total</span>
+                </div>
+            </div>
+            <div class="resumen-card">
+                <div class="resumen-icon"><i class="fas fa-percentage"></i></div>
+                <div class="resumen-data">
+                    <span class="resumen-value">${totalMeta > 0 ? Math.round((totalProducido / totalMeta) * 100) : 0}%</span>
+                    <span class="resumen-label">Avance General</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabla de pedidos -->
+        <div class="reporte-tabla">
+            <h3>Estado de Pedidos</h3>
+            <table class="tabla-reporte">
+                <thead>
+                    <tr>
+                        <th>Pedido</th>
+                        <th>Cliente</th>
+                        <th>Producido</th>
+                        <th>Meta</th>
+                        <th>Progreso</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${pedidosConProduccion.length === 0 ? `
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 40px; color: #94a3b8;">
+                                <i class="fas fa-clipboard-list" style="font-size: 2rem; margin-bottom: 10px; display: block; opacity: 0.5;"></i>
+                                <p style="margin: 0;">No hay pedidos en producción</p>
+                            </td>
+                        </tr>
+                    ` : pedidosConProduccion.slice(0, 20).map(pedido => `
+                        <tr>
+                            <td><strong>#${pedido.id}</strong></td>
+                            <td>${pedido.clienteNombre}</td>
+                            <td>${pedido.piezasProducidas.toLocaleString()}</td>
+                            <td>${pedido.piezasTotal.toLocaleString()}</td>
+                            <td>
+                                <div class="progress-mini">
+                                    <div class="progress-bar-mini ${pedido.progreso >= 100 ? 'completado' : pedido.progreso >= 50 ? 'avanzado' : ''}" style="width: ${pedido.progreso}%"></div>
+                                </div>
+                                <span class="progress-text">${pedido.progreso}%</span>
+                            </td>
+                            <td>
+                                <span class="estado-badge ${pedido.progreso >= 100 ? 'completado' : pedido.progreso > 0 ? 'en-proceso' : 'pendiente'}">
+                                    ${pedido.progreso >= 100 ? 'Completado' : pedido.progreso > 0 ? 'En Proceso' : 'Pendiente'}
+                                </span>
+                            </td>
+                            <td>
+                                <button class="btn-icon" onclick="verDetallePedido(${pedido.id})" title="Ver detalle">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// Ver detalle de pedido
+function verDetallePedido(pedidoId) {
+    const pedidos = typeof db !== 'undefined' ? db.getPedidos() : [];
+    const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    const pedido = pedidos.find(p => p.id === pedidoId) || pedidosActivos.find(p => p.id === pedidoId);
+
+    if (!pedido) return;
+
+    const cliente = typeof db !== 'undefined' ? db.getCliente(pedido.clienteId) : null;
+    const productos = typeof db !== 'undefined' ? db.getProductos() : [];
+    const personal = typeof db !== 'undefined' ? db.getPersonal() : [];
+    const historial = getHistorialProduccion().filter(h => h.pedidoId === pedidoId || h.pedidoId == pedidoId);
+
+    const totalProducido = historial.reduce((sum, h) => sum + (h.cantidad || h.piezas || 0), 0);
+    const totalMeta = (pedido.productos || []).reduce((sum, p) => sum + (p.cantidad || 0), 0);
+
+    // Enriquecer historial con nombre de operador
+    const historialEnriquecido = historial.map(h => {
+        let operadorNombre = h.operadoraNombre || h.operadorNombre || '';
+        if (!operadorNombre && (h.operadoraId || h.operadorId)) {
+            const op = personal.find(p => p.id == h.operadoraId || p.id == h.operadorId);
+            operadorNombre = op ? op.nombre : '';
+        }
+        const procesoNombre = h.procesoNombre || h.proceso || h.tipoProceso || h.nombreProceso || '';
+        return { ...h, operadorNombre, procesoNombre };
+    });
+
+    const content = `
+        <div class="detalle-pedido">
+            <div class="detalle-pedido-header">
+                <h3>Pedido #${pedido.id}</h3>
+                <span class="cliente-nombre">${cliente?.nombreComercial || 'N/A'}</span>
+            </div>
+
+            <div class="detalle-op-stats" style="margin: 20px 0;">
+                <div class="stat-item">
+                    <span class="stat-label">Cliente</span>
+                    <span class="stat-value" style="font-size: 1rem;">${cliente?.nombreComercial?.substring(0, 12) || 'N/A'}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Producido</span>
+                    <span class="stat-value">${totalProducido.toLocaleString()}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Meta</span>
+                    <span class="stat-value">${totalMeta.toLocaleString()}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Progreso</span>
+                    <span class="stat-value">${totalMeta > 0 ? Math.round((totalProducido / totalMeta) * 100) : 0}%</span>
+                </div>
+            </div>
+
+            <div class="detalle-op-historial">
+                <h4>Registros de Producción</h4>
+                ${historialEnriquecido.length === 0 ?
+                    '<p style="text-align: center; color: #94a3b8; padding: 20px;">Sin registros de producción</p>'
+                    : `
+                    <div class="historial-header" style="display: grid; grid-template-columns: 80px 55px 1fr 1fr; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #3d4a5c; margin-bottom: 5px;">
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Fecha</span>
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Pzas</span>
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Operador</span>
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Proceso</span>
+                    </div>
+                    ${historialEnriquecido.slice(0, 15).map(h => `
+                    <div class="historial-item-detallado" style="display: grid; grid-template-columns: 80px 55px 1fr 1fr; gap: 8px; padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); align-items: center;">
+                        <span class="fecha" style="color: #94a3b8; font-size: 0.75rem;">${formatearFecha(h.fecha)}</span>
+                        <span class="piezas" style="color: #10b981; font-weight: 600; background: rgba(16, 185, 129, 0.1); padding: 3px 6px; border-radius: 12px; text-align: center; font-size: 0.8rem;">${h.cantidad || h.piezas || 0}</span>
+                        <span class="operador" style="color: #38bdf8; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${h.operadorNombre || ''}">${h.operadorNombre ? h.operadorNombre.split(' ')[0] : '-'}</span>
+                        <span class="proceso" style="color: #fbbf24; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500;" title="${h.procesoNombre || ''}">${h.procesoNombre || '-'}</span>
+                    </div>
+                `).join('')}
+                `}
+            </div>
+        </div>
+    `;
+
+    openModal(`Pedido #${pedido.id}`, content, '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>');
+}
+
+function getReporteOperadoras() {
+    const historial = getHistorialProduccion();
+
+    // Obtener operadores de múltiples fuentes
+    let operadores = supervisoraState.operadores || [];
+
+    // Si no hay operadores en state, intentar obtener de la base de datos
+    if (operadores.length === 0 && typeof db !== 'undefined') {
+        try {
+            const personal = db.getPersonal();
+            operadores = personal.filter(p => p.rol === 'operador' && p.activo !== false);
+        } catch (e) {
+            console.warn('[COCO] Error obteniendo personal:', e);
+        }
+    }
+
+    // Obtener datos de estado_maquinas y asignaciones para piezas actuales
+    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const estaciones = typeof db !== 'undefined' ? db.getEstaciones() : [];
+
+    const operadoras = [];
+
+    operadores.forEach(op => {
+        // Buscar estación asignada a este operador
+        const estacionOp = estaciones.find(e => e.operadorId === op.id);
+        const estacionId = estacionOp?.id || null;
+
+        // Obtener piezas de hoy desde estado_maquinas
+        let piezasHoy = 0;
+        if (estacionId && estadoMaquinas[estacionId]) {
+            piezasHoy = estadoMaquinas[estacionId].piezasHoy || 0;
+        }
+
+        // También buscar en supervisoraState.maquinas
+        if (piezasHoy === 0) {
+            const maquina = Object.entries(supervisoraState.maquinas || {}).find(([id, m]) =>
+                m.operadores && m.operadores.some(o => o.id === op.id)
+            );
+            if (maquina) {
+                piezasHoy = maquina[1].piezasHoy || 0;
+            }
+        }
+
+        // Buscar en historial de producción del día
+        const hoy = new Date().toISOString().split('T')[0];
+        const historialHoy = historial.filter(h => {
+            const esDeOperador = h.operadoraId == op.id || h.operadorId == op.id ||
+                                (h.estacionId && estacionId && h.estacionId === estacionId);
+            const esDeHoy = h.fecha && h.fecha.startsWith(hoy);
+            return esDeOperador && esDeHoy;
+        });
+
+        // Sumar piezas del historial si no hay en estado_maquinas
+        if (piezasHoy === 0 && historialHoy.length > 0) {
+            piezasHoy = historialHoy.reduce((sum, h) => sum + (h.cantidad || h.piezas || 0), 0);
+        }
+
+        // Datos históricos completos para estadísticas
+        const datosHistoricos = historial.filter(h =>
+            h.operadoraId == op.id || h.operadorId == op.id ||
+            (h.estacionId && estacionId && h.estacionId === estacionId)
+        );
+
+        const piezasSemana = datosHistoricos.reduce((sum, h) => sum + (h.cantidad || h.piezas || 0), 0);
+
+        operadoras.push({
+            id: op.id,
+            nombre: op.nombre,
+            estacion: estacionId || (estacionOp?.nombre) || '-',
+            piezas: piezasHoy,
+            piezasSemana: piezasSemana,
+            eficiencia: calcularEficienciaOperadora(op.id),
+            tendencia: calcularTendenciaOperadora(op.id),
+            procesosCompletados: datosHistoricos.filter(h => h.tipo === 'completado' || h.tipo === 'proceso_completado').length
+        });
+    });
+
+    return operadoras.sort((a, b) => b.piezas - a.piezas);
+}
+
+function calcularTendenciaOperadora(operadorId) {
+    const historial = getHistorialProduccion();
+    const registros = historial.filter(h => h.operadoraId == operadorId || h.operadorId == operadorId);
+
+    if (registros.length < 2) return 0;
+
+    // Comparar ultima semana con semana anterior
+    const hace7dias = new Date();
+    hace7dias.setDate(hace7dias.getDate() - 7);
+    const hace14dias = new Date();
+    hace14dias.setDate(hace14dias.getDate() - 14);
+
+    const semanaActual = registros.filter(r => r.fecha && new Date(r.fecha) >= hace7dias);
+    const semanaAnterior = registros.filter(r => r.fecha && new Date(r.fecha) >= hace14dias && new Date(r.fecha) < hace7dias);
+
+    const promedioActual = semanaActual.length > 0 ?
+        semanaActual.reduce((sum, r) => sum + (r.cantidad || r.piezas || 0), 0) / semanaActual.length : 0;
+    const promedioAnterior = semanaAnterior.length > 0 ?
+        semanaAnterior.reduce((sum, r) => sum + (r.cantidad || r.piezas || 0), 0) / semanaAnterior.length : 0;
+
+    if (promedioAnterior === 0) return 0;
+    return Math.round(((promedioActual - promedioAnterior) / promedioAnterior) * 100);
+}
+
+function calcularTotalPiezas(periodo) {
+    const maquinas = Object.values(supervisoraState.maquinas || {});
+    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const historial = getHistorialProduccion();
+
+    // Piezas de hoy desde estado_maquinas (más actualizado)
+    let piezasHoyEstado = Object.values(estadoMaquinas).reduce((sum, m) => sum + (m.piezasHoy || 0), 0);
+
+    // Si no hay en estado_maquinas, usar supervisoraState.maquinas
+    if (piezasHoyEstado === 0) {
+        piezasHoyEstado = maquinas.reduce((sum, m) => sum + (m.piezasHoy || 0), 0);
+    }
+
+    // Si aún no hay, calcular del historial de hoy
+    const hoy = new Date().toISOString().split('T')[0];
+    if (piezasHoyEstado === 0) {
+        piezasHoyEstado = historial
+            .filter(h => h.fecha && h.fecha.startsWith(hoy))
+            .reduce((sum, h) => sum + (h.cantidad || h.piezas || 0), 0);
+    }
+
+    if (periodo === 'hoy') {
+        return piezasHoyEstado;
+    }
+
+    const fechaInicio = new Date();
+    fechaInicio.setHours(0, 0, 0, 0);
+
+    if (periodo === 'semana') {
+        fechaInicio.setDate(fechaInicio.getDate() - 7);
+    } else if (periodo === 'mes') {
+        fechaInicio.setMonth(fechaInicio.getMonth() - 1);
+    }
+
+    const piezasHistorial = historial
+        .filter(h => h.fecha && new Date(h.fecha) >= fechaInicio)
+        .reduce((sum, h) => sum + (h.cantidad || h.piezas || 0), 0);
+
+    return piezasHistorial;
+}
+
+function calcularPromedioEficiencia(periodo) {
+    const operadoras = getReporteOperadoras();
+    if (operadoras.length === 0) return 0;
+
+    const total = operadoras.reduce((sum, o) => sum + o.eficiencia, 0);
+    return Math.round(total / operadoras.length);
+}
+
+function generarInsightsOperadoras(operadoras) {
+    const insights = [];
+
+    // Mejor operadora
+    if (operadoras.length > 0 && operadoras[0].eficiencia >= 100) {
+        insights.push({
+            tipo: 'success',
+            icono: 'fa-star',
+            mensaje: `<strong>${operadoras[0].nombre}</strong> esta destacando con ${operadoras[0].eficiencia}% de eficiencia. ¡Considera reconocer su esfuerzo!`
+        });
+    }
+
+    // Operadoras que necesitan atencion
+    const bajoRendimiento = operadoras.filter(o => o.eficiencia < 70);
+    if (bajoRendimiento.length > 0) {
+        insights.push({
+            tipo: 'warning',
+            icono: 'fa-exclamation-circle',
+            mensaje: `${bajoRendimiento.length} operadora${bajoRendimiento.length > 1 ? 's' : ''} con rendimiento bajo el 70%. Podria ser buen momento para capacitacion o revisar asignaciones.`
+        });
+    }
+
+    // Tendencia general
+    const tendenciaPositiva = operadoras.filter(o => o.tendencia > 0).length;
+    if (operadoras.length > 0 && tendenciaPositiva > operadoras.length / 2) {
+        insights.push({
+            tipo: 'info',
+            icono: 'fa-chart-line',
+            mensaje: `El ${Math.round((tendenciaPositiva / operadoras.length) * 100)}% del equipo muestra tendencia positiva. ¡Buen trabajo liderando, Coco!`
+        });
+    }
+
+    // Si no hay insights
+    if (insights.length === 0) {
+        insights.push({
+            tipo: 'info',
+            icono: 'fa-info-circle',
+            mensaje: 'Acumula mas datos de produccion para obtener insights personalizados sobre tu equipo.'
+        });
+    }
+
+    return insights;
+}
+
+function cambiarPeriodoReporte(periodo) {
+    cocoState.reportePeriodo = periodo;
+    renderCocoReportes();
+}
+
+function verDetalleOperadora(operadorId) {
+    // Buscar operador en múltiples fuentes
+    let operador = supervisoraState.operadores?.find(o => o.id === operadorId || o.id == operadorId);
+
+    // Si no está en state, buscar en la base de datos
+    if (!operador && typeof db !== 'undefined') {
+        try {
+            const personal = db.getPersonal();
+            operador = personal.find(p => p.id === operadorId || p.id == operadorId);
+        } catch (e) {
+            console.warn('[COCO] Error buscando operador:', e);
+        }
+    }
+
+    // Si aún no hay, buscar en getReporteOperadoras (ya procesado)
+    if (!operador) {
+        const reporteOps = getReporteOperadoras();
+        operador = reporteOps.find(o => o.id === operadorId || o.id == operadorId);
+    }
+
+    if (!operador) {
+        console.warn('[COCO] Operador no encontrado:', operadorId);
+        openModal('Error', '<p style="text-align:center; padding: 20px;">No se encontró información del operador</p>', '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>');
+        return;
+    }
+
+    // Obtener historial con búsqueda flexible (operadorId u operadoraId)
+    const historial = getHistorialProduccion().filter(h =>
+        h.operadorId == operadorId || h.operadoraId == operadorId
+    );
+
+    // Obtener datos de estado_maquinas para info en tiempo real
+    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+
+    // Obtener productos, pedidos y clientes para referencias
+    const productos = typeof db !== 'undefined' ? db.getProductos() : [];
+    const pedidos = typeof db !== 'undefined' ? db.getPedidos() : [];
+    const clientes = typeof db !== 'undefined' ? db.getClientes() : [];
+    const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    const todosPedidos = [...pedidos, ...pedidosActivos];
+
+    // Buscar estación actual del operador
+    let estacionActual = null;
+    let piezasHoy = 0;
+    let procesoActual = null;
+    let pedidoActual = null;
+    let productoActual = null;
+
+    Object.entries(estadoMaquinas).forEach(([estId, estado]) => {
+        if (estado.operadoraId == operadorId || estado.operadorId == operadorId) {
+            estacionActual = estId;
+            piezasHoy = estado.piezasHoy || 0;
+            // Buscar nombre de proceso en múltiples campos
+            procesoActual = estado.procesoNombre || estado.procesoActual || estado.proceso || estado.nombreProceso;
+        }
+    });
+
+    // También buscar en asignaciones
+    Object.entries(asignaciones).forEach(([estId, asig]) => {
+        if (asig.operadoraId == operadorId || asig.operadorId == operadorId) {
+            if (!estacionActual) estacionActual = estId;
+            if (!piezasHoy && asig.piezasProducidas) piezasHoy = asig.piezasProducidas;
+            if (!procesoActual) procesoActual = asig.procesoNombre || asig.procesoActual || asig.proceso || asig.nombreProceso;
+            if (asig.pedidoId) {
+                const ped = todosPedidos.find(p => p.id == asig.pedidoId);
+                if (ped) pedidoActual = ped;
+            }
+            if (asig.productoId) {
+                const prod = productos.find(p => p.id == asig.productoId);
+                if (prod) productoActual = prod;
+            }
+        }
+    });
+
+    const eficiencia = calcularEficienciaOperadora(operadorId);
+    const tendencia = calcularTendenciaOperadora(operadorId);
+
+    // Calcular total de piezas del historial
+    const totalPiezasHistorial = historial.reduce((sum, h) => sum + (h.cantidad || h.piezas || 0), 0);
+
+    // Enriquecer historial con info de pedido, producto y cliente
+    const historialEnriquecido = historial.map(h => {
+        let pedidoInfo = '';
+        let productoInfo = '';
+        let clienteInfo = '';
+        // Buscar nombre de proceso en múltiples campos posibles
+        let procesoInfo = h.procesoNombre || h.proceso || h.tipoProceso || h.nombreProceso || '';
+
+        if (h.pedidoId || h.pedidoCodigo) {
+            const ped = todosPedidos.find(p => p.id == h.pedidoId);
+            pedidoInfo = h.pedidoCodigo || (ped ? `#${ped.id}` : `#${h.pedidoId}`);
+
+            // Obtener cliente del pedido
+            if (ped && ped.clienteId) {
+                const cliente = clientes.find(c => c.id == ped.clienteId);
+                clienteInfo = cliente ? cliente.nombreComercial : '';
+            }
+        }
+
+        if (h.productoId) {
+            const prod = productos.find(p => p.id == h.productoId);
+            if (prod) {
+                productoInfo = prod.nombre;
+                // Si no hay cliente, intentar obtenerlo del producto
+                if (!clienteInfo && prod.clienteId) {
+                    const cliente = clientes.find(c => c.id == prod.clienteId);
+                    clienteInfo = cliente ? cliente.nombreComercial : '';
+                }
+            }
+        }
+
+        return {
+            ...h,
+            pedidoInfo,
+            productoInfo,
+            clienteInfo,
+            procesoInfo
+        };
+    });
+
+    const content = `
+        <div class="detalle-operadora">
+            <div class="detalle-op-header">
+                <div class="detalle-op-avatar">${getIniciales(operador.nombre || 'NN')}</div>
+                <div class="detalle-op-info">
+                    <h3>${operador.nombre || 'Sin nombre'}</h3>
+                    <span class="eficiencia-badge ${eficiencia >= 100 ? 'excelente' : eficiencia >= 80 ? 'buena' : 'baja'}">${eficiencia}% eficiencia</span>
+                    ${estacionActual ? `<span class="estacion-actual" style="display: block; margin-top: 5px; font-size: 0.85rem; color: #64748b;"><i class="fas fa-desktop"></i> Estación: ${estacionActual}</span>` : ''}
+                </div>
+            </div>
+
+            <!-- Trabajo actual -->
+            ${procesoActual || pedidoActual || productoActual ? `
+            <div class="trabajo-actual" style="background: rgba(102, 126, 234, 0.1); border: 1px solid rgba(102, 126, 234, 0.3); border-radius: 10px; padding: 15px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 10px 0; font-size: 0.85rem; color: #a5b4fc;"><i class="fas fa-tools"></i> Trabajo Actual</h4>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                    ${procesoActual ? `<div><span style="font-size: 0.7rem; color: #8b9dc3; display: block;">Proceso</span><strong style="color: #fff;">${procesoActual}</strong></div>` : ''}
+                    ${pedidoActual ? `<div><span style="font-size: 0.7rem; color: #8b9dc3; display: block;">Pedido</span><strong style="color: #fff;">#${pedidoActual.id}</strong></div>` : ''}
+                    ${productoActual ? `<div><span style="font-size: 0.7rem; color: #8b9dc3; display: block;">Producto</span><strong style="color: #fff;">${productoActual.nombre.substring(0, 15)}</strong></div>` : ''}
+                </div>
+            </div>
+            ` : ''}
+
+            <div class="detalle-op-stats">
+                <div class="stat-item">
+                    <span class="stat-label">Piezas Hoy</span>
+                    <span class="stat-value">${piezasHoy.toLocaleString()}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Total Histórico</span>
+                    <span class="stat-value">${totalPiezasHistorial.toLocaleString()}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Registros</span>
+                    <span class="stat-value">${historial.length}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Tendencia</span>
+                    <span class="stat-value tendencia ${tendencia > 0 ? 'positiva' : tendencia < 0 ? 'negativa' : ''}">
+                        ${tendencia > 0 ? '+' : ''}${tendencia}%
+                    </span>
+                </div>
+            </div>
+
+            <div class="detalle-op-historial">
+                <h4>Últimos Registros de Producción</h4>
+                ${historialEnriquecido.length === 0 ?
+                    '<p class="sin-registros" style="text-align: center; color: #94a3b8; padding: 20px;">Sin registros históricos aún</p>'
+                    : `
+                    <div class="historial-header" style="display: grid; grid-template-columns: 85px 55px 1fr 75px 1fr; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #3d4a5c; margin-bottom: 5px;">
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Fecha</span>
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Pzas</span>
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Proceso</span>
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Pedido</span>
+                        <span style="font-size: 0.65rem; color: #8b9dc3; text-transform: uppercase;">Cliente</span>
+                    </div>
+                    ${historialEnriquecido.slice(0, 15).map(h => `
+                    <div class="historial-item-detallado" style="display: grid; grid-template-columns: 85px 55px 1fr 75px 1fr; gap: 8px; padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); align-items: center;">
+                        <span class="fecha" style="color: #94a3b8; font-size: 0.75rem;">${formatearFecha(h.fecha)}</span>
+                        <span class="piezas" style="color: #10b981; font-weight: 600; background: rgba(16, 185, 129, 0.1); padding: 3px 6px; border-radius: 12px; text-align: center; font-size: 0.8rem;">${h.cantidad || h.piezas || 0}</span>
+                        <span class="proceso" style="color: #fbbf24; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500;" title="${h.procesoInfo || ''}">${h.procesoInfo || '-'}</span>
+                        <span class="pedido" style="color: #a5b4fc; font-size: 0.75rem;">${h.pedidoInfo || '-'}</span>
+                        <span class="cliente" style="color: #38bdf8; font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${h.clienteInfo || ''}">${h.clienteInfo ? h.clienteInfo.substring(0, 15) : '-'}</span>
+                    </div>
+                `).join('')}
+                `}
+            </div>
+        </div>
+    `;
+
+    openModal(`Detalle: ${operador.nombre || 'Operador'}`, content, '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>');
+}
+
+function verHistorialOperadora(operadorId) {
+    verDetalleOperadora(operadorId);
+}
+
+function exportarReporte() {
+    // Mostrar modal con opciones de exportación
+    const content = `
+        <div class="export-options">
+            <p>Selecciona el formato de exportación:</p>
+            <div class="export-buttons">
+                <button class="btn btn-primary" onclick="exportarReporteCSV(); closeModal();">
+                    <i class="fas fa-file-csv"></i> CSV (Excel)
+                </button>
+                <button class="btn btn-outline" onclick="exportarReportePDF(); closeModal();">
+                    <i class="fas fa-file-pdf"></i> PDF
+                </button>
+            </div>
+        </div>
+    `;
+
+    openModal('Exportar Reporte', content, [
+        { text: 'Cancelar', class: 'btn-secondary', onclick: 'closeModal()' }
+    ]);
+}
+
+function exportarReporteCSV() {
+    const operadoras = getReporteOperadoras();
+    let csv = 'Ranking,Nombre,Estacion,Piezas,Eficiencia,Tendencia\n';
+
+    operadoras.forEach((op, idx) => {
+        csv += `${idx + 1},"${op.nombre}","${op.estacion || '-'}",${op.piezas},${op.eficiencia}%,${op.tendencia}%\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reporte_operadoras_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+    showToast('Reporte CSV exportado correctamente', 'success');
+}
+
+function exportarReportePDF() {
+    const elemento = document.querySelector('.coco-reportes');
+    if (!elemento) {
+        showToast('No se encontró el reporte para exportar', 'error');
+        return;
+    }
+
+    showToast('Generando PDF...', 'info');
+
+    const opciones = {
+        margin: 10,
+        filename: `reporte_operadoras_${new Date().toISOString().split('T')[0]}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+    };
+
+    // Clonar elemento para no afectar la UI
+    const clon = elemento.cloneNode(true);
+    clon.style.background = '#1a1f2e';
+    clon.style.padding = '20px';
+
+    html2pdf().set(opciones).from(clon).save().then(() => {
+        showToast('Reporte PDF exportado correctamente', 'success');
+    }).catch(err => {
+        console.error('Error al exportar PDF:', err);
+        showToast('Error al generar PDF', 'error');
+    });
+}
+
+// ========================================
+// ASISTENTE IA DE COCO
+// ========================================
+
+function renderCocoAsistente() {
+    const container = document.querySelector('.coco-asistente-container');
+    if (!container) return;
+
+    const areaFiltro = cocoState.asistenteAreaFiltro;
+    const areas = getAreasDisponibles();
+    const recomendaciones = getRecomendacionesIA(areaFiltro);
+    const datosHistoricos = hayDatosSuficientes();
+
+    container.innerHTML = `
+        <div class="coco-asistente">
+            <div class="asistente-header">
+                <div class="asistente-avatar">
+                    <i class="fas fa-robot"></i>
+                    <div class="avatar-pulse"></div>
+                </div>
+                <div class="asistente-intro">
+                    <h2>Asistente Inteligente</h2>
+                    <p>Hola Coco, analice los datos de produccion y tengo algunas recomendaciones para ti.</p>
+                </div>
+                <div class="asistente-filtros">
+                    <select class="mini-select" onchange="cambiarFiltroAsistente(this.value)">
+                        <option value="todas" ${areaFiltro === 'todas' ? 'selected' : ''}>Todas las areas</option>
+                        ${areas.map(a => `<option value="${a}" ${areaFiltro === a ? 'selected' : ''}>${a}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+
+            ${!datosHistoricos ? `
+                <div class="asistente-sin-datos">
+                    <div class="sin-datos-icon">
+                        <i class="fas fa-database"></i>
+                    </div>
+                    <h3>Recopilando datos...</h3>
+                    <p>Para darte recomendaciones mas precisas, necesito analizar mas datos historicos.</p>
+                    <div class="datos-progreso">
+                        <div class="progreso-item">
+                            <span>Registros de produccion</span>
+                            <div class="progreso-barra">
+                                <div class="progreso-fill" style="width: ${getProgresoRegistros()}%"></div>
+                            </div>
+                            <span>${getProgresoRegistros()}%</span>
+                        </div>
+                        <div class="progreso-item">
+                            <span>Historial de operadoras</span>
+                            <div class="progreso-barra">
+                                <div class="progreso-fill" style="width: ${getProgresoHistorial()}%"></div>
+                            </div>
+                            <span>${getProgresoHistorial()}%</span>
+                        </div>
+                    </div>
+                    <p class="datos-tip">
+                        <i class="fas fa-lightbulb"></i>
+                        Tip: Mientras mas uses el sistema de liberacion y captures datos de produccion,
+                        mejores seran mis recomendaciones.
+                    </p>
+                </div>
+            ` : ''}
+
+            <!-- Recomendaciones de Asignacion -->
+            <div class="asistente-seccion">
+                <h3><i class="fas fa-user-cog"></i> Recomendaciones de Asignacion</h3>
+                <p class="seccion-descripcion">
+                    Basado en el rendimiento historico de cada operadora en diferentes procesos.
+                </p>
+
+                <div class="recomendaciones-grid">
+                    ${recomendaciones.asignaciones.length > 0 ? recomendaciones.asignaciones.map(rec => `
+                        <div class="recomendacion-card">
+                            <div class="rec-header">
+                                <div class="rec-operadora">
+                                    <span class="rec-avatar">${getIniciales(rec.operadora)}</span>
+                                    <div class="rec-info">
+                                        <strong>${rec.operadora}</strong>
+                                        <span>Actualmente: ${rec.estacionActual || 'Sin asignar'}</span>
+                                    </div>
+                                </div>
+                                <span class="rec-confianza ${rec.confianza >= 80 ? 'alta' : rec.confianza >= 60 ? 'media' : 'baja'}">
+                                    ${rec.confianza}% confianza
+                                </span>
+                            </div>
+                            <div class="rec-body">
+                                <div class="rec-sugerencia">
+                                    <i class="fas fa-arrow-right"></i>
+                                    <span>Asignar a: <strong>${rec.procesoSugerido}</strong></span>
+                                </div>
+                                <div class="rec-razon">
+                                    <i class="fas fa-chart-line"></i>
+                                    <span>${rec.razon}</span>
+                                </div>
+                                <div class="rec-stats">
+                                    <span title="Eficiencia historica en este proceso">
+                                        <i class="fas fa-tachometer-alt"></i> ${rec.eficienciaHistorica}%
+                                    </span>
+                                    <span title="Piezas promedio por dia">
+                                        <i class="fas fa-cubes"></i> ${rec.promediodiario} pzas/dia
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="rec-actions">
+                                <button class="btn btn-sm btn-primary" onclick="aplicarRecomendacion('${rec.id}')">
+                                    <i class="fas fa-check"></i> Aplicar
+                                </button>
+                                <button class="btn btn-sm btn-secondary" onclick="ignorarRecomendacion('${rec.id}')">
+                                    <i class="fas fa-times"></i> Ignorar
+                                </button>
+                            </div>
+                        </div>
+                    `).join('') : `
+                        <div class="sin-recomendaciones">
+                            <i class="fas fa-check-circle"></i>
+                            <p>No hay recomendaciones pendientes. Tu equipo esta bien asignado.</p>
+                        </div>
+                    `}
+                </div>
+            </div>
+
+            <!-- Optimizacion de Pedidos -->
+            ${recomendaciones.pedidos.length > 0 ? `
+                <div class="asistente-seccion">
+                    <h3><i class="fas fa-clipboard-check"></i> Optimizacion de Pedidos</h3>
+                    <div class="optimizacion-grid">
+                        ${recomendaciones.pedidos.map(rec => `
+                            <div class="optimizacion-card ${rec.prioridad}">
+                                <div class="opt-header">
+                                    <span class="opt-pedido">Pedido #${rec.pedidoId}</span>
+                                    <span class="opt-prioridad">${rec.prioridad}</span>
+                                </div>
+                                <div class="opt-body">
+                                    <p>${rec.recomendacion}</p>
+                                    <div class="opt-impacto">
+                                        <i class="fas fa-bolt"></i>
+                                        Impacto estimado: <strong>${rec.impacto}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
+            <!-- Chat con IA -->
+            <div class="asistente-chat">
+                <h3><i class="fas fa-comments"></i> Preguntame algo, Coco</h3>
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="chat-message ia">
+                            <div class="message-avatar"><i class="fas fa-robot"></i></div>
+                            <div class="message-content">
+                                <p>¿En que puedo ayudarte? Puedes preguntarme cosas como:</p>
+                                <ul class="sugerencias-chat">
+                                    <li onclick="enviarPregunta('¿Quien es mejor para costura?')">¿Quien es mejor para costura?</li>
+                                    <li onclick="enviarPregunta('¿Como optimizo el pedido urgente?')">¿Como optimizo el pedido urgente?</li>
+                                    <li onclick="enviarPregunta('¿Quien necesita capacitacion?')">¿Quien necesita capacitacion?</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input">
+                        <input type="text" id="chatInput" placeholder="Escribe tu pregunta..."
+                               onkeypress="if(event.key==='Enter') enviarPregunta()">
+                        <button class="btn btn-primary" onclick="enviarPregunta()">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Historial de recomendaciones -->
+            <div class="asistente-historial">
+                <h3><i class="fas fa-history"></i> Historial de Recomendaciones</h3>
+                <div class="historial-lista">
+                    ${getHistorialRecomendaciones().slice(0, 5).map(h => `
+                        <div class="historial-rec-item ${h.aplicada ? 'aplicada' : 'ignorada'}">
+                            <span class="historial-fecha">${formatearFecha(h.fecha)}</span>
+                            <span class="historial-texto">${h.texto}</span>
+                            <span class="historial-estado">
+                                <i class="fas fa-${h.aplicada ? 'check' : 'times'}"></i>
+                                ${h.aplicada ? 'Aplicada' : 'Ignorada'}
+                            </span>
+                        </div>
+                    `).join('') || '<p class="sin-historial">No hay historial de recomendaciones</p>'}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ========================================
+// MOTOR DE RECOMENDACIONES IA
+// ========================================
+
+function getRecomendacionesIA(areaFiltro = 'todas') {
+    const historial = getHistorialProduccion();
+    let operadores = supervisoraState.operadores || [];
+    const pedidos = supervisoraState.pedidosHoy || [];
+    const maquinas = supervisoraState.maquinas;
+
+    // Aplicar filtro de area si es necesario
+    if (areaFiltro !== 'todas') {
+        operadores = filtrarOperadorasPorArea(operadores, areaFiltro);
+    }
+
+    const recomendaciones = {
+        asignaciones: [],
+        pedidos: [],
+        general: []
+    };
+
+    // Analizar rendimiento por operadora y proceso
+    const rendimientoPorOperadora = {};
+
+    operadores.forEach(op => {
+        rendimientoPorOperadora[op.id] = {
+            nombre: op.nombre,
+            procesos: {}
+        };
+
+        // Analizar historial por tipo de proceso
+        const historialOp = historial.filter(h => h.operadorId === op.id);
+
+        historialOp.forEach(h => {
+            const tipoProceso = h.tipoProceso || 'general';
+            if (!rendimientoPorOperadora[op.id].procesos[tipoProceso]) {
+                rendimientoPorOperadora[op.id].procesos[tipoProceso] = {
+                    totalPiezas: 0,
+                    totalRegistros: 0,
+                    eficiencias: []
+                };
+            }
+
+            rendimientoPorOperadora[op.id].procesos[tipoProceso].totalPiezas += h.piezas || 0;
+            rendimientoPorOperadora[op.id].procesos[tipoProceso].totalRegistros++;
+            if (h.eficiencia) {
+                rendimientoPorOperadora[op.id].procesos[tipoProceso].eficiencias.push(h.eficiencia);
+            }
+        });
+    });
+
+    // Generar recomendaciones de asignacion
+    operadores.forEach(op => {
+        const datos = rendimientoPorOperadora[op.id];
+        if (!datos || Object.keys(datos.procesos).length === 0) return;
+
+        // Encontrar el mejor proceso para esta operadora
+        let mejorProceso = null;
+        let mejorEficiencia = 0;
+
+        Object.entries(datos.procesos).forEach(([proceso, stats]) => {
+            if (stats.eficiencias.length > 0) {
+                const promedioEficiencia = stats.eficiencias.reduce((a, b) => a + b, 0) / stats.eficiencias.length;
+                if (promedioEficiencia > mejorEficiencia) {
+                    mejorEficiencia = promedioEficiencia;
+                    mejorProceso = proceso;
+                }
+            }
+        });
+
+        if (mejorProceso && mejorEficiencia > 0) {
+            // Verificar si hay pedidos que necesiten este proceso
+            const pedidosConProceso = pedidos.filter(p =>
+                p.procesos?.some(proc =>
+                    proc.tipo === mejorProceso && proc.estado !== 'completado'
+                )
+            );
+
+            if (pedidosConProceso.length > 0) {
+                const estacionActual = Object.entries(maquinas).find(([id, m]) =>
+                    m.operadores?.some(o => o.id === op.id)
+                );
+
+                recomendaciones.asignaciones.push({
+                    id: Date.now() + op.id,
+                    operadoraId: op.id,
+                    operadora: op.nombre,
+                    estacionActual: estacionActual ? estacionActual[0] : null,
+                    procesoSugerido: mejorProceso,
+                    eficienciaHistorica: Math.round(mejorEficiencia),
+                    promediodiario: Math.round(datos.procesos[mejorProceso].totalPiezas / Math.max(1, datos.procesos[mejorProceso].totalRegistros)),
+                    confianza: Math.min(95, 50 + datos.procesos[mejorProceso].totalRegistros * 5),
+                    razon: `Historicamente rinde ${Math.round(mejorEficiencia)}% en ${mejorProceso}`
+                });
+            }
+        }
+    });
+
+    // Ordenar por confianza
+    recomendaciones.asignaciones.sort((a, b) => b.confianza - a.confianza);
+
+    // Limitar a 5 recomendaciones
+    recomendaciones.asignaciones = recomendaciones.asignaciones.slice(0, 5);
+
+    // Recomendaciones para pedidos
+    pedidos.forEach(pedido => {
+        const progreso = calcularProgresoPedido(pedido);
+        if ((pedido.prioridad === 'alta' || pedido.prioridad === 'urgente') && progreso < 50) {
+            const estacionesEnPedido = Object.values(maquinas).filter(m => m.pedidoId === pedido.id);
+
+            if (estacionesEnPedido.length < 3) {
+                recomendaciones.pedidos.push({
+                    pedidoId: pedido.id,
+                    prioridad: 'alta',
+                    recomendacion: `Agregar mas estaciones al pedido #${pedido.id}. Actualmente solo tiene ${estacionesEnPedido.length}.`,
+                    impacto: '+20% velocidad estimada'
+                });
+            }
+        }
+    });
+
+    return recomendaciones;
+}
+
+function hayDatosSuficientes() {
+    const historial = getHistorialProduccion();
+    return historial.length >= 10; // Minimo 10 registros para empezar a recomendar
+}
+
+function getProgresoRegistros() {
+    const historial = getHistorialProduccion();
+    return Math.min(100, Math.round((historial.length / 50) * 100));
+}
+
+function getProgresoHistorial() {
+    const liberaciones = JSON.parse(localStorage.getItem('supervisora_liberaciones') || '[]');
+    return Math.min(100, Math.round((liberaciones.length / 30) * 100));
+}
+
+function getHistorialProduccion() {
+    return JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+}
+
+function guardarRegistroProduccion(registro) {
+    const historial = getHistorialProduccion();
+    historial.unshift({
+        ...registro,
+        fecha: new Date().toISOString()
+    });
+
+    // Mantener ultimos 500 registros
+    if (historial.length > 500) historial.splice(500);
+
+    localStorage.setItem('historial_produccion', JSON.stringify(historial));
+}
+
+function getHistorialRecomendaciones() {
+    return JSON.parse(localStorage.getItem('historial_recomendaciones') || '[]');
+}
+
+function aplicarRecomendacion(recId) {
+    const recomendaciones = getRecomendacionesIA();
+    const rec = recomendaciones.asignaciones.find(r => r.id == recId);
+
+    if (rec) {
+        // Guardar en historial
+        const historial = getHistorialRecomendaciones();
+        historial.unshift({
+            fecha: new Date().toISOString(),
+            texto: `Asignar ${rec.operadora} a ${rec.procesoSugerido}`,
+            aplicada: true
+        });
+        localStorage.setItem('historial_recomendaciones', JSON.stringify(historial.slice(0, 50)));
+
+        showToast(`Recomendacion aplicada: ${rec.operadora} -> ${rec.procesoSugerido}`, 'success');
+        renderCocoAsistente();
+    }
+}
+
+function ignorarRecomendacion(recId) {
+    const recomendaciones = getRecomendacionesIA();
+    const rec = recomendaciones.asignaciones.find(r => r.id == recId);
+
+    if (rec) {
+        // Guardar en historial
+        const historial = getHistorialRecomendaciones();
+        historial.unshift({
+            fecha: new Date().toISOString(),
+            texto: `Asignar ${rec.operadora} a ${rec.procesoSugerido}`,
+            aplicada: false
+        });
+        localStorage.setItem('historial_recomendaciones', JSON.stringify(historial.slice(0, 50)));
+
+        showToast('Recomendacion ignorada', 'info');
+        renderCocoAsistente();
+    }
+}
+
+// Chat con IA
+function enviarPregunta(preguntaPredef) {
+    const input = document.getElementById('chatInput');
+    const pregunta = preguntaPredef || (input ? input.value.trim() : '');
+
+    if (!pregunta) return;
+
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+
+    // Agregar mensaje del usuario
+    chatMessages.innerHTML += `
+        <div class="chat-message usuario">
+            <div class="message-content">
+                <p>${pregunta}</p>
+            </div>
+            <div class="message-avatar"><i class="fas fa-user"></i></div>
+        </div>
+    `;
+
+    // Generar respuesta de IA
+    const respuesta = generarRespuestaIA(pregunta);
+
+    setTimeout(() => {
+        chatMessages.innerHTML += `
+            <div class="chat-message ia">
+                <div class="message-avatar"><i class="fas fa-robot"></i></div>
+                <div class="message-content">
+                    <p>${respuesta}</p>
+                </div>
+            </div>
+        `;
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }, 500);
+
+    if (input) input.value = '';
+}
+
+function generarRespuestaIA(pregunta) {
+    const preguntaLower = pregunta.toLowerCase();
+    const operadores = supervisoraState.operadores || [];
+    const historial = getHistorialProduccion();
+
+    // Analizar pregunta y generar respuesta contextual
+    if (preguntaLower.includes('mejor') && preguntaLower.includes('costura')) {
+        const mejorCostura = encontrarMejorOperadoraPorProceso('costura');
+        if (mejorCostura) {
+            return `Basado en los datos historicos, <strong>${mejorCostura.nombre}</strong> tiene el mejor rendimiento en costura con un promedio de ${mejorCostura.promedio} piezas por dia y ${mejorCostura.eficiencia}% de eficiencia.`;
+        }
+        return `Aun no tengo suficientes datos para determinar quien es mejor en costura, Coco. Necesito mas registros de produccion.`;
+    }
+
+    if (preguntaLower.includes('mejor') && preguntaLower.includes('corte')) {
+        const mejorCorte = encontrarMejorOperadoraPorProceso('corte');
+        if (mejorCorte) {
+            return `Para corte, mi recomendacion es <strong>${mejorCorte.nombre}</strong> con ${mejorCorte.eficiencia}% de eficiencia y promedio de ${mejorCorte.promedio} piezas por dia.`;
+        }
+        return `Necesito mas datos de produccion de corte para darte una recomendacion precisa.`;
+    }
+
+    if (preguntaLower.includes('capacitacion') || preguntaLower.includes('necesita ayuda')) {
+        const bajoRendimiento = operadores.filter(op => calcularEficienciaOperadora(op.id) < 70);
+        if (bajoRendimiento.length > 0) {
+            return `Te sugiero revisar el desempeno de: <strong>${bajoRendimiento.map(o => o.nombre).join(', ')}</strong>. Su eficiencia esta por debajo del 70%. Podrian beneficiarse de capacitacion adicional o revisar si estan en el proceso adecuado.`;
+        }
+        return `¡Buenas noticias, Coco! Todo tu equipo esta por encima del 70% de eficiencia. No detecto necesidades urgentes de capacitacion.`;
+    }
+
+    if (preguntaLower.includes('optimiz') && preguntaLower.includes('pedido')) {
+        const urgentes = (supervisoraState.pedidosHoy || []).filter(p => p.prioridad === 'alta' || p.prioridad === 'urgente');
+        if (urgentes.length > 0) {
+            return `Para optimizar el pedido urgente #${urgentes[0].id}, te recomiendo: 1) Asignar a tus operadoras mas eficientes, 2) Agregar mas estaciones si es posible, 3) Revisar que no haya cuellos de botella en procesos anteriores.`;
+        }
+        return `No tienes pedidos urgentes en este momento. ¿Hay algun pedido especifico que quieras optimizar?`;
+    }
+
+    if (preguntaLower.includes('cuantas') && preguntaLower.includes('operadora')) {
+        const total = operadores.length;
+        const activas = Object.values(supervisoraState.maquinas).filter(m => m.operadores && m.operadores.length > 0).length;
+        return `Tienes ${total} operadoras en total. Actualmente hay ${activas} estaciones con operadoras asignadas.`;
+    }
+
+    if (preguntaLower.includes('produccion') && preguntaLower.includes('hoy')) {
+        const piezasHoy = Object.values(supervisoraState.maquinas).reduce((sum, m) => sum + (m.piezasHoy || 0), 0);
+        return `La produccion de hoy es de <strong>${piezasHoy.toLocaleString()}</strong> piezas. ${piezasHoy > 500 ? '¡Vamos muy bien!' : 'Aun hay margen de mejora.'}`;
+    }
+
+    // Respuesta generica
+    return `Entiendo tu pregunta, Coco. Dejame analizar los datos... Para darte una mejor respuesta, ¿podrias ser mas especifica? Por ejemplo, puedes preguntarme sobre operadoras especificas, procesos, o pedidos.`;
+}
+
+function encontrarMejorOperadoraPorProceso(tipoProceso) {
+    const historial = getHistorialProduccion();
+    const porOperadora = {};
+
+    historial.filter(h => h.tipoProceso === tipoProceso).forEach(h => {
+        if (!porOperadora[h.operadorId]) {
+            porOperadora[h.operadorId] = {
+                id: h.operadorId,
+                nombre: h.operadorNombre,
+                totalPiezas: 0,
+                registros: 0,
+                eficiencias: []
+            };
+        }
+        porOperadora[h.operadorId].totalPiezas += h.piezas || 0;
+        porOperadora[h.operadorId].registros++;
+        if (h.eficiencia) porOperadora[h.operadorId].eficiencias.push(h.eficiencia);
+    });
+
+    const ordenado = Object.values(porOperadora)
+        .filter(o => o.registros >= 2)
+        .sort((a, b) => (b.totalPiezas / b.registros) - (a.totalPiezas / a.registros));
+
+    if (ordenado.length === 0) return null;
+
+    const mejor = ordenado[0];
+    return {
+        nombre: mejor.nombre,
+        promedio: Math.round(mejor.totalPiezas / mejor.registros),
+        eficiencia: mejor.eficiencias.length > 0 ?
+            Math.round(mejor.eficiencias.reduce((a, b) => a + b, 0) / mejor.eficiencias.length) : 80
+    };
+}
+
+// ========================================
+// DASHBOARD DE TIEMPOS MUERTOS
+// ========================================
+
+let tiemposMuertosFiltro = 'hoy';
+
+function renderTiemposMuertos() {
+    const container = document.querySelector('.coco-tiempos-muertos-container');
+    if (!container) return;
+
+    // Verificar que exista el estado
+    if (!supervisoraState.tiemposMuertos) {
+        supervisoraState.tiemposMuertos = { activos: {}, historial: [] };
+    }
+
+    const activos = supervisoraState.tiemposMuertos.activos || {};
+    const activosArray = Object.values(activos);
+
+    // Calcular estadísticas
+    const stats = typeof calcularEstadisticasTiemposMuertos === 'function'
+        ? calcularEstadisticasTiemposMuertos(tiemposMuertosFiltro)
+        : { totalParos: 0, tiempoTotal: 0, promedio: 0, activos: activosArray.length, porMotivo: [] };
+
+    const historial = typeof getHistorialTiemposMuertos === 'function'
+        ? getHistorialTiemposMuertos(tiemposMuertosFiltro)
+        : [];
+
+    const horasTotales = Math.floor(stats.tiempoTotal / 60);
+    const minutosTotales = stats.tiempoTotal % 60;
+
+    container.innerHTML = `
+        <div class="tiempos-muertos-dashboard">
+            <div class="tm-header">
+                <h2><i class="fas fa-pause-circle"></i> Tiempos Muertos</h2>
+                <div class="tm-header-actions">
+                    <select class="form-control" id="tmFiltroSelect" onchange="cambiarFiltroTM(this.value)">
+                        <option value="hoy" ${tiemposMuertosFiltro === 'hoy' ? 'selected' : ''}>Hoy</option>
+                        <option value="semana" ${tiemposMuertosFiltro === 'semana' ? 'selected' : ''}>Esta semana</option>
+                        <option value="mes" ${tiemposMuertosFiltro === 'mes' ? 'selected' : ''}>Este mes</option>
+                    </select>
+                    <button class="btn btn-outline" onclick="exportarTiemposMuertosCSV()">
+                        <i class="fas fa-download"></i> Exportar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Paros Activos -->
+            ${activosArray.length > 0 ? `
+                <div class="tm-activos-section">
+                    <h3><i class="fas fa-exclamation-circle"></i> Paros Activos (${activosArray.length})</h3>
+                    <div class="tm-activos-grid">
+                        ${activosArray.map(tm => {
+                            const inicio = new Date(tm.inicio);
+                            const duracionMin = Math.floor((new Date() - inicio) / 60000);
+                            return `
+                                <div class="tm-activo-card" onclick="mostrarTiempoMuertoActivo('${tm.estacionId}')"
+                                     style="border-left: 4px solid ${tm.motivoColor}">
+                                    <div class="tm-card-header">
+                                        <span class="tm-card-estacion">${tm.estacionId}</span>
+                                        <span class="tm-card-duracion">${duracionMin} min</span>
+                                    </div>
+                                    <div class="tm-card-motivo">
+                                        <i class="fas ${tm.motivoIcono}" style="color: ${tm.motivoColor}"></i>
+                                        ${tm.motivoNombre}
+                                    </div>
+                                    ${tm.operadores && tm.operadores.length > 0 ? `
+                                        <div class="tm-card-operadores">
+                                            ${tm.operadores.map(op => op.nombre.split(' ')[0]).join(', ')}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
+            <!-- Resumen del período -->
+            <div class="tm-resumen">
+                <div class="tm-stat-card">
+                    <div class="tm-stat-icon"><i class="fas fa-hashtag"></i></div>
+                    <div class="tm-stat-value">${stats.totalParos}</div>
+                    <div class="tm-stat-label">Paros registrados</div>
+                </div>
+                <div class="tm-stat-card">
+                    <div class="tm-stat-icon"><i class="fas fa-clock"></i></div>
+                    <div class="tm-stat-value">${horasTotales}h ${minutosTotales}m</div>
+                    <div class="tm-stat-label">Tiempo total</div>
+                </div>
+                <div class="tm-stat-card">
+                    <div class="tm-stat-icon"><i class="fas fa-hourglass-half"></i></div>
+                    <div class="tm-stat-value">${stats.promedio} min</div>
+                    <div class="tm-stat-label">Promedio por paro</div>
+                </div>
+                <div class="tm-stat-card ${activosArray.length > 0 ? 'activos' : ''}">
+                    <div class="tm-stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                    <div class="tm-stat-value">${activosArray.length}</div>
+                    <div class="tm-stat-label">Activos ahora</div>
+                </div>
+            </div>
+
+            <!-- Distribución por motivo -->
+            <div class="tm-por-motivo">
+                <h3><i class="fas fa-chart-pie"></i> Distribución por Motivo</h3>
+                <div class="tm-motivos-list">
+                    ${stats.porMotivo && stats.porMotivo.length > 0 ? stats.porMotivo.map(m => {
+                        const porcentaje = stats.tiempoTotal > 0 ? Math.round((m.tiempoTotal / stats.tiempoTotal) * 100) : 0;
+                        return `
+                            <div class="tm-motivo-item">
+                                <div class="tm-motivo-info">
+                                    <span class="tm-motivo-icon" style="background: ${m.color}20; color: ${m.color}">
+                                        <i class="fas ${m.icono}"></i>
+                                    </span>
+                                    <span class="tm-motivo-nombre">${m.motivo}</span>
+                                </div>
+                                <div class="tm-motivo-stats">
+                                    <span class="tm-motivo-cantidad">${m.cantidad} paros</span>
+                                    <span class="tm-motivo-tiempo">${m.tiempoTotal} min</span>
+                                </div>
+                                <div class="tm-motivo-bar">
+                                    <div class="tm-motivo-bar-fill" style="width: ${porcentaje}%; background: ${m.color}"></div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('') : '<p class="text-muted text-center">No hay paros registrados en este período</p>'}
+                </div>
+            </div>
+
+            <!-- Historial reciente -->
+            <div class="tm-historial">
+                <h3><i class="fas fa-history"></i> Historial</h3>
+                <div class="tm-historial-tabla">
+                    ${historial.length > 0 ? `
+                        <table class="tabla-tm">
+                            <thead>
+                                <tr>
+                                    <th>Fecha/Hora</th>
+                                    <th>Estación</th>
+                                    <th>Motivo</th>
+                                    <th>Duración</th>
+                                    <th>Operadora</th>
+                                    <th>Solución</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${historial.slice(0, 25).map(h => {
+                                    const inicio = new Date(h.inicio);
+                                    const fechaStr = inicio.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' });
+                                    const horaStr = inicio.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+                                    return `
+                                        <tr>
+                                            <td>
+                                                <div class="tm-fecha">${fechaStr}</div>
+                                                <div class="tm-hora">${horaStr}</div>
+                                            </td>
+                                            <td><strong>${h.estacionId}</strong></td>
+                                            <td>
+                                                <span class="tm-motivo-badge" style="background: ${h.motivoColor}20; color: ${h.motivoColor}">
+                                                    <i class="fas ${h.motivoIcono}"></i> ${h.motivoNombre}
+                                                </span>
+                                            </td>
+                                            <td>${h.duracionMinutos} min</td>
+                                            <td>${h.operadores?.map(op => op.nombre.split(' ')[0]).join(', ') || '-'}</td>
+                                            <td class="solucion-cell" title="${h.solucion || ''}">${h.solucion || '-'}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    ` : '<p class="text-muted text-center">No hay paros registrados en este período</p>'}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function cambiarFiltroTM(filtro) {
+    tiemposMuertosFiltro = filtro;
+    renderTiemposMuertos();
+}
