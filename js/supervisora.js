@@ -305,9 +305,30 @@ function renderLayoutInSupervisora(layout) {
         let operadoresHTML = '';
 
         if (operadoresCount > 0) {
+            // Calcular rendimiento del operador en esta estación
+            const estadoMaquinasData = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+            const estadoEst = estadoMaquinasData[element.id];
+            const piezasRealizadas = estadoEst?.piezasHoy || maquinaState.piezasHoy || 0;
+            const pedidoAsignado = maquinaState.pedidoId ? supervisoraState.pedidosHoy.find(p => p.id === maquinaState.pedidoId) : null;
+            const cantidadObjetivo = pedidoAsignado?.productos?.[0]?.cantidad || pedidoAsignado?.cantidad || 0;
+            const avanceOp = cantidadObjetivo > 0 ? Math.min(100, Math.round((piezasRealizadas / cantidadObjetivo) * 100)) : 0;
+
+            // Semáforo de rendimiento basado en piezas esperadas por tiempo transcurrido
+            let semaforo = 'gris'; // sin datos
+            if (cantidadObjetivo > 0 && piezasRealizadas > 0) {
+                const rendimiento = avanceOp; // simplificado: % completado como proxy
+                if (rendimiento >= 85) semaforo = 'verde';
+                else if (rendimiento >= 70) semaforo = 'amarillo';
+                else semaforo = 'rojo';
+            } else if (maquinaState.estado === 'activo' || estaTrabajando) {
+                semaforo = 'amarillo'; // activo pero sin piezas aún
+            }
+
             operadoresHTML = maquinaState.operadores.map(op => `
-                <div class="operador-chip" data-operador-id="${op.id}" title="${S(op.nombre)}">
+                <div class="operador-chip" data-operador-id="${op.id}" title="${S(op.nombre)} - ${avanceOp}%">
                     <span class="operador-iniciales">${S(getIniciales(op.nombre))}</span>
+                    <span class="operador-semaforo ${semaforo}"></span>
+                    ${cantidadObjetivo > 0 ? `<div class="operador-mini-bar"><div class="operador-mini-fill" style="width:${avanceOp}%"></div></div>` : ''}
                     <button class="remove-operador" onclick="event.stopPropagation(); removeOperadorFromEstacion('${S(element.id)}', ${op.id})" title="Quitar">&times;</button>
                 </div>
             `).join('');
@@ -1040,6 +1061,11 @@ function renderPedidosList() {
         }
         const articulosTexto = nombresArticulos.length > 0 ? nombresArticulos.join(', ') : '';
 
+        // Calcular avance ponderado real del pedido
+        const avancePedido = typeof calcularAvancePedido === 'function'
+            ? calcularAvancePedido(pedido, typeof db !== 'undefined' ? db.getProductos() : [])
+            : progreso;
+
         const isExpanded = supervisoraState.expandedPedidos.has(pedido.id);
         const procesos = pedido.procesos || getProcesosFromDB(pedido.id);
         // Normalizar estados para comparación (en-proceso, en_proceso, en proceso)
@@ -1085,6 +1111,11 @@ function renderPedidosList() {
                         </div>
                         <div class="pedido-cliente-name">${clienteNombre}</div>
                         ${articulosTexto ? `<div class="pedido-articulo-name"><i class="fas fa-box-open"></i> ${articulosTexto}</div>` : ''}
+                        ${pedido.notas ? `<div class="pedido-notas-preview"><i class="fas fa-sticky-note"></i> ${S(pedido.notas.substring(0, 80))}${pedido.notas.length > 80 ? '...' : ''}</div>` : ''}
+                        <div class="pedido-avance-bar">
+                            <div class="pedido-avance-fill ${avancePedido >= 100 ? 'completado' : avancePedido >= 70 ? 'avanzado' : avancePedido >= 30 ? 'medio' : ''}" style="width:${Math.min(avancePedido, 100)}%"></div>
+                            <span class="pedido-avance-text">${avancePedido}%</span>
+                        </div>
                         <div class="pedido-stats-row">
                             <span class="pedido-stat"><i class="fas fa-cubes"></i> ${cantidad.toLocaleString()}</span>
                             <span class="pedido-stat"><i class="fas fa-tasks"></i> ${procesosCompletados}/${procesos.length}</span>
@@ -6481,6 +6512,10 @@ function confirmarAjusteCantidad(procesoId, pedidoId, piezasAnteriores) {
     // Refrescar vista
     if (typeof cargarPedidosDelDia === 'function') cargarPedidosDelDia();
     if (typeof renderizarPedidosHoy === 'function') renderizarPedidosHoy();
+    // Refrescar mapa de planta para actualizar barras de avance
+    if (supervisoraState && supervisoraState.layout) {
+        renderLayoutInSupervisora(supervisoraState.layout);
+    }
 
     const diferencia = nuevaCantidad - piezasAnteriores;
     const signo = diferencia > 0 ? '+' : '';
@@ -6625,6 +6660,10 @@ function guardarAjusteCierre(tipo, index, cantidadAnterior, pedidoId) {
     localStorage.setItem('historial_ajustes_cantidad', JSON.stringify(historialAjustes.slice(0, 500)));
 
     cerrarAjusteCierre();
+    // Refrescar mapa de planta para actualizar barras de avance
+    if (supervisoraState && supervisoraState.layout) {
+        renderLayoutInSupervisora(supervisoraState.layout);
+    }
     showToast(`Cantidad ajustada: ${cantidadAnterior} → ${nuevaCantidad}`, 'success');
 }
 
@@ -6683,19 +6722,25 @@ function confirmarCierrePedido(pedidoId) {
         }
     }
 
-    // Notificar a administración
+    // Notificar a administración (key local)
     const notificacionesAdmin = JSON.parse(localStorage.getItem('notificaciones_admin') || '[]');
-    notificacionesAdmin.unshift({
+    const notifData = {
         id: Date.now(),
-        tipo: 'pedido_cerrado',
-        titulo: 'Pedido Cerrado',
-        mensaje: `Pedido #${pedidoId} ha sido cerrado y está listo para entrega`,
+        tipo: 'pedido_completado',
+        titulo: 'Pedido Completado y Listo para Entrega',
+        mensaje: `Pedido #${pedidoId} cerrado por ${supervisoraState?.nombre || 'Supervisora'} - Listo para entrega`,
         pedidoId: pedidoId,
-        cliente: pedido?.cliente,
+        cliente: pedido?.cliente || pedido?.clienteNombre || '',
         fecha: new Date().toISOString(),
         leida: false
-    });
+    };
+    notificacionesAdmin.unshift(notifData);
     localStorage.setItem('notificaciones_admin', JSON.stringify(notificacionesAdmin.slice(0, 200)));
+
+    // También agregar a notificaciones_coco (sincronizada via realtime-sync)
+    const notificacionesCoco = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    notificacionesCoco.unshift(notifData);
+    localStorage.setItem('notificaciones_coco', JSON.stringify(notificacionesCoco.slice(0, 200)));
 
     // Cerrar modal
     const modal = document.getElementById('modalCierrePedido');
@@ -8495,3 +8540,242 @@ window.confirmarDescontarPiezasSup = confirmarDescontarPiezasSup;
 window.asignarCorteInventario = asignarCorteInventario;
 window.actualizarInfoEstacionCorte = actualizarInfoEstacionCorte;
 window.confirmarAsignarCorte = confirmarAsignarCorte;
+
+// ========================================
+// SISTEMA DE ASISTENCIA
+// ========================================
+
+function abrirModalAsistencia() {
+    const hoy = new Date().toISOString().split('T')[0];
+    const operadores = supervisoraState.operadores || [];
+
+    if (operadores.length === 0) {
+        showToast('No hay operadores registrados', 'warning');
+        return;
+    }
+
+    // Cargar asistencia guardada para hoy (localStorage fallback)
+    let asistenciaHoy = {};
+    try {
+        const saved = JSON.parse(localStorage.getItem('asistencia_hoy') || '{}');
+        if (saved.fecha === hoy) {
+            asistenciaHoy = saved.registros || {};
+        }
+    } catch (e) {}
+
+    let rows = '';
+    operadores.forEach(op => {
+        const reg = asistenciaHoy[op.id] || {};
+        const tipo = reg.tipo || 'asistencia';
+        const motivo = reg.motivo || '';
+
+        rows += `
+        <tr class="asistencia-row" data-operador-id="${op.id}">
+            <td class="asistencia-nombre">
+                <div class="asistencia-avatar">${getIniciales(op.nombre)}</div>
+                <span>${op.nombre}</span>
+            </td>
+            <td class="asistencia-tipo-cell">
+                <div class="asistencia-tipo-group">
+                    <button class="asist-tipo-btn ${tipo === 'asistencia' ? 'active' : ''}" data-tipo="asistencia" onclick="setTipoAsistencia(${op.id}, 'asistencia', this)" title="Asistencia">
+                        <i class="fas fa-check"></i>
+                    </button>
+                    <button class="asist-tipo-btn falta ${tipo === 'falta' ? 'active' : ''}" data-tipo="falta" onclick="setTipoAsistencia(${op.id}, 'falta', this)" title="Falta">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <button class="asist-tipo-btn retardo ${tipo === 'retardo' ? 'active' : ''}" data-tipo="retardo" onclick="setTipoAsistencia(${op.id}, 'retardo', this)" title="Retardo">
+                        <i class="fas fa-clock"></i>
+                    </button>
+                    <button class="asist-tipo-btn permiso ${tipo === 'permiso' ? 'active' : ''}" data-tipo="permiso" onclick="setTipoAsistencia(${op.id}, 'permiso', this)" title="Permiso">
+                        <i class="fas fa-hand-paper"></i>
+                    </button>
+                </div>
+            </td>
+            <td class="asistencia-motivo-cell">
+                <input type="text" class="asistencia-motivo-input" id="motivo-${op.id}" placeholder="Motivo..." value="${motivo}" ${tipo === 'asistencia' ? 'disabled' : ''}>
+            </td>
+        </tr>`;
+    });
+
+    const content = `
+    <div class="asistencia-modal-content">
+        <div class="asistencia-fecha">
+            <i class="fas fa-calendar-day"></i>
+            <span>Fecha: <strong>${hoy}</strong></span>
+            <div class="asistencia-resumen" id="asistenciaResumen">
+                <span class="asist-res-item ok"><i class="fas fa-check"></i> <span id="resAsistencia">${operadores.length}</span></span>
+                <span class="asist-res-item falta"><i class="fas fa-times"></i> <span id="resFaltas">0</span></span>
+                <span class="asist-res-item retardo"><i class="fas fa-clock"></i> <span id="resRetardos">0</span></span>
+                <span class="asist-res-item permiso"><i class="fas fa-hand-paper"></i> <span id="resPermisos">0</span></span>
+            </div>
+        </div>
+        <div class="asistencia-acciones-rapidas">
+            <button class="btn btn-sm btn-outline" onclick="marcarTodosAsistencia()"><i class="fas fa-check-double"></i> Todos presentes</button>
+        </div>
+        <div class="asistencia-table-wrapper">
+            <table class="asistencia-table">
+                <thead>
+                    <tr>
+                        <th>Operadora</th>
+                        <th>Estado</th>
+                        <th>Motivo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows}
+                </tbody>
+            </table>
+        </div>
+    </div>`;
+
+    const footer = `
+        <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="guardarAsistencia()"><i class="fas fa-save"></i> Guardar Asistencia</button>
+    `;
+
+    openModal('Registro de Asistencia', content, footer);
+    actualizarResumenAsistencia();
+}
+
+function setTipoAsistencia(operadorId, tipo, btn) {
+    // Desactivar todos los botones del grupo
+    const row = btn.closest('.asistencia-tipo-group');
+    row.querySelectorAll('.asist-tipo-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Habilitar/deshabilitar campo motivo
+    const motivoInput = document.getElementById('motivo-' + operadorId);
+    if (motivoInput) {
+        motivoInput.disabled = (tipo === 'asistencia');
+        if (tipo === 'asistencia') motivoInput.value = '';
+    }
+
+    actualizarResumenAsistencia();
+}
+
+function marcarTodosAsistencia() {
+    document.querySelectorAll('.asistencia-row').forEach(row => {
+        const btns = row.querySelectorAll('.asist-tipo-btn');
+        btns.forEach(b => b.classList.remove('active'));
+        btns[0].classList.add('active'); // Primer boton = asistencia
+
+        const motivoInput = row.querySelector('.asistencia-motivo-input');
+        if (motivoInput) {
+            motivoInput.disabled = true;
+            motivoInput.value = '';
+        }
+    });
+    actualizarResumenAsistencia();
+}
+
+function actualizarResumenAsistencia() {
+    let asistencias = 0, faltas = 0, retardos = 0, permisos = 0;
+    document.querySelectorAll('.asistencia-row').forEach(row => {
+        const activeBtn = row.querySelector('.asist-tipo-btn.active');
+        if (!activeBtn) return;
+        const tipo = activeBtn.dataset.tipo;
+        if (tipo === 'asistencia') asistencias++;
+        else if (tipo === 'falta') faltas++;
+        else if (tipo === 'retardo') retardos++;
+        else if (tipo === 'permiso') permisos++;
+    });
+
+    const el = (id) => document.getElementById(id);
+    if (el('resAsistencia')) el('resAsistencia').textContent = asistencias;
+    if (el('resFaltas')) el('resFaltas').textContent = faltas;
+    if (el('resRetardos')) el('resRetardos').textContent = retardos;
+    if (el('resPermisos')) el('resPermisos').textContent = permisos;
+}
+
+async function guardarAsistencia() {
+    const hoy = new Date().toISOString().split('T')[0];
+    const registros = {};
+    const registrosArray = [];
+
+    document.querySelectorAll('.asistencia-row').forEach(row => {
+        const operadorId = parseInt(row.dataset.operadorId);
+        const activeBtn = row.querySelector('.asist-tipo-btn.active');
+        const tipo = activeBtn ? activeBtn.dataset.tipo : 'asistencia';
+        const motivoInput = row.querySelector('.asistencia-motivo-input');
+        const motivo = motivoInput ? motivoInput.value.trim() : '';
+
+        registros[operadorId] = { tipo, motivo };
+        registrosArray.push({
+            personal_id: operadorId,
+            fecha: hoy,
+            tipo: tipo,
+            motivo: motivo || null,
+            registrado_por: 'Supervisora'
+        });
+    });
+
+    // Guardar en localStorage como fallback
+    localStorage.setItem('asistencia_hoy', JSON.stringify({
+        fecha: hoy,
+        registros: registros
+    }));
+
+    // Guardar historial completo en localStorage
+    let historial = [];
+    try {
+        historial = JSON.parse(localStorage.getItem('historial_asistencia') || '[]');
+    } catch (e) {}
+
+    // Actualizar o insertar registros del día
+    registrosArray.forEach(reg => {
+        const idx = historial.findIndex(h => h.personal_id === reg.personal_id && h.fecha === reg.fecha);
+        if (idx >= 0) {
+            historial[idx] = { ...historial[idx], ...reg, updated_at: new Date().toISOString() };
+        } else {
+            historial.push({ ...reg, id: Date.now() + Math.random(), created_at: new Date().toISOString() });
+        }
+    });
+    localStorage.setItem('historial_asistencia', JSON.stringify(historial));
+
+    // Intentar guardar en Supabase via RPC
+    const sb = window.supabaseInstance;
+    if (sb) {
+        try {
+            for (const reg of registrosArray) {
+                await sb.rpc('registrar_asistencia', {
+                    p_personal_id: reg.personal_id,
+                    p_fecha: reg.fecha,
+                    p_tipo: reg.tipo,
+                    p_motivo: reg.motivo,
+                    p_observaciones: null,
+                    p_registrado_por: reg.registrado_por
+                });
+            }
+            console.log('[ASISTENCIA] Guardado en Supabase exitosamente');
+        } catch (e) {
+            console.warn('[ASISTENCIA] Error guardando en Supabase, usando localStorage:', e.message);
+        }
+    }
+
+    // Sincronizar via realtime
+    if (typeof syncManager !== 'undefined') {
+        syncManager.set('asistencia_' + hoy, JSON.stringify(registros));
+    }
+
+    closeModal();
+
+    const faltas = Object.values(registros).filter(r => r.tipo === 'falta').length;
+    const retardos = Object.values(registros).filter(r => r.tipo === 'retardo').length;
+    const permisos = Object.values(registros).filter(r => r.tipo === 'permiso').length;
+
+    let msg = 'Asistencia registrada';
+    if (faltas > 0 || retardos > 0 || permisos > 0) {
+        const parts = [];
+        if (faltas > 0) parts.push(faltas + ' falta' + (faltas > 1 ? 's' : ''));
+        if (retardos > 0) parts.push(retardos + ' retardo' + (retardos > 1 ? 's' : ''));
+        if (permisos > 0) parts.push(permisos + ' permiso' + (permisos > 1 ? 's' : ''));
+        msg += ' (' + parts.join(', ') + ')';
+    }
+    showToast(msg, 'success');
+}
+
+// Exponer funciones de asistencia globalmente
+window.abrirModalAsistencia = abrirModalAsistencia;
+window.setTipoAsistencia = setTipoAsistencia;
+window.marcarTodosAsistencia = marcarTodosAsistencia;
+window.guardarAsistencia = guardarAsistencia;

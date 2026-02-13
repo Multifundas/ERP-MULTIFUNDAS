@@ -125,7 +125,10 @@
                 <div class="sidebar-section operadores-section">
                     <div class="section-header">
                         <h3><i class="fas fa-users"></i> Operadores</h3>
-                        <span class="operadores-count" id="operadoresCount">0</span>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <button class="btn-asistencia-mini" onclick="abrirModalAsistencia()" title="Registrar asistencia"><i class="fas fa-clipboard-list"></i></button>
+                            <span class="operadores-count" id="operadoresCount">0</span>
+                        </div>
                     </div>
                     <div id="operadoresList" class="operadores-list">
                         <!-- Se carga dinamicamente -->
@@ -289,6 +292,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="js/supabase-config.js"></script>
     <script src="js/supabase-client.js"></script>
+    <script src="js/admin-auth.js"></script>
     <script src="js/realtime-sync.js"></script>
     <script src="js/database-adapter.js"></script>
     <script src="js/sanitize.js"></script>
@@ -297,5 +301,6 @@
     <script src="js/data.js"></script>
     <script src="js/supervisora.js"></script>
     <script src="js/coco-dashboard.js"></script>
+    <script src="js/dev-switcher.js"></script>
 </body>
 </html>

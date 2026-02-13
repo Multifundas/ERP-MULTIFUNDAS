@@ -154,6 +154,9 @@ document.addEventListener('DOMContentLoaded', () => {
         loadNotifications();
         initLiveUpdates();
 
+        // Escuchar notificaciones de pedidos completados (via realtime-sync)
+        initCompletionNotifications();
+
         // Sincronización inicial de datos para otros paneles
         setTimeout(() => {
             if (typeof sincronizarOperadorasParaLogin === 'function') {
@@ -219,6 +222,80 @@ function sincronizarEstadoOperadoresAlInicio() {
     }
 
     console.log('[ADMIN] Estado de operadores sincronizado al inicio');
+}
+
+// ========================================
+// NOTIFICACIONES DE PEDIDOS COMPLETADOS
+// ========================================
+function initCompletionNotifications() {
+    // Rastrear IDs de notificaciones ya mostradas para no repetir
+    var _shownCompletionIds = new Set();
+
+    // Marcar las existentes como ya vistas
+    try {
+        var existing = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+        existing.forEach(function(n) {
+            if (n.tipo === 'pedido_completado') _shownCompletionIds.add(n.id);
+        });
+    } catch (e) {}
+
+    // Escuchar cambios via realtime-sync
+    window.addEventListener('sync-update', function(event) {
+        if (event.detail && event.detail.key === 'notificaciones_coco') {
+            checkForNewCompletions(event.detail.value);
+        }
+    });
+
+    // También escuchar storage events (cambios locales)
+    window.addEventListener('storage', function(event) {
+        if (event.key === 'notificaciones_coco' && event.newValue) {
+            try {
+                checkForNewCompletions(JSON.parse(event.newValue));
+            } catch (e) {}
+        }
+    });
+
+    function checkForNewCompletions(notifs) {
+        if (!Array.isArray(notifs)) return;
+        notifs.forEach(function(n) {
+            if (n.tipo === 'pedido_completado' && !_shownCompletionIds.has(n.id)) {
+                _shownCompletionIds.add(n.id);
+                // Mostrar toast prominente
+                showCompletionToast(n);
+                // Refrescar notificaciones y alertas
+                if (typeof loadNotifications === 'function') loadNotifications();
+                if (typeof loadAlertas === 'function') loadAlertas();
+            }
+        });
+    }
+
+    function showCompletionToast(notif) {
+        var toastEl = document.createElement('div');
+        toastEl.className = 'completion-toast';
+        toastEl.innerHTML =
+            '<div class="completion-toast-icon"><i class="fas fa-check-circle"></i></div>' +
+            '<div class="completion-toast-content">' +
+                '<strong>' + S(notif.titulo || 'Pedido Completado') + '</strong>' +
+                '<p>' + S(notif.mensaje || '') + '</p>' +
+            '</div>' +
+            '<button class="completion-toast-close" onclick="this.parentElement.remove()">&times;</button>';
+
+        if (notif.pedidoId) {
+            toastEl.style.cursor = 'pointer';
+            toastEl.addEventListener('click', function(e) {
+                if (e.target.tagName !== 'BUTTON') {
+                    viewPedido(notif.pedidoId);
+                    toastEl.remove();
+                }
+            });
+        }
+
+        document.body.appendChild(toastEl);
+        // Auto-remove after 10 seconds
+        setTimeout(function() {
+            if (toastEl.parentElement) toastEl.remove();
+        }, 10000);
+    }
 }
 
 // ========================================
@@ -1472,10 +1549,7 @@ function generarAlertasDinamicas() {
                 accion: `viewPedido(${pedido.id})`
             });
         } else if (diasRestantes <= 2) {
-            const productosArr = pedido.productos || [];
-            const totalCantidad = productosArr.reduce((sum, p) => sum + (p.cantidad || 0), 0);
-            const totalCompletadas = productosArr.reduce((sum, p) => sum + (p.completadas || 0), 0);
-            const avance = totalCantidad > 0 ? Math.round((totalCompletadas / totalCantidad) * 100) : 0;
+            const avance = calcularAvancePedido(pedido, productos);
 
             if (avance < 80) {
                 alertas.push({
@@ -1499,7 +1573,7 @@ function generarAlertasDinamicas() {
             tipo: 'info',
             titulo: 'Pedidos sin asignar',
             mensaje: `Hay ${pedidosSinAsignar.length} pedido(s) pendiente(s) de asignación`,
-            accion: `showSection('pedidos')`
+            accion: `navigateTo('pedidos')`
         });
     }
 
@@ -1529,8 +1603,7 @@ function loadPedidosCriticos() {
         const cliente = clientes.find(c => c.id === pedido.clienteId);
         const productosArr = pedido.productos || [];
         const totalCantidad = productosArr.reduce((sum, p) => sum + (p.cantidad || 0), 0);
-        const totalCompletadas = productosArr.reduce((sum, p) => sum + (p.completadas || 0), 0);
-        const avance = totalCantidad > 0 ? Math.round((totalCompletadas / totalCantidad) * 100) : 0;
+        const avance = calcularAvancePedido(pedido, productos);
 
         const hoy = new Date();
         const entrega = new Date(pedido.fechaEntrega || '2099-12-31');
@@ -1825,7 +1898,7 @@ function loadPedidosPendientes() {
             const productosArr = pedido.productos || [];
             const totalCantidad = productosArr.reduce((sum, p) => sum + (p.cantidad || 0), 0);
             const totalCompletadas = productosArr.reduce((sum, p) => sum + (p.completadas || 0), 0);
-            const avance = totalCantidad > 0 ? Math.round((totalCompletadas / totalCantidad) * 100) : 0;
+            const avance = calcularAvancePedido(pedido, productos);
 
             // Nombres de productos
             const nombresProductos = productosArr.map(pp => {
@@ -2582,7 +2655,6 @@ function viewPedido(id) {
     const productosDetalleHTML = pedido.productos.map(p => {
         // Usar == para comparación flexible de tipos
         const prod = productos.find(pr => pr.id == p.productoId);
-        const avanceGeneral = Math.round(((p.completadas || 0) / (p.cantidad || 1)) * 100);
 
         console.log('[viewPedido] Producto:', p.productoId, 'encontrado:', !!prod, 'rutaProcesos:', prod?.rutaProcesos?.length || 0);
 
@@ -2684,6 +2756,15 @@ function viewPedido(id) {
 
         avanceProcesos = avanceProcesos || [];
         console.log('[viewPedido] avanceProcesos final:', avanceProcesos.length, avanceProcesos);
+
+        // Calcular avance general del producto como promedio de procesos
+        let avanceGeneral;
+        if (avanceProcesos.length > 0 && (p.cantidad || 0) > 0) {
+            const sumaAvances = avanceProcesos.reduce((sum, proc) => sum + Math.min((proc.completadas || 0), p.cantidad) / p.cantidad, 0);
+            avanceGeneral = Math.round((sumaAvances / avanceProcesos.length) * 100);
+        } else {
+            avanceGeneral = Math.round(((p.completadas || 0) / (p.cantidad || 1)) * 100);
+        }
 
         let procesosHTML = '';
         if (avanceProcesos.length > 0) {
@@ -14161,6 +14242,9 @@ function loadPersonalEnhanced() {
         <div class="section-header">
             <h1>Gestión de Personal</h1>
             <div class="header-actions">
+                <button class="btn btn-info" onclick="showReporteAsistencia()">
+                    <i class="fas fa-clipboard-check"></i> Asistencia
+                </button>
                 <button class="btn btn-secondary" onclick="exportPersonalToExcel()">
                     <i class="fas fa-file-excel"></i> Exportar
                 </button>
@@ -14337,6 +14421,232 @@ function exportPersonalToExcel() {
         exportTableToExcel('personalTableEnhanced', 'personal');
         showToast('Exportación completada');
     }
+}
+
+// ========================================
+// REPORTE DE ASISTENCIA
+// ========================================
+
+function showReporteAsistencia() {
+    const personal = db.getPersonal().filter(p => p.rol === 'operador' && p.activo);
+
+    // Obtener historial de asistencia desde localStorage
+    let historial = [];
+    try {
+        historial = JSON.parse(localStorage.getItem('historial_asistencia') || '[]');
+    } catch (e) {}
+
+    // Rango de fechas: últimos 30 días
+    const hoy = new Date();
+    const hace30 = new Date(hoy);
+    hace30.setDate(hace30.getDate() - 30);
+    const fechaInicio = hace30.toISOString().split('T')[0];
+    const fechaFin = hoy.toISOString().split('T')[0];
+
+    // Calcular resumen por operador
+    const resumen = personal.map(emp => {
+        const registros = historial.filter(h =>
+            h.personal_id === emp.id &&
+            h.fecha >= fechaInicio &&
+            h.fecha <= fechaFin
+        );
+
+        const asistencias = registros.filter(r => r.tipo === 'asistencia').length;
+        const faltas = registros.filter(r => r.tipo === 'falta').length;
+        const retardos = registros.filter(r => r.tipo === 'retardo').length;
+        const permisos = registros.filter(r => r.tipo === 'permiso').length;
+        const totalDias = asistencias + faltas + retardos + permisos;
+        const pctAsistencia = totalDias > 0 ? Math.round((asistencias / totalDias) * 100) : 0;
+
+        return {
+            id: emp.id,
+            nombre: emp.nombre,
+            asistencias,
+            faltas,
+            retardos,
+            permisos,
+            totalDias,
+            pctAsistencia
+        };
+    });
+
+    // Totales generales
+    const totalAsistencias = resumen.reduce((s, r) => s + r.asistencias, 0);
+    const totalFaltas = resumen.reduce((s, r) => s + r.faltas, 0);
+    const totalRetardos = resumen.reduce((s, r) => s + r.retardos, 0);
+    const totalPermisos = resumen.reduce((s, r) => s + r.permisos, 0);
+
+    // Registro del día de hoy
+    let asistenciaHoy = {};
+    try {
+        const saved = JSON.parse(localStorage.getItem('asistencia_hoy') || '{}');
+        if (saved.fecha === fechaFin) {
+            asistenciaHoy = saved.registros || {};
+        }
+    } catch (e) {}
+
+    const hoyRegistrado = Object.keys(asistenciaHoy).length > 0;
+
+    const content = `
+    <div class="asistencia-reporte">
+        <div class="asistencia-reporte-header">
+            <div class="asistencia-rango">
+                <i class="fas fa-calendar-alt"></i>
+                <span>${fechaInicio} a ${fechaFin}</span>
+            </div>
+            <div class="asistencia-estado-hoy">
+                <span class="status-badge ${hoyRegistrado ? 'success' : 'warning'}">
+                    <i class="fas fa-${hoyRegistrado ? 'check-circle' : 'exclamation-circle'}"></i>
+                    Hoy: ${hoyRegistrado ? 'Registrada' : 'Sin registrar'}
+                </span>
+            </div>
+        </div>
+
+        <div class="asistencia-kpis">
+            <div class="asist-kpi ok">
+                <span class="asist-kpi-value">${totalAsistencias}</span>
+                <span class="asist-kpi-label"><i class="fas fa-check"></i> Asistencias</span>
+            </div>
+            <div class="asist-kpi falta">
+                <span class="asist-kpi-value">${totalFaltas}</span>
+                <span class="asist-kpi-label"><i class="fas fa-times"></i> Faltas</span>
+            </div>
+            <div class="asist-kpi retardo">
+                <span class="asist-kpi-value">${totalRetardos}</span>
+                <span class="asist-kpi-label"><i class="fas fa-clock"></i> Retardos</span>
+            </div>
+            <div class="asist-kpi permiso">
+                <span class="asist-kpi-value">${totalPermisos}</span>
+                <span class="asist-kpi-label"><i class="fas fa-hand-paper"></i> Permisos</span>
+            </div>
+        </div>
+
+        <div class="asistencia-tabla-wrapper" style="max-height:45vh;overflow-y:auto;">
+            <table class="data-table" id="tablaReporteAsistencia">
+                <thead>
+                    <tr>
+                        <th>Operadora</th>
+                        <th style="text-align:center">Asistencias</th>
+                        <th style="text-align:center">Faltas</th>
+                        <th style="text-align:center">Retardos</th>
+                        <th style="text-align:center">Permisos</th>
+                        <th style="text-align:center">% Asistencia</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${resumen.map(r => {
+                        const colorClass = r.pctAsistencia >= 90 ? 'success' :
+                                           r.pctAsistencia >= 75 ? 'warning' : 'danger';
+                        return `
+                        <tr>
+                            <td>
+                                <div class="empleado-cell">
+                                    <span class="asist-avatar">${getIniciales(r.nombre)}</span>
+                                    <strong>${r.nombre}</strong>
+                                </div>
+                            </td>
+                            <td style="text-align:center">
+                                <span class="asist-cell-val ok">${r.asistencias}</span>
+                            </td>
+                            <td style="text-align:center">
+                                <span class="asist-cell-val ${r.faltas > 0 ? 'falta' : ''}">${r.faltas}</span>
+                            </td>
+                            <td style="text-align:center">
+                                <span class="asist-cell-val ${r.retardos > 0 ? 'retardo' : ''}">${r.retardos}</span>
+                            </td>
+                            <td style="text-align:center">
+                                <span class="asist-cell-val ${r.permisos > 0 ? 'permiso' : ''}">${r.permisos}</span>
+                            </td>
+                            <td style="text-align:center">
+                                <div class="asist-pct-bar">
+                                    <div class="asist-pct-fill ${colorClass}" style="width:${r.pctAsistencia}%"></div>
+                                    <span class="asist-pct-text">${r.totalDias > 0 ? r.pctAsistencia + '%' : 'N/A'}</span>
+                                </div>
+                            </td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="asistencia-reporte-footer">
+            <button class="btn btn-secondary btn-sm" onclick="exportarReporteAsistencia()">
+                <i class="fas fa-file-excel"></i> Exportar a Excel
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="verHistorialAsistencia()">
+                <i class="fas fa-history"></i> Ver Historial Detallado
+            </button>
+        </div>
+    </div>`;
+
+    const footer = `<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>`;
+    openModal('Reporte de Asistencia - Últimos 30 días', content, footer);
+}
+
+function exportarReporteAsistencia() {
+    const table = document.getElementById('tablaReporteAsistencia');
+    if (table) {
+        exportTableToExcel('tablaReporteAsistencia', 'reporte_asistencia');
+        showToast('Reporte de asistencia exportado');
+    }
+}
+
+function verHistorialAsistencia() {
+    let historial = [];
+    try {
+        historial = JSON.parse(localStorage.getItem('historial_asistencia') || '[]');
+    } catch (e) {}
+
+    const personal = db.getPersonal();
+
+    // Ordenar por fecha descendente
+    historial.sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+    // Limitar a últimos 200 registros
+    const registros = historial.slice(0, 200);
+
+    const tipoIcons = {
+        asistencia: '<i class="fas fa-check" style="color:#22c55e"></i>',
+        falta: '<i class="fas fa-times" style="color:#ef4444"></i>',
+        retardo: '<i class="fas fa-clock" style="color:#f59e0b"></i>',
+        permiso: '<i class="fas fa-hand-paper" style="color:#8b5cf6"></i>'
+    };
+
+    const content = `
+    <div style="max-height:60vh;overflow-y:auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Operadora</th>
+                    <th>Tipo</th>
+                    <th>Motivo</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${registros.map(r => {
+                    const emp = personal.find(p => p.id === r.personal_id);
+                    return `
+                    <tr>
+                        <td>${r.fecha}</td>
+                        <td>${emp ? emp.nombre : 'ID: ' + r.personal_id}</td>
+                        <td>${tipoIcons[r.tipo] || ''} ${r.tipo}</td>
+                        <td>${r.motivo || '-'}</td>
+                    </tr>`;
+                }).join('')}
+                ${registros.length === 0 ? '<tr><td colspan="4" style="text-align:center;color:#64748b;">No hay registros de asistencia</td></tr>' : ''}
+            </tbody>
+        </table>
+    </div>`;
+
+    const footer = `
+        <button class="btn btn-secondary" onclick="showReporteAsistencia()">
+            <i class="fas fa-arrow-left"></i> Volver al Resumen
+        </button>
+        <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+    `;
+
+    openModal('Historial Detallado de Asistencia', content, footer);
 }
 
 // ========================================

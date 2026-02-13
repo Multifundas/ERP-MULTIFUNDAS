@@ -3,531 +3,194 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ERP Multifundas - Sistema de Producción</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>ERP Multifundas - Acceso</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
-    <!-- Intro.js para Tour Guiado -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intro.js/7.0.1/introjs.min.css">
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #e2e8f0;
+        }
 
-    <!-- Frappe Gantt -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/frappe-gantt/0.6.1/frappe-gantt.min.css">
+        .landing-header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .landing-logo {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 2.2rem;
+            color: white;
+            box-shadow: 0 12px 40px rgba(102, 126, 234, 0.4);
+        }
+
+        .landing-header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .landing-header p {
+            color: #94a3b8;
+            font-size: 1rem;
+        }
+
+        .landing-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            max-width: 680px;
+            width: 90%;
+        }
+
+        .landing-card {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(100, 116, 139, 0.2);
+            border-radius: 16px;
+            padding: 32px 24px;
+            text-align: center;
+            text-decoration: none;
+            color: #e2e8f0;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .landing-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            border-radius: 16px 16px 0 0;
+        }
+
+        .landing-card:nth-child(1)::before { background: linear-gradient(90deg, #667eea, #764ba2); }
+        .landing-card:nth-child(2)::before { background: linear-gradient(90deg, #10b981, #34d399); }
+        .landing-card:nth-child(3)::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .landing-card:nth-child(4)::before { background: linear-gradient(90deg, #ec4899, #f472b6); }
+
+        .landing-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(102, 126, 234, 0.4);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .landing-card-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            font-size: 1.5rem;
+        }
+
+        .landing-card:nth-child(1) .landing-card-icon { background: rgba(102, 126, 234, 0.15); color: #667eea; }
+        .landing-card:nth-child(2) .landing-card-icon { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+        .landing-card:nth-child(3) .landing-card-icon { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+        .landing-card:nth-child(4) .landing-card-icon { background: rgba(236, 72, 153, 0.15); color: #ec4899; }
+
+        .landing-card h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .landing-card p {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            line-height: 1.4;
+        }
+
+        .landing-footer {
+            margin-top: 48px;
+            text-align: center;
+            color: #475569;
+            font-size: 0.75rem;
+        }
+
+        @media (max-width: 600px) {
+            .landing-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .landing-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .landing-card {
+                padding: 24px 20px;
+            }
+        }
+    </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <nav class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <img src="img/logo.png" alt="Multifundas" class="logo" onerror="this.style.display='none'">
-                <h2>MULTIFUNDAS</h2>
-                <span class="subtitle">ERP Producción</span>
-            </div>
-
-            <ul class="nav-menu">
-                <li class="nav-item active" data-section="dashboard">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Dashboard</span>
-                </li>
-                <li class="nav-item" data-section="pedidos">
-                    <i class="fas fa-clipboard-list"></i>
-                    <span>Pedidos</span>
-                </li>
-                <li class="nav-item" data-section="clientes">
-                    <i class="fas fa-users"></i>
-                    <span>Clientes</span>
-                </li>
-                <li class="nav-item" data-section="productos">
-                    <i class="fas fa-box"></i>
-                    <span>Productos</span>
-                </li>
-                <li class="nav-item" data-section="procesos">
-                    <i class="fas fa-th-large"></i>
-                    <span>Áreas de Planta</span>
-                </li>
-                <li class="nav-item" data-section="personal">
-                    <i class="fas fa-id-badge"></i>
-                    <span>Personal</span>
-                </li>
-                <li class="nav-item" data-section="costeo">
-                    <i class="fas fa-dollar-sign"></i>
-                    <span>Costeo</span>
-                </li>
-                <li class="nav-item" data-section="reportes">
-                    <i class="fas fa-file-alt"></i>
-                    <span>Reportes</span>
-                </li>
-                <li class="nav-item" data-section="portal-clientes">
-                    <i class="fas fa-globe"></i>
-                    <span>Portal Clientes</span>
-                </li>
-                <li class="nav-item" data-section="auditoria">
-                    <i class="fas fa-history"></i>
-                    <span>Auditoría</span>
-                </li>
-            </ul>
-
-            <!-- Enlaces a Paneles Externos -->
-            <div class="sidebar-panels">
-                <h4><i class="fas fa-desktop"></i> Paneles</h4>
-                <a href="supervisora.html" class="panel-link">
-                    <i class="fas fa-user-tie"></i>
-                    <span>Panel Supervisora</span>
-                </a>
-                <a href="panel-operadora/operadora.html" class="panel-link">
-                    <i class="fas fa-user-cog"></i>
-                    <span>Panel Operadora</span>
-                </a>
-            </div>
-
-            <div class="sidebar-footer">
-                <div class="user-info">
-                    <i class="fas fa-user-circle"></i>
-                    <div>
-                        <span class="user-name">Administrador</span>
-                        <span class="user-role">Admin Principal</span>
-                    </div>
-                </div>
-            </div>
-        </nav>
-
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Top Bar -->
-            <header class="top-bar">
-                <button class="menu-toggle" id="menuToggle">
-                    <i class="fas fa-bars"></i>
-                </button>
-                <div class="search-box" id="searchBox">
-                    <i class="fas fa-search"></i>
-                    <input type="text" id="globalSearchInput" placeholder="Buscar pedidos, clientes, productos..." autocomplete="off">
-                </div>
-                <div class="top-bar-actions">
-                    <!-- Botón de Herramientas con Dropdown -->
-                    <div class="dropdown-tools">
-                        <button class="btn-icon" id="toolsBtn" onclick="toggleDropdownTools()" title="Herramientas de Desarrollo">
-                            <i class="fas fa-tools"></i>
-                        </button>
-                        <div class="dropdown-tools-menu" id="toolsDropdown">
-                            <button onclick="limpiarDatosProduccion(); cerrarDropdownTools();" class="dropdown-tools-item">
-                                <i class="fas fa-eraser"></i>
-                                <span>Limpiar Producción</span>
-                            </button>
-                            <button onclick="limpiarTodosLosDatos(); cerrarDropdownTools();" class="dropdown-tools-item danger">
-                                <i class="fas fa-trash-alt"></i>
-                                <span>Limpiar TODO</span>
-                            </button>
-                        </div>
-                    </div>
-                    <button class="btn-icon" id="notificationsBtn">
-                        <i class="fas fa-bell"></i>
-                        <span class="badge">3</span>
-                    </button>
-                    <button class="btn-icon" onclick="mostrarAjustesSistema()" title="Ajustes del Sistema" id="btnAjustesSistema">
-                        <i class="fas fa-cog"></i>
-                    </button>
-                </div>
-            </header>
-
-            <!-- Content Area -->
-            <div class="content-area" id="contentArea">
-                <!-- Dashboard Section -->
-                <section class="section active" id="section-dashboard">
-                    <div class="section-header">
-                        <h1>Dashboard Ejecutivo</h1>
-                        <div class="date-filter">
-                            <select id="periodFilter">
-                                <option value="day">Día</option>
-                                <option value="week">Semana</option>
-                                <option value="month" selected>Mes</option>
-                                <option value="bimester">Bimestre</option>
-                                <option value="semester">Semestre</option>
-                                <option value="year">Anual</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- KPI Cards - Primera fila -->
-                    <div class="kpi-grid">
-                        <div class="kpi-card clickable" onclick="showKPIDetalle('procesos')">
-                            <div class="kpi-icon green">
-                                <i class="fas fa-play-circle"></i>
-                            </div>
-                            <div class="kpi-info">
-                                <span class="kpi-value" id="procesosActivos">8</span>
-                                <span class="kpi-label">Procesos Activos</span>
-                            </div>
-                        </div>
-                        <div class="kpi-card clickable" onclick="showKPIDetalle('clientes')">
-                            <div class="kpi-icon blue">
-                                <i class="fas fa-building"></i>
-                            </div>
-                            <div class="kpi-info">
-                                <span class="kpi-value" id="clientesActivos">3</span>
-                                <span class="kpi-label">Clientes Activos</span>
-                            </div>
-                        </div>
-                        <div class="kpi-card clickable" onclick="showKPIDetalle('operadores')">
-                            <div class="kpi-icon orange">
-                                <i class="fas fa-user-clock"></i>
-                            </div>
-                            <div class="kpi-info">
-                                <span class="kpi-value" id="operadoresActivos">17</span>
-                                <span class="kpi-label">Operadores Activos</span>
-                            </div>
-                        </div>
-                        <div class="kpi-card highlight clickable" onclick="showKPIDetalle('ventas')">
-                            <div class="kpi-icon purple">
-                                <i class="fas fa-dollar-sign"></i>
-                            </div>
-                            <div class="kpi-info">
-                                <span class="kpi-value" id="ventaTotal">$245,800</span>
-                                <span class="kpi-label">Venta Total en Fabricación</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Segunda fila KPIs -->
-                    <div class="kpi-grid kpi-grid-2">
-                        <div class="kpi-card metric-card clickable" onclick="showKPIDetalle('efectividad')">
-                            <div class="metric-header">
-                                <span class="metric-title">% Efectividad Promedio</span>
-                                <i class="fas fa-chart-line"></i>
-                            </div>
-                            <div class="metric-value-large" id="efectividadPromedio">87.5%</div>
-                            <div class="metric-bar">
-                                <div class="metric-bar-fill efectividad" style="width: 87.5%"></div>
-                            </div>
-                            <div class="metric-detail">
-                                <span>Piezas reales vs esperadas</span>
-                            </div>
-                        </div>
-                        <div class="kpi-card metric-card clickable" onclick="showKPIDetalle('costos')">
-                            <div class="metric-header">
-                                <span class="metric-title">Costo Real vs Estimado</span>
-                                <i class="fas fa-balance-scale"></i>
-                            </div>
-                            <div class="metric-value-large" id="vsCostoEstimado">
-                                <span class="text-muted">--%</span>
-                            </div>
-                            <div class="metric-bar">
-                                <div class="metric-bar-fill costos" style="width: 0%"></div>
-                            </div>
-                            <div class="metric-detail">
-                                <span id="costoEstimadoDetalle">Sin datos de producción</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Alertas Activas -->
-                    <div class="alerts-section">
-                        <h3><i class="fas fa-exclamation-triangle"></i> Alertas Activas</h3>
-                        <div class="alerts-grid" id="alertsContainer">
-                            <!-- Las alertas se cargan dinámicamente -->
-                        </div>
-                    </div>
-
-                    <!-- Costo vs Estimado -->
-                    <div class="cost-comparison-section">
-                        <div class="section-header-inline">
-                            <h3><i class="fas fa-balance-scale-right"></i> Costo Real vs Estimado</h3>
-                            <select id="costPeriodFilter" onchange="loadCostoVsEstimado()">
-                                <option value="day">Hoy</option>
-                                <option value="week">Esta Semana</option>
-                                <option value="month" selected>Este Mes</option>
-                                <option value="bimester">Bimestre</option>
-                                <option value="semester">Semestre</option>
-                                <option value="year">Año</option>
-                            </select>
-                        </div>
-                        <div class="cost-comparison-content" id="costComparisonContainer">
-                            <!-- Se carga dinámicamente -->
-                        </div>
-                    </div>
-
-                    <!-- Pedidos Pendientes por Entregar -->
-                    <div class="orders-section pending-delivery-section">
-                        <h3><i class="fas fa-truck"></i> Pedidos Pendientes por Entregar</h3>
-                        <div class="orders-table-container">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Pedido</th>
-                                        <th>Cliente</th>
-                                        <th>Productos</th>
-                                        <th>Total Piezas</th>
-                                        <th>Fecha Entrega</th>
-                                        <th>Días Restantes</th>
-                                        <th>Estado</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="pendingDeliveryTable">
-                                    <!-- Se carga dinámicamente -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- Pedidos Críticos -->
-                    <div class="orders-section">
-                        <h3><i class="fas fa-clock"></i> Pedidos Críticos</h3>
-                        <div class="orders-table-container">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Pedido</th>
-                                        <th>Cliente</th>
-                                        <th>Producto</th>
-                                        <th>Cantidad</th>
-                                        <th>Avance</th>
-                                        <th>Entrega</th>
-                                        <th>Estado</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="criticalOrdersTable">
-                                    <!-- Se carga dinámicamente -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- Mapa de Planta en Tiempo Real (al final del dashboard) -->
-                    <div class="plant-map-section">
-                        <div class="plant-map-header">
-                            <h3><i class="fas fa-th"></i> Mapa de Planta en Tiempo Real</h3>
-                            <div class="plant-map-actions">
-                                <span class="operators-count" id="operatorsCountLabel">17 operadores activos</span>
-                                <button class="btn btn-outline-primary btn-sm" onclick="showGestionAreasPlanta()">
-                                    <i class="fas fa-cog"></i> Gestionar Áreas
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Leyenda -->
-                        <div class="plant-map-legend">
-                            <div class="legend-item">
-                                <span class="legend-dot adelantado"></span>
-                                <span>Adelantado (+10%)</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="legend-dot on-pace"></span>
-                                <span>On Pace</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="legend-dot retrasado"></span>
-                                <span>Retrasado (-10%)</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="legend-dot muy-retrasado"></span>
-                                <span>Muy Retrasado (-20%)</span>
-                            </div>
-                            <div class="legend-item">
-                                <span class="legend-dot inactivo"></span>
-                                <span>Inactivo</span>
-                            </div>
-                        </div>
-
-                        <!-- Mapa de la Planta -->
-                        <div class="plant-map-container" id="plantMapContainer">
-                            <!-- El mapa se genera dinámicamente -->
-                        </div>
-
-                        <!-- Resumen de Estados -->
-                        <div class="plant-map-summary">
-                            <div class="summary-card adelantado">
-                                <span class="summary-label">Adelantados</span>
-                                <span class="summary-value" id="summaryAdelantados">9</span>
-                            </div>
-                            <div class="summary-card on-pace">
-                                <span class="summary-label">On Pace</span>
-                                <span class="summary-value" id="summaryOnPace">0</span>
-                            </div>
-                            <div class="summary-card retrasado">
-                                <span class="summary-label">Retrasados</span>
-                                <span class="summary-value" id="summaryRetrasados">3</span>
-                            </div>
-                            <div class="summary-card sin-asignar">
-                                <span class="summary-label">Sin Asignar</span>
-                                <span class="summary-value" id="summarySinAsignar">24</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Pedidos Section -->
-                <section class="section" id="section-pedidos">
-                    <!-- Content loaded dynamically -->
-                </section>
-
-                <!-- Clientes Section -->
-                <section class="section" id="section-clientes">
-                    <!-- Content loaded dynamically -->
-                </section>
-
-                <!-- Productos Section -->
-                <section class="section" id="section-productos">
-                    <!-- Content loaded dynamically -->
-                </section>
-
-                <!-- Procesos Section -->
-                <section class="section" id="section-procesos">
-                    <!-- Content loaded dynamically -->
-                </section>
-
-                <!-- Personal Section -->
-                <section class="section" id="section-personal">
-                    <!-- Content loaded dynamically -->
-                </section>
-
-                <!-- Costeo Section -->
-                <section class="section" id="section-costeo">
-                    <!-- Content loaded dynamically -->
-                </section>
-
-                <!-- Reportes Section -->
-                <section class="section" id="section-reportes">
-                    <!-- Content loaded dynamically -->
-                </section>
-
-                <!-- Portal Clientes Section -->
-                <section class="section" id="section-portal-clientes">
-                    <!-- Content loaded dynamically -->
-                </section>
-
-                <!-- Auditoria Section -->
-                <section class="section" id="section-auditoria">
-                    <!-- Content loaded dynamically -->
-                </section>
-            </div>
-        </main>
+    <div class="landing-header">
+        <div class="landing-logo">
+            <i class="fas fa-industry"></i>
+        </div>
+        <h1>ERP Multifundas</h1>
+        <p>Sistema de Control de Produccion</p>
     </div>
 
-    <!-- Modal Container -->
-    <div class="modal-overlay" id="modalOverlay">
-        <div class="modal" id="modal">
-            <div class="modal-header">
-                <h3 id="modalTitle">Título del Modal</h3>
-                <button class="modal-close" id="modalClose">&times;</button>
+    <div class="landing-grid">
+        <a href="admin.html" class="landing-card">
+            <div class="landing-card-icon">
+                <i class="fas fa-chart-line"></i>
             </div>
-            <div class="modal-body" id="modalBody">
-                <!-- Modal content -->
+            <h3>Administracion</h3>
+            <p>Dashboard, pedidos, clientes, productos, reportes y costeo</p>
+        </a>
+
+        <a href="supervisora.html" class="landing-card">
+            <div class="landing-card-icon">
+                <i class="fas fa-users-cog"></i>
             </div>
-            <div class="modal-footer" id="modalFooter">
-                <button class="btn btn-secondary" id="modalCancel">Cancelar</button>
-                <button class="btn btn-primary" id="modalConfirm">Confirmar</button>
+            <h3>Supervisora</h3>
+            <p>Mapa de planta, asignaciones, control de produccion en tiempo real</p>
+        </a>
+
+        <a href="panel-operadora/operadora.html" class="landing-card">
+            <div class="landing-card-icon">
+                <i class="fas fa-hard-hat"></i>
             </div>
-        </div>
+            <h3>Operadora</h3>
+            <p>Captura de piezas, registro de produccion y estado de maquinas</p>
+        </a>
+
+        <a href="layout-editor.html" class="landing-card">
+            <div class="landing-card-icon">
+                <i class="fas fa-drafting-compass"></i>
+            </div>
+            <h3>Editor de Planta</h3>
+            <p>Diseño y configuracion del layout de la planta de produccion</p>
+        </a>
     </div>
 
-    <!-- Notifications Panel -->
-    <div class="notifications-panel" id="notificationsPanel">
-        <div class="notifications-header">
-            <h4>Notificaciones</h4>
-            <button class="btn-link">Marcar todas como leídas</button>
-        </div>
-        <div class="notifications-list" id="notificationsList">
-            <!-- Notifications will be populated by JS -->
-        </div>
+    <div class="landing-footer">
+        ERP Multifundas &copy; 2025
     </div>
-
-    <!-- Asistente IA Flotante -->
-    <div class="ai-assistant-fab" id="aiAssistantFab" onclick="toggleAIChat()">
-        <i class="fas fa-robot"></i>
-        <span class="fab-tooltip">Asistente IA</span>
-        <span class="fab-pulse"></span>
-    </div>
-
-    <!-- Panel de Chat IA -->
-    <div class="ai-chat-panel" id="aiChatPanel">
-        <div class="ai-chat-header">
-            <div class="ai-chat-title">
-                <div class="ai-avatar">
-                    <i class="fas fa-robot"></i>
-                </div>
-                <div class="ai-info">
-                    <h4>Asistente Multifundas</h4>
-                    <span class="ai-status"><i class="fas fa-circle"></i> En línea</span>
-                </div>
-            </div>
-            <div class="ai-chat-actions">
-                <button class="ai-btn-icon" onclick="clearAIChat()" title="Limpiar chat">
-                    <i class="fas fa-trash"></i>
-                </button>
-                <button class="ai-btn-icon" onclick="toggleAIChat()" title="Cerrar">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        </div>
-
-        <div class="ai-chat-suggestions">
-            <span class="suggestions-label">Preguntas sugeridas:</span>
-            <div class="suggestions-list">
-                <button class="suggestion-chip" onclick="askAISuggestion('¿Cuál es el estado de los pedidos urgentes?')">
-                    <i class="fas fa-fire"></i> Pedidos urgentes
-                </button>
-                <button class="suggestion-chip" onclick="askAISuggestion('¿Cómo está la eficiencia hoy?')">
-                    <i class="fas fa-chart-line"></i> Eficiencia
-                </button>
-                <button class="suggestion-chip" onclick="askAISuggestion('¿Qué operadores tienen mejor rendimiento?')">
-                    <i class="fas fa-trophy"></i> Top operadores
-                </button>
-                <button class="suggestion-chip" onclick="askAISuggestion('¿Hay alertas pendientes?')">
-                    <i class="fas fa-bell"></i> Alertas
-                </button>
-            </div>
-        </div>
-
-        <div class="ai-chat-messages" id="aiChatMessages">
-            <div class="ai-message bot">
-                <div class="message-avatar">
-                    <i class="fas fa-robot"></i>
-                </div>
-                <div class="message-content">
-                    <p>¡Hola! Soy el asistente inteligente de Multifundas. Puedo ayudarte con:</p>
-                    <ul>
-                        <li>Estado de pedidos y producción</li>
-                        <li>Rendimiento de operadores</li>
-                        <li>Análisis de eficiencia</li>
-                        <li>Alertas y problemas</li>
-                        <li>Estadísticas generales</li>
-                    </ul>
-                    <p>¿En qué puedo ayudarte hoy?</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="ai-chat-input">
-            <input type="text" id="aiChatInput" placeholder="Escribe tu pregunta..." onkeypress="handleAIChatKeypress(event)">
-            <button class="ai-send-btn" onclick="sendAIMessage()">
-                <i class="fas fa-paper-plane"></i>
-            </button>
-        </div>
-    </div>
-
-    <!-- Librerías externas para exportación y gráficas -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-
-    <!-- jsPDF para exportación PDF -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-
-    <!-- Frappe Gantt -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/frappe-gantt/0.6.1/frappe-gantt.min.js"></script>
-
-    <!-- Intro.js para Tour Guiado -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/intro.js/7.0.1/intro.min.js"></script>
-
-    <!-- Supabase SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="js/supabase-config.js"></script>
-    <script src="js/supabase-client.js"></script>
-    <script src="js/realtime-sync.js"></script>
-    <script src="js/database-adapter.js"></script>
-    <script src="js/sanitize.js"></script>
-
-    <script src="js/data.js"></script>
-    <script src="js/app.js"></script>
 </body>
 </html>

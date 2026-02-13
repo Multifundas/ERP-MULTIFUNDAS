@@ -1220,6 +1220,156 @@ const CONFIG_SISTEMA_DEFAULT = {
     }
 };
 
+// ========================================
+// CÁLCULO DE AVANCE DE PEDIDO (promedio ponderado)
+// ========================================
+/**
+ * Calcula el avance real de un pedido como promedio ponderado
+ * de todos los procesos de cada producto.
+ *
+ * Fórmula: Para cada producto, promedia (completadas/cantidad) de cada proceso.
+ * Luego pondera por cantidad de cada producto.
+ *
+ * @param {Object} pedido - El pedido con sus productos
+ * @param {Array} [catalogoProductos] - Catálogo de productos (para rutaProcesos)
+ * @returns {number} Porcentaje de avance 0-100
+ */
+function calcularAvancePedido(pedido, catalogoProductos) {
+    var productosArr = pedido.productos || [];
+    if (productosArr.length === 0) return 0;
+
+    // Leer datos sincronizados de localStorage
+    var pedidosERP = [];
+    var historialProduccion = [];
+    try {
+        pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+        historialProduccion = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    } catch (e) { /* ignorar errores de parse */ }
+    var pedidoERP = pedidosERP.find(function(pe) { return pe.id == pedido.id; });
+
+    var totalPeso = 0;
+    var totalAvancePonderado = 0;
+
+    for (var i = 0; i < productosArr.length; i++) {
+        var pp = productosArr[i];
+        var cantidad = pp.cantidad || 0;
+        if (cantidad <= 0) continue;
+
+        // Obtener avanceProcesos del producto
+        var avanceProcesos = _obtenerAvanceProcesos(pp, pedido, pedidoERP, historialProduccion, catalogoProductos);
+
+        var avanceProducto;
+        if (avanceProcesos.length === 0) {
+            // Sin procesos definidos: usar completadas/cantidad simple
+            avanceProducto = (pp.completadas || 0) / cantidad;
+        } else {
+            // Promedio de avance de cada proceso
+            var sumaProcesos = 0;
+            for (var j = 0; j < avanceProcesos.length; j++) {
+                var procCompletadas = Math.min(avanceProcesos[j].completadas || 0, cantidad);
+                sumaProcesos += procCompletadas / cantidad;
+            }
+            avanceProducto = sumaProcesos / avanceProcesos.length;
+        }
+
+        totalAvancePonderado += avanceProducto * cantidad;
+        totalPeso += cantidad;
+    }
+
+    if (totalPeso <= 0) return 0;
+    return Math.round((totalAvancePonderado / totalPeso) * 100);
+}
+
+/**
+ * Helper: obtiene los avanceProcesos reales de un producto dentro de un pedido,
+ * sincronizando con pedidos_erp e historial_produccion.
+ */
+function _obtenerAvanceProcesos(pp, pedido, pedidoERP, historialProduccion, catalogoProductos) {
+    var avanceProcesos = pp.avanceProcesos;
+
+    // Normalizar avanceProcesos
+    if (!avanceProcesos || typeof avanceProcesos !== 'object') {
+        avanceProcesos = [];
+    } else if (!Array.isArray(avanceProcesos)) {
+        avanceProcesos = Object.values(avanceProcesos);
+    }
+
+    // Si no hay, buscar en pedidoERP
+    if (avanceProcesos.length === 0 && pedidoERP) {
+        var productoERP = pedidoERP.productos ? pedidoERP.productos.find(function(pe) { return pe.productoId == pp.productoId; }) : null;
+        if (productoERP && productoERP.procesos && productoERP.procesos.length > 0) {
+            avanceProcesos = productoERP.procesos.map(function(proc) {
+                return {
+                    procesoId: proc.procesoId || proc.id,
+                    nombre: proc.nombre || proc.procesoNombre,
+                    completadas: proc.piezasCompletadas || proc.completadas || proc.piezas || 0
+                };
+            });
+        } else if (pedidoERP.procesos && pedidoERP.procesos.length > 0) {
+            avanceProcesos = pedidoERP.procesos.map(function(proc) {
+                return {
+                    procesoId: proc.id || proc.procesoId,
+                    nombre: proc.nombre || proc.procesoNombre,
+                    completadas: proc.piezas || proc.piezasCompletadas || proc.completadas || 0
+                };
+            });
+        }
+    }
+
+    // Si aún no hay, generar desde rutaProcesos del catálogo
+    if (avanceProcesos.length === 0 && catalogoProductos) {
+        var prodCatalogo = catalogoProductos.find(function(p) { return p.id == pp.productoId; });
+        var rutaProcesos = prodCatalogo ? (prodCatalogo.rutaProcesos || prodCatalogo.procesos || []) : [];
+        if (rutaProcesos.length > 0) {
+            avanceProcesos = rutaProcesos.map(function(proc, idx) {
+                return {
+                    procesoId: proc.procesoId || ('rp_' + idx),
+                    nombre: proc.nombre,
+                    completadas: 0
+                };
+            });
+        }
+    }
+
+    // Sincronizar con historial de producción y pedidoERP.procesos
+    if (avanceProcesos.length > 0) {
+        avanceProcesos = avanceProcesos.map(function(proc) {
+            // Buscar en historial
+            var piezasHistorial = 0;
+            if (historialProduccion && historialProduccion.length > 0) {
+                for (var k = 0; k < historialProduccion.length; k++) {
+                    var h = historialProduccion[k];
+                    if (h.pedidoId == pedido.id && (h.procesoId == proc.procesoId || h.procesoNombre === proc.nombre || h.proceso === proc.nombre)) {
+                        piezasHistorial += (h.cantidad || h.piezas || 0);
+                    }
+                }
+            }
+
+            // Buscar en pedidoERP.procesos
+            var piezasERP = 0;
+            if (pedidoERP && pedidoERP.procesos) {
+                var procesoERP = pedidoERP.procesos.find(function(p) {
+                    if (p.id == proc.procesoId || p.procesoId == proc.procesoId) return true;
+                    var nombreP = (p.nombre || '').toLowerCase().trim();
+                    var nombreProc = (proc.nombre || '').toLowerCase().trim();
+                    return nombreP === nombreProc || nombreP.includes(nombreProc) || nombreProc.includes(nombreP);
+                });
+                if (procesoERP) {
+                    piezasERP = procesoERP.piezas || procesoERP.piezasCompletadas || procesoERP.completadas || 0;
+                }
+            }
+
+            return {
+                procesoId: proc.procesoId,
+                nombre: proc.nombre,
+                completadas: Math.max(proc.completadas || 0, piezasHistorial, piezasERP)
+            };
+        });
+    }
+
+    return avanceProcesos;
+}
+
 // Funciones de configuración del sistema
 function getConfigSistema() {
     const saved = localStorage.getItem('config_sistema');

@@ -1312,7 +1312,7 @@ body {
 .orders-table-container {
     background: var(--bg-secondary);
     border-radius: var(--radius-lg);
-    overflow: hidden;
+    overflow-x: auto;
     box-shadow: var(--shadow-sm);
 }
 
@@ -3523,6 +3523,68 @@ body {
 
 .toast-message.info i {
     color: #93c5fd;
+}
+
+/* ========================================
+   TOAST DE PEDIDO COMPLETADO
+   ======================================== */
+.completion-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    background: linear-gradient(135deg, #065f46, #047857);
+    color: white;
+    padding: 16px 20px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 420px;
+    box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
+    animation: slideInRight 0.4s ease;
+    border-left: 4px solid #10b981;
+}
+
+.completion-toast-icon {
+    font-size: 1.8rem;
+    color: #34d399;
+    flex-shrink: 0;
+}
+
+.completion-toast-content {
+    flex: 1;
+}
+
+.completion-toast-content strong {
+    display: block;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+
+.completion-toast-content p {
+    font-size: 0.8rem;
+    margin: 0;
+    opacity: 0.9;
+}
+
+.completion-toast-close {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.7);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px;
+    flex-shrink: 0;
+}
+
+.completion-toast-close:hover {
+    color: white;
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
 }
 
 /* ========================================
@@ -13434,5 +13496,292 @@ kbd {
     .proceso-avance-texto {
         text-align: center;
         margin-top: 4px;
+    }
+}
+
+/* ============================================
+   REPORTE DE ASISTENCIA - ADMIN
+   ============================================ */
+
+.asistencia-reporte {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.asistencia-reporte-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.asistencia-rango {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.asistencia-rango i {
+    color: #667eea;
+}
+
+.asistencia-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+
+.asist-kpi {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 14px 10px;
+    border-radius: 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.asist-kpi.ok { border-left: 3px solid #22c55e; }
+.asist-kpi.falta { border-left: 3px solid #ef4444; }
+.asist-kpi.retardo { border-left: 3px solid #f59e0b; }
+.asist-kpi.permiso { border-left: 3px solid #8b5cf6; }
+
+.asist-kpi-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.asist-kpi.ok .asist-kpi-value { color: #22c55e; }
+.asist-kpi.falta .asist-kpi-value { color: #ef4444; }
+.asist-kpi.retardo .asist-kpi-value { color: #f59e0b; }
+.asist-kpi.permiso .asist-kpi-value { color: #8b5cf6; }
+
+.asist-kpi-label {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-weight: 500;
+    margin-top: 4px;
+}
+
+.asist-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-right: 8px;
+}
+
+.asist-cell-val {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.asist-cell-val.ok { color: #22c55e; }
+.asist-cell-val.falta { color: #ef4444; }
+.asist-cell-val.retardo { color: #f59e0b; }
+.asist-cell-val.permiso { color: #8b5cf6; }
+
+.asist-pct-bar {
+    position: relative;
+    height: 22px;
+    background: #e2e8f0;
+    border-radius: 11px;
+    overflow: hidden;
+    min-width: 80px;
+}
+
+.asist-pct-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    border-radius: 11px;
+    transition: width 0.5s ease;
+}
+
+.asist-pct-fill.success { background: linear-gradient(90deg, #22c55e, #16a34a); }
+.asist-pct-fill.warning { background: linear-gradient(90deg, #f59e0b, #d97706); }
+.asist-pct-fill.danger { background: linear-gradient(90deg, #ef4444, #dc2626); }
+
+.asist-pct-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #1e293b;
+    z-index: 1;
+}
+
+.asistencia-reporte-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.btn-info {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border: none;
+}
+
+.btn-info:hover {
+    background: linear-gradient(135deg, #5a6fd6, #6a4294);
+}
+
+/* ============================================
+   RESPONSIVE - ADMIN MOBILE IMPROVEMENTS
+   ============================================ */
+
+@media (max-width: 768px) {
+    /* Section headers wrap on mobile */
+    .section-header {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .section-header h1 {
+        font-size: 1.2rem;
+        width: 100%;
+    }
+
+    .header-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        width: 100%;
+    }
+
+    .header-actions .btn {
+        flex: 1;
+        min-width: 0;
+        font-size: 0.8rem;
+        padding: 8px 10px;
+        white-space: nowrap;
+    }
+
+    /* Data tables: smaller text, horizontal scroll */
+    .data-table th,
+    .data-table td {
+        font-size: 0.8rem;
+        padding: 8px 10px;
+    }
+
+    .data-table th {
+        white-space: nowrap;
+    }
+
+    /* Modal full-width on mobile */
+    .modal {
+        width: 96%;
+        max-width: none;
+        margin: 10px;
+        max-height: 92vh;
+    }
+
+    .modal-body {
+        max-height: 70vh;
+        padding: 15px;
+    }
+
+    .modal-header {
+        padding: 12px 15px;
+    }
+
+    .modal-header h3 {
+        font-size: 0.95rem;
+    }
+
+    .modal-footer {
+        padding: 12px 15px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .modal-footer .btn {
+        flex: 1;
+        min-width: 100px;
+    }
+
+    /* Personal KPI bar responsive */
+    .personal-kpi-bar {
+        flex-wrap: wrap;
+    }
+
+    /* Asistencia report responsive */
+    .asistencia-kpis {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .asistencia-reporte-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .asistencia-reporte-footer {
+        flex-wrap: wrap;
+    }
+
+    .asist-pct-bar {
+        min-width: 60px;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Even smaller screens */
+    .section-header h1 {
+        font-size: 1.1rem;
+    }
+
+    .header-actions .btn {
+        font-size: 0.75rem;
+        padding: 6px 8px;
+    }
+
+    .header-actions .btn i {
+        margin-right: 0;
+    }
+
+    /* Stack action buttons */
+    .header-actions .btn span {
+        display: none;
+    }
+
+    .data-table th,
+    .data-table td {
+        font-size: 0.75rem;
+        padding: 6px 8px;
+    }
+
+    /* Asistencia KPIs stack */
+    .asistencia-kpis {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .asist-kpi-value {
+        font-size: 1.2rem;
+    }
+
+    /* Personal table: hide some columns */
+    .empleado-cell {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
     }
 }
