@@ -45,22 +45,22 @@ const initialData = {
         // Manual
         { id: 'M1', areaPlantaId: 'manual', nombre: 'Manual 1', operadorId: null },
         // Extras
-        { id: 'EX1', areaPlantaId: 'extras', nombre: 'Extra 1', operadorId: 13 },
+        { id: 'EX1', areaPlantaId: 'extras', nombre: 'Extra 1', operadorId: null },
         { id: 'EX2', areaPlantaId: 'extras', nombre: 'Extra 2', operadorId: null },
         // Costura (24 posiciones)
-        { id: 'C1', areaPlantaId: 'costura', nombre: 'Costura 1', operadorId: 1 },
-        { id: 'C2', areaPlantaId: 'costura', nombre: 'Costura 2', operadorId: 2 },
-        { id: 'C3', areaPlantaId: 'costura', nombre: 'Costura 3', operadorId: 14 },
-        { id: 'C4', areaPlantaId: 'costura', nombre: 'Costura 4', operadorId: 15 },
-        { id: 'C5', areaPlantaId: 'costura', nombre: 'Costura 5', operadorId: 16 },
-        { id: 'C6', areaPlantaId: 'costura', nombre: 'Costura 6', operadorId: 17 },
+        { id: 'C1', areaPlantaId: 'costura', nombre: 'Costura 1', operadorId: null },
+        { id: 'C2', areaPlantaId: 'costura', nombre: 'Costura 2', operadorId: null },
+        { id: 'C3', areaPlantaId: 'costura', nombre: 'Costura 3', operadorId: null },
+        { id: 'C4', areaPlantaId: 'costura', nombre: 'Costura 4', operadorId: null },
+        { id: 'C5', areaPlantaId: 'costura', nombre: 'Costura 5', operadorId: null },
+        { id: 'C6', areaPlantaId: 'costura', nombre: 'Costura 6', operadorId: null },
         { id: 'C7', areaPlantaId: 'costura', nombre: 'Costura 7', operadorId: null },
         { id: 'C8', areaPlantaId: 'costura', nombre: 'Costura 8', operadorId: null },
-        { id: 'C9', areaPlantaId: 'costura', nombre: 'Costura 9', operadorId: 18 },
-        { id: 'C10', areaPlantaId: 'costura', nombre: 'Costura 10', operadorId: 19 },
+        { id: 'C9', areaPlantaId: 'costura', nombre: 'Costura 9', operadorId: null },
+        { id: 'C10', areaPlantaId: 'costura', nombre: 'Costura 10', operadorId: null },
         { id: 'C11', areaPlantaId: 'costura', nombre: 'Costura 11', operadorId: null },
         { id: 'C12', areaPlantaId: 'costura', nombre: 'Costura 12', operadorId: null },
-        { id: 'C13', areaPlantaId: 'costura', nombre: 'Costura 13', operadorId: 20 },
+        { id: 'C13', areaPlantaId: 'costura', nombre: 'Costura 13', operadorId: null },
         { id: 'C14', areaPlantaId: 'costura', nombre: 'Costura 14', operadorId: null },
         { id: 'C15', areaPlantaId: 'costura', nombre: 'Costura 15', operadorId: null },
         { id: 'C16', areaPlantaId: 'costura', nombre: 'Costura 16', operadorId: null },
@@ -73,23 +73,23 @@ const initialData = {
         { id: 'C23', areaPlantaId: 'costura', nombre: 'Costura 23', operadorId: null },
         { id: 'C24', areaPlantaId: 'costura', nombre: 'Costura 24', operadorId: null },
         // Empaque y Calidad
-        { id: 'EC1', areaPlantaId: 'empaque', nombre: 'Empaque 1', operadorId: 6 },
-        { id: 'EC2', areaPlantaId: 'empaque', nombre: 'Empaque 2', operadorId: 21 },
-        { id: 'EC3', areaPlantaId: 'empaque', nombre: 'Calidad 1', operadorId: 22 },
+        { id: 'EC1', areaPlantaId: 'empaque', nombre: 'Empaque 1', operadorId: null },
+        { id: 'EC2', areaPlantaId: 'empaque', nombre: 'Empaque 2', operadorId: null },
+        { id: 'EC3', areaPlantaId: 'empaque', nombre: 'Calidad 1', operadorId: null },
         { id: 'EC4', areaPlantaId: 'empaque', nombre: 'Calidad 2', operadorId: null },
         { id: 'EC5', areaPlantaId: 'empaque', nombre: 'Empaque 3', operadorId: null },
         { id: 'EC6', areaPlantaId: 'empaque', nombre: 'Empaque 4', operadorId: null },
         // Serigrafía
-        { id: 'S1', areaPlantaId: 'serigrafia', nombre: 'Serigrafía 1', operadorId: 5 },
+        { id: 'S1', areaPlantaId: 'serigrafia', nombre: 'Serigrafía 1', operadorId: null },
         { id: 'S2', areaPlantaId: 'serigrafia', nombre: 'Serigrafía 2', operadorId: null },
         // Corte de Bies
-        { id: 'CB1', areaPlantaId: 'cortebies', nombre: 'Corte Bies 1', operadorId: 9 },
+        { id: 'CB1', areaPlantaId: 'cortebies', nombre: 'Corte Bies 1', operadorId: null },
         { id: 'CB2', areaPlantaId: 'cortebies', nombre: 'Corte Bies 2', operadorId: null },
         // Doblado de Fundas
-        { id: 'D1', areaPlantaId: 'doblado', nombre: 'Doblado 1', operadorId: 23 },
+        { id: 'D1', areaPlantaId: 'doblado', nombre: 'Doblado 1', operadorId: null },
         { id: 'D2', areaPlantaId: 'doblado', nombre: 'Doblado 2', operadorId: null },
         // Área de Corte
-        { id: 'CO1', areaPlantaId: 'corte', nombre: 'Corte 1', operadorId: 24 },
+        { id: 'CO1', areaPlantaId: 'corte', nombre: 'Corte 1', operadorId: null },
         { id: 'CO2', areaPlantaId: 'corte', nombre: 'Corte 2', operadorId: null },
         // Corte a Medida
         { id: 'CM1', areaPlantaId: 'cortemedida', nombre: 'Corte Medida 1', operadorId: null },
@@ -98,25 +98,7 @@ const initialData = {
     ],
 
     // Estado de operadores en tiempo real (para el mapa)
-    estadoOperadores: [
-        { operadorId: 1, estacionId: 'C1', estado: 'adelantado', efectividad: 115, iniciales: 'CR' },
-        { operadorId: 2, estacionId: 'C2', estado: 'adelantado', efectividad: 112, iniciales: 'MG' },
-        { operadorId: 14, estacionId: 'C3', estado: 'retrasado', efectividad: 85, iniciales: 'JH' },
-        { operadorId: 15, estacionId: 'C4', estado: 'muy-retrasado', efectividad: 78, iniciales: 'LT' },
-        { operadorId: 16, estacionId: 'C5', estado: 'adelantado', efectividad: 118, iniciales: 'ER' },
-        { operadorId: 17, estacionId: 'C6', estado: 'adelantado', efectividad: 110, iniciales: 'MO' },
-        { operadorId: 18, estacionId: 'C9', estado: 'retrasado', efectividad: 88, iniciales: 'SJ' },
-        { operadorId: 19, estacionId: 'C10', estado: 'muy-retrasado', efectividad: 75, iniciales: 'JM' },
-        { operadorId: 20, estacionId: 'C13', estado: 'adelantado', efectividad: 122, iniciales: 'AR' },
-        { operadorId: 6, estacionId: 'EC1', estado: 'adelantado', efectividad: 108, iniciales: 'RF' },
-        { operadorId: 21, estacionId: 'EC2', estado: 'inactivo', efectividad: 0, iniciales: 'CV' },
-        { operadorId: 22, estacionId: 'EC3', estado: 'retrasado', efectividad: 92, iniciales: 'SC' },
-        { operadorId: 5, estacionId: 'S1', estado: 'adelantado', efectividad: 125, iniciales: 'PS' },
-        { operadorId: 9, estacionId: 'CB1', estado: 'adelantado', efectividad: 115, iniciales: 'RD' },
-        { operadorId: 23, estacionId: 'D1', estado: 'adelantado', efectividad: 111, iniciales: 'PM' },
-        { operadorId: 24, estacionId: 'CO1', estado: 'inactivo', efectividad: 0, iniciales: 'AL' },
-        { operadorId: 13, estacionId: 'EX1', estado: 'adelantado', efectividad: 105, iniciales: 'FC' }
-    ],
+    estadoOperadores: [],
 
     // Procesos por área
     procesos: [
@@ -146,56 +128,7 @@ const initialData = {
     ],
 
     // Clientes
-    clientes: [
-        {
-            id: 1,
-            razonSocial: 'Cruella SA de CV',
-            nombreComercial: 'Cruella Fashion',
-            tipo: 'estrategico',
-            contacto: 'María García',
-            email: 'maria@cruella.com',
-            telefono: '55 1234 5678',
-            direccion: 'Av. Reforma 123, CDMX',
-            accesoPortal: true,
-            usuario: 'cruella',
-            fechaAlta: '2024-01-15',
-            articulosFrecuentes: [
-                { productoId: 1, notas: 'Producto principal', ultimoPrecio: 85.00 }
-            ]
-        },
-        {
-            id: 2,
-            razonSocial: 'Fashion Corp Internacional',
-            nombreComercial: 'Fashion Corp',
-            tipo: 'estrategico',
-            contacto: 'Carlos López',
-            email: 'carlos@fashioncorp.com',
-            telefono: '55 9876 5432',
-            direccion: 'Insurgentes Sur 456, CDMX',
-            accesoPortal: true,
-            usuario: 'fashion',
-            fechaAlta: '2024-02-20',
-            articulosFrecuentes: [
-                { productoId: 2, notas: 'Pide cada mes', ultimoPrecio: 125.00 }
-            ]
-        },
-        {
-            id: 3,
-            razonSocial: 'Textiles Unidos SA',
-            nombreComercial: 'Textiles Unidos',
-            tipo: 'externo',
-            contacto: 'Ana Martínez',
-            email: 'ana@textilesunidos.com',
-            telefono: '55 5555 1234',
-            direccion: 'Zona Industrial, Edo. Méx.',
-            accesoPortal: false,
-            usuario: null,
-            fechaAlta: '2024-03-10',
-            articulosFrecuentes: [
-                { productoId: 3, notas: 'Pedidos grandes', ultimoPrecio: 45.00 }
-            ]
-        }
-    ],
+    clientes: [],
 
     // Familias de productos
     familias: [
@@ -220,354 +153,25 @@ const initialData = {
     ],
 
     // Productos (catálogo por cliente) - Con ruta de procesos mejorada
-    productos: [
-        {
-            id: 1,
-            clienteId: 1,
-            familiaId: 1,
-            subfamiliaId: 1,
-            nombre: 'Porta Vestido Sencillo 1.60 x 0.62',
-            medidas: '160cm x 62cm',
-            materiales: 'Tela no tejida 80g, cierre negro 1.48m, bies 800cm',
-            descripcion: 'Porta vestido sencillo con ventana transparente',
-            // Ruta de procesos con capacidad y control
-            rutaProcesos: [
-                { orden: 1, nombre: 'Corte de espalda', areaPlantaId: 'cortemedida', capacidadHora: 24, tiempoEstandar: 2.5, habilitado: true },
-                { orden: 2, nombre: 'Corte de lado ventana', areaPlantaId: 'cortemedida', capacidadHora: 30, tiempoEstandar: 2.0, habilitado: true },
-                { orden: 3, nombre: 'Corte de lado completo', areaPlantaId: 'cortemedida', capacidadHora: 27, tiempoEstandar: 2.2, habilitado: true },
-                { orden: 4, nombre: 'Corte ventana C4', areaPlantaId: 'corte', capacidadHora: 33, tiempoEstandar: 1.8, habilitado: true },
-                { orden: 5, nombre: 'Impresión de logotipo', areaPlantaId: 'serigrafia', capacidadHora: 40, tiempoEstandar: 1.5, habilitado: true },
-                { orden: 6, nombre: 'Corte de cierre', areaPlantaId: 'corte', capacidadHora: 75, tiempoEstandar: 0.8, habilitado: true },
-                { orden: 7, nombre: 'Corte de bies', areaPlantaId: 'cortebies', capacidadHora: 50, tiempoEstandar: 1.2, habilitado: true },
-                { orden: 8, nombre: 'Costura de ventana', areaPlantaId: 'costura', capacidadHora: 20, tiempoEstandar: 3.0, habilitado: true },
-                { orden: 9, nombre: 'Costura de cierre', areaPlantaId: 'costura', capacidadHora: 24, tiempoEstandar: 2.5, habilitado: true },
-                { orden: 10, nombre: 'Costura de frentes', areaPlantaId: 'costura', capacidadHora: 21, tiempoEstandar: 2.8, habilitado: true },
-                { orden: 11, nombre: 'Cerrado de portavestido', areaPlantaId: 'costura', capacidadHora: 17, tiempoEstandar: 3.5, habilitado: true },
-                { orden: 12, nombre: 'Revisión de calidad', areaPlantaId: 'empaque', capacidadHora: 60, tiempoEstandar: 1.0, habilitado: true },
-                { orden: 13, nombre: 'Empaque', areaPlantaId: 'empaque', capacidadHora: 120, tiempoEstandar: 0.5, habilitado: true }
-            ],
-            tiempoTotal: 22.3,
-            imagen: null,
-            comentarios: 'Cliente frecuente. Priorizar en temporada alta.',
-            version: 1,
-            activo: true
-        },
-        {
-            id: 2,
-            clienteId: 2,
-            familiaId: 2,
-            subfamiliaId: 4,
-            nombre: 'Funda Traje Premium',
-            medidas: '180cm x 65cm',
-            materiales: 'Tela no tejida 100g, cierre negro 1.70m, bies 900cm',
-            descripcion: 'Funda premium para traje con doble ventana',
-            rutaProcesos: [
-                { orden: 1, nombre: 'Corte de espalda', areaPlantaId: 'cortemedida', capacidadHora: 22, tiempoEstandar: 2.7, habilitado: true },
-                { orden: 2, nombre: 'Corte de lado ventana', areaPlantaId: 'cortemedida', capacidadHora: 28, tiempoEstandar: 2.1, habilitado: true },
-                { orden: 3, nombre: 'Corte ventana doble', areaPlantaId: 'corte', capacidadHora: 25, tiempoEstandar: 2.4, habilitado: true },
-                { orden: 4, nombre: 'Impresión de logotipo', areaPlantaId: 'serigrafia', capacidadHora: 35, tiempoEstandar: 1.7, habilitado: true },
-                { orden: 5, nombre: 'Corte de cierre largo', areaPlantaId: 'corte', capacidadHora: 70, tiempoEstandar: 0.85, habilitado: true },
-                { orden: 6, nombre: 'Corte de bies premium', areaPlantaId: 'cortebies', capacidadHora: 45, tiempoEstandar: 1.3, habilitado: true },
-                { orden: 7, nombre: 'Costura de ventana doble', areaPlantaId: 'costura', capacidadHora: 18, tiempoEstandar: 3.3, habilitado: true },
-                { orden: 8, nombre: 'Costura de cierre', areaPlantaId: 'costura', capacidadHora: 22, tiempoEstandar: 2.7, habilitado: true },
-                { orden: 9, nombre: 'Costura de frentes reforzados', areaPlantaId: 'costura', capacidadHora: 19, tiempoEstandar: 3.1, habilitado: true },
-                { orden: 10, nombre: 'Cerrado premium', areaPlantaId: 'costura', capacidadHora: 15, tiempoEstandar: 4.0, habilitado: true },
-                { orden: 11, nombre: 'Revisión de calidad premium', areaPlantaId: 'empaque', capacidadHora: 50, tiempoEstandar: 1.2, habilitado: true },
-                { orden: 12, nombre: 'Empaque premium', areaPlantaId: 'empaque', capacidadHora: 100, tiempoEstandar: 0.6, habilitado: true }
-            ],
-            tiempoTotal: 25.0,
-            imagen: null,
-            comentarios: 'Producto premium. Usar materiales de primera calidad.',
-            version: 1,
-            activo: true
-        },
-        {
-            id: 3,
-            clienteId: 3,
-            familiaId: 3,
-            subfamiliaId: 7,
-            nombre: 'Bolsa Industrial Grande',
-            medidas: '100cm x 80cm',
-            materiales: 'Polipropileno 120g',
-            descripcion: 'Bolsa industrial para uso pesado',
-            rutaProcesos: [
-                { orden: 1, nombre: 'Corte de tela principal', areaPlantaId: 'corte', capacidadHora: 40, tiempoEstandar: 1.5, habilitado: true },
-                { orden: 2, nombre: 'Corte de forro', areaPlantaId: 'corte', capacidadHora: 50, tiempoEstandar: 1.2, habilitado: true },
-                { orden: 3, nombre: 'Costura base', areaPlantaId: 'costura', capacidadHora: 20, tiempoEstandar: 3.0, habilitado: true },
-                { orden: 4, nombre: 'Cerrado industrial', areaPlantaId: 'costura', capacidadHora: 17, tiempoEstandar: 3.5, habilitado: true },
-                { orden: 5, nombre: 'Revisión', areaPlantaId: 'empaque', capacidadHora: 60, tiempoEstandar: 1.0, habilitado: true },
-                { orden: 6, nombre: 'Empaque a granel', areaPlantaId: 'empaque', capacidadHora: 120, tiempoEstandar: 0.5, habilitado: true }
-            ],
-            tiempoTotal: 10.7,
-            imagen: null,
-            comentarios: 'Producto estándar industrial.',
-            version: 1,
-            activo: true
-        }
-    ],
+    productos: [],
 
     // Personal (con horarios en lugar de turnos)
-    personal: [
-        { id: 1, nombre: 'Cristina Ramírez', rol: 'operador', areaId: 7, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['C1'] },
-        { id: 2, nombre: 'Miguel García', rol: 'operador', areaId: 7, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['C2'] },
-        { id: 3, nombre: 'Ana López', rol: 'operador', areaId: 2, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 55, activo: true, posiciones: [] },
-        { id: 4, nombre: 'Carlos Ruiz', rol: 'operador', areaId: 1, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 52, activo: true, posiciones: [] },
-        { id: 5, nombre: 'Patricia Sánchez', rol: 'operador', areaId: 3, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 60, activo: true, posiciones: ['S1'] },
-        { id: 6, nombre: 'Ricardo Fernández', rol: 'operador', areaId: 8, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 48, activo: true, posiciones: ['EC1'] },
-        { id: 7, nombre: 'Rosa Martínez', rol: 'operador', areaId: 7, horaEntrada: '14:00', horaSalida: '22:00', horaComida: '18:00', salarioHora: 50, activo: true, posiciones: [] },
-        { id: 8, nombre: 'Luis García', rol: 'operador', areaId: 4, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: [] },
-        { id: 9, nombre: 'Roberto Domínguez', rol: 'operador', areaId: 5, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['CB1'] },
-        { id: 10, nombre: 'Miguel Flores', rol: 'operador', areaId: 6, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: [] },
-        { id: 11, nombre: 'Patricia Morales', rol: 'supervisora', areaId: null, horaEntrada: '07:30', horaSalida: '16:30', horaComida: '12:30', salarioHora: 80, activo: true, posiciones: [] },
-        { id: 12, nombre: 'Roberto Díaz', rol: 'supervisora', areaId: null, horaEntrada: '14:00', horaSalida: '22:00', horaComida: '18:00', salarioHora: 80, activo: true, posiciones: [] },
-        { id: 13, nombre: 'Fernando Castro', rol: 'operador', areaId: 7, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['EX1'] },
-        { id: 14, nombre: 'Javier Hernández', rol: 'operador', areaId: 7, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['C3'] },
-        { id: 15, nombre: 'Laura Torres', rol: 'operador', areaId: 7, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['C4'] },
-        { id: 16, nombre: 'Eduardo Reyes', rol: 'operador', areaId: 7, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['C5'] },
-        { id: 17, nombre: 'Martha Ortiz', rol: 'operador', areaId: 7, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['C6'] },
-        { id: 18, nombre: 'Sandra Juárez', rol: 'operador', areaId: 7, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['C9'] },
-        { id: 19, nombre: 'José Moreno', rol: 'operador', areaId: 7, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['C10'] },
-        { id: 20, nombre: 'Adriana Ríos', rol: 'operador', areaId: 7, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['C13'] },
-        { id: 21, nombre: 'Carmen Vargas', rol: 'operador', areaId: 8, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 48, activo: true, posiciones: ['EC2'] },
-        { id: 22, nombre: 'Sergio Castillo', rol: 'operador', areaId: 8, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 48, activo: true, posiciones: ['EC3'] },
-        { id: 23, nombre: 'Paula Mendoza', rol: 'operador', areaId: 7, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['D1'] },
-        { id: 24, nombre: 'Alfonso Luna', rol: 'operador', areaId: 7, horaEntrada: '08:00', horaSalida: '17:00', horaComida: '13:00', salarioHora: 50, activo: true, posiciones: ['CT1'] }
-    ],
+    personal: [],
 
     // Pedidos (con precios de venta)
-    pedidos: [
-        {
-            id: 1234,
-            clienteId: 1,
-            productos: [
-                {
-                    productoId: 1,
-                    cantidad: 300,
-                    completadas: 135,
-                    precioUnitario: 85.00,
-                    avanceProcesos: [
-                        { procesoOrden: 1, nombre: 'Corte de espalda', completadas: 300, estado: 'completado' },
-                        { procesoOrden: 2, nombre: 'Corte de frente', completadas: 300, estado: 'completado' },
-                        { procesoOrden: 3, nombre: 'Preparación de piezas', completadas: 280, estado: 'completado' },
-                        { procesoOrden: 4, nombre: 'Unión de hombros', completadas: 250, estado: 'completado' },
-                        { procesoOrden: 5, nombre: 'Impresión de logotipo', completadas: 220, estado: 'completado' },
-                        { procesoOrden: 6, nombre: 'Colocación de cuello', completadas: 200, estado: 'en_proceso' },
-                        { procesoOrden: 7, nombre: 'Cerrado de costados', completadas: 180, estado: 'en_proceso' },
-                        { procesoOrden: 8, nombre: 'Costura de ventana', completadas: 135, estado: 'en_proceso' },
-                        { procesoOrden: 9, nombre: 'Doblado de bies', completadas: 50, estado: 'en_proceso' },
-                        { procesoOrden: 10, nombre: 'Control de calidad', completadas: 0, estado: 'pendiente' },
-                        { procesoOrden: 11, nombre: 'Empaque individual', completadas: 0, estado: 'pendiente' }
-                    ]
-                }
-            ],
-            prioridad: 'alta',
-            fechaCarga: '2026-01-20',
-            fechaEntrega: '2026-01-27',
-            estado: 'produccion',
-            notas: 'Cliente importante - entrega urgente',
-            presupuestoEstimado: 18500,
-            costoReal: 19450
-        },
-        {
-            id: 1235,
-            clienteId: 2,
-            productos: [
-                {
-                    productoId: 2,
-                    cantidad: 500,
-                    completadas: 300,
-                    precioUnitario: 125.00,
-                    avanceProcesos: [
-                        { procesoOrden: 1, nombre: 'Corte de tela principal', completadas: 500, estado: 'completado' },
-                        { procesoOrden: 2, nombre: 'Corte de forro', completadas: 500, estado: 'completado' },
-                        { procesoOrden: 3, nombre: 'Sublimación', completadas: 480, estado: 'completado' },
-                        { procesoOrden: 4, nombre: 'Unión tela-forro', completadas: 450, estado: 'completado' },
-                        { procesoOrden: 5, nombre: 'Costura de cierre', completadas: 400, estado: 'en_proceso' },
-                        { procesoOrden: 6, nombre: 'Colocación de agarradera', completadas: 350, estado: 'en_proceso' },
-                        { procesoOrden: 7, nombre: 'Costura decorativa', completadas: 300, estado: 'en_proceso' },
-                        { procesoOrden: 8, nombre: 'Revisión', completadas: 200, estado: 'en_proceso' },
-                        { procesoOrden: 9, nombre: 'Empaque', completadas: 100, estado: 'en_proceso' }
-                    ]
-                }
-            ],
-            prioridad: 'alta',
-            fechaCarga: '2026-01-18',
-            fechaEntrega: '2026-01-28',
-            estado: 'produccion',
-            notas: '',
-            presupuestoEstimado: 42000,
-            costoReal: 43800
-        },
-        {
-            id: 1236,
-            clienteId: 3,
-            productos: [
-                {
-                    productoId: 3,
-                    cantidad: 1000,
-                    completadas: 800,
-                    precioUnitario: 45.00,
-                    avanceProcesos: [
-                        { procesoOrden: 1, nombre: 'Corte de tela principal', completadas: 1000, estado: 'completado' },
-                        { procesoOrden: 2, nombre: 'Corte de forro', completadas: 1000, estado: 'completado' },
-                        { procesoOrden: 3, nombre: 'Costura base', completadas: 950, estado: 'completado' },
-                        { procesoOrden: 4, nombre: 'Cerrado industrial', completadas: 900, estado: 'completado' },
-                        { procesoOrden: 5, nombre: 'Revisión', completadas: 850, estado: 'en_proceso' },
-                        { procesoOrden: 6, nombre: 'Empaque a granel', completadas: 800, estado: 'en_proceso' }
-                    ]
-                }
-            ],
-            prioridad: 'media',
-            fechaCarga: '2026-01-15',
-            fechaEntrega: '2026-01-29',
-            estado: 'produccion',
-            notas: '',
-            presupuestoEstimado: 28000,
-            costoReal: 27500
-        },
-        {
-            id: 1237,
-            clienteId: 1,
-            productos: [
-                {
-                    productoId: 1,
-                    cantidad: 200,
-                    completadas: 50,
-                    precioUnitario: 85.00,
-                    avanceProcesos: [
-                        { procesoOrden: 1, nombre: 'Corte de espalda', completadas: 200, estado: 'completado' },
-                        { procesoOrden: 2, nombre: 'Corte de frente', completadas: 180, estado: 'completado' },
-                        { procesoOrden: 3, nombre: 'Preparación de piezas', completadas: 150, estado: 'en_proceso' },
-                        { procesoOrden: 4, nombre: 'Unión de hombros', completadas: 100, estado: 'en_proceso' },
-                        { procesoOrden: 5, nombre: 'Impresión de logotipo', completadas: 80, estado: 'en_proceso' },
-                        { procesoOrden: 6, nombre: 'Colocación de cuello', completadas: 50, estado: 'en_proceso' },
-                        { procesoOrden: 7, nombre: 'Cerrado de costados', completadas: 50, estado: 'en_proceso' },
-                        { procesoOrden: 8, nombre: 'Costura de ventana', completadas: 50, estado: 'en_proceso' },
-                        { procesoOrden: 9, nombre: 'Doblado de bies', completadas: 0, estado: 'pendiente' },
-                        { procesoOrden: 10, nombre: 'Control de calidad', completadas: 0, estado: 'pendiente' },
-                        { procesoOrden: 11, nombre: 'Empaque individual', completadas: 0, estado: 'pendiente' }
-                    ]
-                }
-            ],
-            prioridad: 'media',
-            fechaCarga: '2026-01-22',
-            fechaEntrega: '2026-02-05',
-            estado: 'produccion',
-            notas: '',
-            presupuestoEstimado: 12500,
-            costoReal: 4200
-        },
-        {
-            id: 1238,
-            clienteId: 2,
-            productos: [
-                {
-                    productoId: 2,
-                    cantidad: 150,
-                    completadas: 0,
-                    precioUnitario: 125.00,
-                    avanceProcesos: [
-                        { procesoOrden: 1, nombre: 'Corte de tela principal', completadas: 0, estado: 'pendiente' },
-                        { procesoOrden: 2, nombre: 'Corte de forro', completadas: 0, estado: 'pendiente' },
-                        { procesoOrden: 3, nombre: 'Sublimación', completadas: 0, estado: 'pendiente' },
-                        { procesoOrden: 4, nombre: 'Unión tela-forro', completadas: 0, estado: 'pendiente' },
-                        { procesoOrden: 5, nombre: 'Costura de cierre', completadas: 0, estado: 'pendiente' },
-                        { procesoOrden: 6, nombre: 'Colocación de agarradera', completadas: 0, estado: 'pendiente' },
-                        { procesoOrden: 7, nombre: 'Costura decorativa', completadas: 0, estado: 'pendiente' },
-                        { procesoOrden: 8, nombre: 'Revisión', completadas: 0, estado: 'pendiente' },
-                        { procesoOrden: 9, nombre: 'Empaque', completadas: 0, estado: 'pendiente' }
-                    ]
-                }
-            ],
-            prioridad: 'baja',
-            fechaCarga: '2026-01-25',
-            fechaEntrega: '2026-02-15',
-            estado: 'pendiente',
-            notas: 'Nuevo pedido',
-            presupuestoEstimado: 12600,
-            costoReal: 0
-        }
-    ],
+    pedidos: [],
 
-    // Producción en tiempo real (simulada)
-    produccionActiva: [
-        {
-            id: 1,
-            pedidoId: 1234,
-            productoId: 1,
-            procesoId: 8,
-            operadorId: 1,
-            inicio: '2026-01-26T08:00:00',
-            piezasRealizadas: 45,
-            pausas: [],
-            estado: 'activo'
-        },
-        {
-            id: 2,
-            pedidoId: 1234,
-            productoId: 1,
-            procesoId: 9,
-            operadorId: 2,
-            inicio: '2026-01-26T08:30:00',
-            piezasRealizadas: 38,
-            pausas: [{ inicio: '10:15', fin: '10:25', motivo: 'Baño' }],
-            estado: 'activo'
-        },
-        {
-            id: 3,
-            pedidoId: 1235,
-            productoId: 2,
-            procesoId: 10,
-            operadorId: 7,
-            inicio: '2026-01-26T14:00:00',
-            piezasRealizadas: 22,
-            pausas: [],
-            estado: 'activo'
-        }
-    ],
+    // Producción en tiempo real
+    produccionActiva: [],
 
     // Materiales
-    materiales: [
-        { id: 1, nombre: 'Tela no tejida 80g', unidad: 'metro', costo: 15.50, proveedor: 'Telas del Norte' },
-        { id: 2, nombre: 'Tela no tejida 100g', unidad: 'metro', costo: 18.00, proveedor: 'Telas del Norte' },
-        { id: 3, nombre: 'Cierre negro 1.48m', unidad: 'pieza', costo: 8.50, proveedor: 'Cierres México' },
-        { id: 4, nombre: 'Cierre negro 1.70m', unidad: 'pieza', costo: 9.80, proveedor: 'Cierres México' },
-        { id: 5, nombre: 'Bies (rollo 100m)', unidad: 'rollo', costo: 120.00, proveedor: 'Insumos Textiles' },
-        { id: 6, nombre: 'Polipropileno 120g', unidad: 'metro', costo: 22.00, proveedor: 'Plásticos SA' }
-    ],
+    materiales: [],
 
     // BOM (Bill of Materials) por producto
-    bom: [
-        { productoId: 1, materialId: 1, cantidad: 1.2, unidad: 'metros' },
-        { productoId: 1, materialId: 3, cantidad: 1, unidad: 'pieza' },
-        { productoId: 1, materialId: 5, cantidad: 0.08, unidad: 'rollo' },
-        { productoId: 2, materialId: 2, cantidad: 1.5, unidad: 'metros' },
-        { productoId: 2, materialId: 4, cantidad: 1, unidad: 'pieza' },
-        { productoId: 2, materialId: 5, cantidad: 0.09, unidad: 'rollo' },
-        { productoId: 3, materialId: 6, cantidad: 0.8, unidad: 'metros' }
-    ],
+    bom: [],
 
     // Bitácora de auditoría
-    auditoria: [
-        {
-            id: 1,
-            fecha: '2026-01-26T09:15:00',
-            usuario: 'Admin',
-            accion: 'Ajuste de cantidad',
-            detalle: 'Pedido #1234: Ajuste de 320 a 300 piezas por supervisora',
-            entidad: 'pedido',
-            entidadId: 1234
-        },
-        {
-            id: 2,
-            fecha: '2026-01-25T14:30:00',
-            usuario: 'Admin',
-            accion: 'Cambio de tiempo estándar',
-            detalle: 'Proceso "Costura de ventana": 3.2 min → 3.0 min',
-            entidad: 'proceso',
-            entidadId: 8
-        }
-    ],
+    auditoria: [],
 
     // Notificaciones (se generan dinámicamente basadas en datos reales)
     notificaciones: []
