@@ -4,7 +4,18 @@
 // ========================================
 
 // Inicializar cliente Supabase
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabase;
+try {
+    const supabaseLib = window.supabase;
+    if (supabaseLib && supabaseLib.createClient) {
+        supabase = supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('[Supabase] Cliente creado exitosamente');
+    } else {
+        console.error('[Supabase] SDK no disponible. window.supabase:', typeof window.supabase);
+    }
+} catch (e) {
+    console.error('[Supabase] Error creando cliente:', e.message);
+}
 
 // ========================================
 // HELPERS CRUD GENÉRICOS
