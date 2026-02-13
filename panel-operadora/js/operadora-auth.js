@@ -883,20 +883,37 @@ function guardarConfigEstacion() {
 // ========================================
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Mostrar login inmediatamente mientras carga DB
+    mostrarLogin();
+    ocultarPanel();
+
     dbReady.then(() => {
-        // Verificar si hay sesión activa
-        if (verificarSesionActiva()) {
+        // Si viene por navegación directa (no refresh), forzar login
+        var navType = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
+        var esNavegacion = navType && navType.type === 'navigate';
+
+        // Verificar si hay sesión activa (solo permitir auto-restore en reload/back)
+        if (!esNavegacion && verificarSesionActiva()) {
             ocultarLogin();
             mostrarPanel();
             if (typeof initPanelOperadora === 'function') {
                 initPanelOperadora();
             }
         } else {
+            // Si es navegación directa (desde landing), limpiar sesión y pedir login
+            if (esNavegacion) {
+                localStorage.removeItem('sesion_operadora');
+            }
             mostrarLogin();
             ocultarPanel();
         }
 
         // Enfocar primer campo
+        setTimeout(() => enfocarCampo('numEmpleado'), 100);
+    }).catch(() => {
+        // Si dbReady falla, igualmente mostrar login
+        mostrarLogin();
+        ocultarPanel();
         setTimeout(() => enfocarCampo('numEmpleado'), 100);
     });
 });
