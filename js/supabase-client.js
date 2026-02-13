@@ -3,176 +3,186 @@
 // Wrapper del SDK con helpers CRUD genéricos
 // ========================================
 
-// Inicializar cliente Supabase
-// NOTA: usamos _sbClient para NO colisionar con window.supabase (el SDK)
-let _sbClient;
-try {
-    const supabaseLib = window.supabase;
-    if (supabaseLib && supabaseLib.createClient) {
-        _sbClient = supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        console.log('[Supabase] Cliente creado exitosamente');
-    } else {
-        console.error('[Supabase] SDK no disponible. window.supabase:', typeof window.supabase);
+(function() {
+    'use strict';
+
+    // Inicializar cliente Supabase
+    var sbClient = null;
+    try {
+        var lib = window.supabase;
+        if (lib && typeof lib.createClient === 'function') {
+            sbClient = lib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('[Supabase] Cliente creado exitosamente');
+        } else {
+            console.error('[Supabase] SDK no disponible. window.supabase:', typeof window.supabase);
+        }
+    } catch (e) {
+        console.error('[Supabase] Error creando cliente:', e.message);
     }
-} catch (e) {
-    console.error('[Supabase] Error creando cliente:', e.message);
-}
 
-// ========================================
-// HELPERS CRUD GENÉRICOS
-// ========================================
+    // ========================================
+    // HELPERS CRUD GENÉRICOS
+    // ========================================
 
-const SupabaseClient = {
-    // SELECT * FROM tabla
-    async getAll(table, options = {}) {
-        let query = _sbClient.from(table).select(options.select || '*');
+    var client = {
+        // SELECT * FROM tabla
+        getAll: async function(table, options) {
+            options = options || {};
+            var query = sbClient.from(table).select(options.select || '*');
 
-        if (options.filter) {
-            for (const [col, val] of Object.entries(options.filter)) {
-                query = query.eq(col, val);
+            if (options.filter) {
+                var entries = Object.entries(options.filter);
+                for (var i = 0; i < entries.length; i++) {
+                    query = query.eq(entries[i][0], entries[i][1]);
+                }
+            }
+            if (options.order) {
+                query = query.order(options.order.column, { ascending: options.order.ascending !== false });
+            }
+            if (options.limit) {
+                query = query.limit(options.limit);
+            }
+
+            var result = await query;
+            if (result.error) {
+                console.error('[Supabase] Error getAll ' + table + ':', result.error.message);
+                return [];
+            }
+            return result.data || [];
+        },
+
+        // SELECT * FROM tabla WHERE id = ?
+        getById: async function(table, id, idColumn) {
+            idColumn = idColumn || 'id';
+            var result = await sbClient
+                .from(table)
+                .select('*')
+                .eq(idColumn, id)
+                .single();
+
+            if (result.error) {
+                if (result.error.code === 'PGRST116') return null;
+                console.error('[Supabase] Error getById ' + table + ':', result.error.message);
+                return null;
+            }
+            return result.data;
+        },
+
+        // INSERT INTO tabla
+        insert: async function(table, record) {
+            var result = await sbClient
+                .from(table)
+                .insert(record)
+                .select()
+                .single();
+
+            if (result.error) {
+                console.error('[Supabase] Error insert ' + table + ':', result.error.message);
+                return null;
+            }
+            return result.data;
+        },
+
+        // INSERT INTO tabla (múltiples registros)
+        insertMany: async function(table, records) {
+            var result = await sbClient
+                .from(table)
+                .insert(records)
+                .select();
+
+            if (result.error) {
+                console.error('[Supabase] Error insertMany ' + table + ':', result.error.message);
+                return [];
+            }
+            return result.data || [];
+        },
+
+        // UPDATE tabla SET ... WHERE id = ?
+        update: async function(table, id, updates, idColumn) {
+            idColumn = idColumn || 'id';
+            var result = await sbClient
+                .from(table)
+                .update(updates)
+                .eq(idColumn, id)
+                .select()
+                .single();
+
+            if (result.error) {
+                console.error('[Supabase] Error update ' + table + ':', result.error.message);
+                return null;
+            }
+            return result.data;
+        },
+
+        // DELETE FROM tabla WHERE id = ?
+        remove: async function(table, id, idColumn) {
+            idColumn = idColumn || 'id';
+            var result = await sbClient
+                .from(table)
+                .delete()
+                .eq(idColumn, id);
+
+            if (result.error) {
+                console.error('[Supabase] Error remove ' + table + ':', result.error.message);
+                return false;
+            }
+            return true;
+        },
+
+        // SELECT * FROM tabla WHERE column = value
+        getWhere: async function(table, column, value) {
+            var result = await sbClient
+                .from(table)
+                .select('*')
+                .eq(column, value);
+
+            if (result.error) {
+                console.error('[Supabase] Error getWhere ' + table + ':', result.error.message);
+                return [];
+            }
+            return result.data || [];
+        },
+
+        // Llamar función RPC
+        rpc: async function(functionName, params) {
+            params = params || {};
+            var result = await sbClient.rpc(functionName, params);
+
+            if (result.error) {
+                console.error('[Supabase] Error rpc ' + functionName + ':', result.error.message);
+                return null;
+            }
+            return result.data;
+        },
+
+        // Suscripción Realtime a una tabla
+        subscribe: function(table, callback, event) {
+            event = event || '*';
+            var channel = sbClient
+                .channel('realtime-' + table)
+                .on('postgres_changes',
+                    { event: event, schema: 'public', table: table },
+                    function(payload) {
+                        console.log('[Realtime] ' + table + ':', payload.eventType);
+                        callback(payload);
+                    }
+                )
+                .subscribe();
+
+            return channel;
+        },
+
+        // Cancelar suscripción
+        unsubscribe: function(channel) {
+            if (channel) {
+                sbClient.removeChannel(channel);
             }
         }
-        if (options.order) {
-            query = query.order(options.order.column, { ascending: options.order.ascending ?? true });
-        }
-        if (options.limit) {
-            query = query.limit(options.limit);
-        }
+    };
 
-        const { data, error } = await query;
-        if (error) {
-            console.error(`[Supabase] Error getAll ${table}:`, error.message);
-            return [];
-        }
-        return data || [];
-    },
+    // Exportar al scope global via window
+    window.supabaseInstance = sbClient;
+    window.SupabaseClient = client;
 
-    // SELECT * FROM tabla WHERE id = ?
-    async getById(table, id, idColumn = 'id') {
-        const { data, error } = await _sbClient
-            .from(table)
-            .select('*')
-            .eq(idColumn, id)
-            .single();
-
-        if (error) {
-            if (error.code === 'PGRST116') return null; // Not found
-            console.error(`[Supabase] Error getById ${table}:`, error.message);
-            return null;
-        }
-        return data;
-    },
-
-    // INSERT INTO tabla
-    async insert(table, record) {
-        const { data, error } = await _sbClient
-            .from(table)
-            .insert(record)
-            .select()
-            .single();
-
-        if (error) {
-            console.error(`[Supabase] Error insert ${table}:`, error.message);
-            return null;
-        }
-        return data;
-    },
-
-    // INSERT INTO tabla (múltiples registros)
-    async insertMany(table, records) {
-        const { data, error } = await _sbClient
-            .from(table)
-            .insert(records)
-            .select();
-
-        if (error) {
-            console.error(`[Supabase] Error insertMany ${table}:`, error.message);
-            return [];
-        }
-        return data || [];
-    },
-
-    // UPDATE tabla SET ... WHERE id = ?
-    async update(table, id, updates, idColumn = 'id') {
-        const { data, error } = await _sbClient
-            .from(table)
-            .update(updates)
-            .eq(idColumn, id)
-            .select()
-            .single();
-
-        if (error) {
-            console.error(`[Supabase] Error update ${table}:`, error.message);
-            return null;
-        }
-        return data;
-    },
-
-    // DELETE FROM tabla WHERE id = ?
-    async remove(table, id, idColumn = 'id') {
-        const { error } = await _sbClient
-            .from(table)
-            .delete()
-            .eq(idColumn, id);
-
-        if (error) {
-            console.error(`[Supabase] Error remove ${table}:`, error.message);
-            return false;
-        }
-        return true;
-    },
-
-    // SELECT * FROM tabla WHERE column = value
-    async getWhere(table, column, value) {
-        const { data, error } = await _sbClient
-            .from(table)
-            .select('*')
-            .eq(column, value);
-
-        if (error) {
-            console.error(`[Supabase] Error getWhere ${table}:`, error.message);
-            return [];
-        }
-        return data || [];
-    },
-
-    // Llamar función RPC
-    async rpc(functionName, params = {}) {
-        const { data, error } = await _sbClient.rpc(functionName, params);
-
-        if (error) {
-            console.error(`[Supabase] Error rpc ${functionName}:`, error.message);
-            return null;
-        }
-        return data;
-    },
-
-    // Suscripción Realtime a una tabla
-    subscribe(table, callback, event = '*') {
-        const channel = _sbClient
-            .channel(`realtime-${table}`)
-            .on('postgres_changes',
-                { event, schema: 'public', table },
-                (payload) => {
-                    console.log(`[Realtime] ${table}:`, payload.eventType);
-                    callback(payload);
-                }
-            )
-            .subscribe();
-
-        return channel;
-    },
-
-    // Cancelar suscripción
-    unsubscribe(channel) {
-        if (channel) {
-            _sbClient.removeChannel(channel);
-        }
-    }
-};
-
-// Exportar
-window.supabaseInstance = _sbClient;
-window.SupabaseClient = SupabaseClient;
-
-console.log('[Supabase] Client inicializado');
+    console.log('[Supabase] Client inicializado');
+})();

@@ -3,6 +3,9 @@
 // Implementa la MISMA interfaz que la clase Database de data.js
 // ========================================
 
+// Referencia al helper CRUD exportado por supabase-client.js
+var SupabaseClient = window.SupabaseClient;
+
 class SupabaseDatabase {
     constructor() {
         this.data = null; // Cache en memoria
