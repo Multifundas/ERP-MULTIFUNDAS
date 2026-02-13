@@ -71,7 +71,7 @@
                 '<div class="admin-login-card">' +
                     '<div class="admin-login-header">' +
                         '<div class="admin-login-logo">' +
-                            '<img src="img/logo-multifundas.svg" alt="Multifundas" style="height:36px;">' +
+                            '<i class="fas fa-shield-alt"></i>' +
                         '</div>' +
                         '<h2>Panel ' + roleLabel + '</h2>' +
                         '<p>Ingresa tus credenciales para acceder</p>' +
