@@ -260,31 +260,47 @@ function initPanelOperadora() {
         restaurarEstadoTemporizador();
     }
 
-    // Iniciar reloj
+    // Ejecutar tareas iniciales
     actualizarReloj();
-    setInterval(actualizarReloj, 1000);
-
-    // Verificar recordatorio cada minuto
-    setInterval(verificarRecordatorioHora, 60000);
     verificarRecordatorioHora();
-
-    // Actualizar tiempo de turno
-    setInterval(actualizarTiempoTurno, 60000);
     actualizarTiempoTurno();
-
-    // Actualizar estadísticas en tiempo real
-    setInterval(actualizarEstadisticasEnVivo, 30000);
-
-    // Actualizar progreso del equipo cada 10 segundos
-    setInterval(actualizarProgresoEquipo, 10000);
-
-    // Verificar mensajes de Coco cada 30 segundos
-    setInterval(verificarMensajesCoco, 30000);
     verificarMensajesCoco();
-
-    // Iniciar verificación de conexión
     actualizarIndicadorConexion();
-    setInterval(actualizarIndicadorConexion, 5000);
+
+    // ---- Intervalos consolidados para mejor rendimiento ----
+    // Grupo 1: Cada segundo (solo reloj)
+    window._erpIntervals = [];
+    window._erpIntervals.push(setInterval(actualizarReloj, 1000));
+
+    // Grupo 2: Cada 5 segundos (conexión)
+    window._erpIntervals.push(setInterval(actualizarIndicadorConexion, 5000));
+
+    // Grupo 3: Cada 15 segundos (progreso equipo + nueva asignación)
+    window._erpIntervals.push(setInterval(function() {
+        actualizarProgresoEquipo();
+        verificarNuevaAsignacion();
+    }, 15000));
+
+    // Grupo 4: Cada 30 segundos (estadísticas + mensajes coco)
+    window._erpIntervals.push(setInterval(function() {
+        actualizarEstadisticasEnVivo();
+        verificarMensajesCoco();
+    }, 30000));
+
+    // Grupo 5: Cada 60 segundos (recordatorio hora + tiempo turno)
+    window._erpIntervals.push(setInterval(function() {
+        verificarRecordatorioHora();
+        actualizarTiempoTurno();
+    }, 60000));
+
+    // Grupo 6: Cada 5 minutos (badges)
+    window._erpIntervals.push(setInterval(verificarNuevosBadges, 300000));
+
+    // Función para limpiar todos los intervalos
+    window.clearAllErpIntervals = function() {
+        window._erpIntervals.forEach(function(id) { clearInterval(id); });
+        window._erpIntervals = [];
+    };
 
     // Escuchar cambios de conexión
     window.addEventListener('online', () => {
@@ -296,15 +312,8 @@ function initPanelOperadora() {
         mostrarToast('Sin conexión. Trabajando offline', 'warning');
     });
 
-    // Verificar nuevos badges cada 5 minutos
-    setInterval(verificarNuevosBadges, 300000);
-
     // Verificar si es primer uso (mostrar tutorial)
     verificarPrimerUso();
-
-    // Verificar asignaciones periódicamente (cada 15 segundos)
-    // Esto permite detectar automáticamente cuando Coco asigna un pedido
-    setInterval(verificarNuevaAsignacion, 15000);
 
     console.log('Panel inicializado correctamente');
 }
@@ -4120,36 +4129,61 @@ function sincronizarColaOffline() {
     if (!verificarConexion()) return;
 
     const cola = JSON.parse(localStorage.getItem('cola_offline') || '{"capturas":[],"problemas":[],"eventos":[]}');
+    var totalPendientes = (cola.capturas || []).length + (cola.problemas || []).length;
 
     // Sincronizar capturas
-    cola.capturas.forEach(captura => {
+    (cola.capturas || []).forEach(captura => {
         sincronizarConSupervisora(captura);
     });
 
     // Sincronizar problemas
-    cola.problemas.forEach(problema => {
+    (cola.problemas || []).forEach(problema => {
         notificarSupervisora(problema);
     });
 
     // Limpiar cola
     localStorage.setItem('cola_offline', JSON.stringify({capturas:[],problemas:[],eventos:[]}));
 
-    if (cola.capturas.length > 0 || cola.problemas.length > 0) {
-        mostrarToast('Datos sincronizados', 'success');
+    if (totalPendientes > 0) {
+        mostrarToast('Conexión restaurada. ' + totalPendientes + ' acciones sincronizadas', 'success');
     }
+
+    // Quitar banner offline
+    var banner = document.getElementById('offlineBanner');
+    if (banner) banner.remove();
 }
 
 function actualizarIndicadorConexion() {
     const indicador = document.getElementById('conexionIndicador');
     if (indicador) {
+        const cola = JSON.parse(localStorage.getItem('cola_offline') || '{"capturas":[],"problemas":[],"eventos":[]}');
+        const pendientes = (cola.capturas || []).length + (cola.problemas || []).length + (cola.eventos || []).length;
+
         if (verificarConexion()) {
             indicador.className = 'conexion-indicador online';
             indicador.innerHTML = '<i class="fas fa-wifi"></i>';
             indicador.title = 'Conectado';
+            // Quitar banner offline si existe
+            var banner = document.getElementById('offlineBanner');
+            if (banner) banner.remove();
         } else {
             indicador.className = 'conexion-indicador offline';
-            indicador.innerHTML = '<i class="fas fa-wifi-slash"></i>';
-            indicador.title = 'Sin conexión';
+            indicador.innerHTML = '<i class="fas fa-wifi-slash"></i>' +
+                (pendientes > 0 ? '<span class="offline-badge">' + pendientes + '</span>' : '');
+            indicador.title = 'Sin conexión' + (pendientes > 0 ? ' (' + pendientes + ' pendientes)' : '');
+            // Mostrar banner offline persistente
+            if (!document.getElementById('offlineBanner')) {
+                var banner = document.createElement('div');
+                banner.id = 'offlineBanner';
+                banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:8px 16px;text-align:center;font-size:0.85rem;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
+                banner.innerHTML = '<i class="fas fa-wifi-slash"></i> Modo Offline — Los datos se sincronizarán al reconectar' +
+                    (pendientes > 0 ? ' <span style="background:rgba(0,0,0,0.2);padding:2px 8px;border-radius:10px;margin-left:8px;">' + pendientes + ' acciones pendientes</span>' : '');
+                document.body.prepend(banner);
+            } else {
+                var banner = document.getElementById('offlineBanner');
+                banner.innerHTML = '<i class="fas fa-wifi-slash"></i> Modo Offline — Los datos se sincronizarán al reconectar' +
+                    (pendientes > 0 ? ' <span style="background:rgba(0,0,0,0.2);padding:2px 8px;border-radius:10px;margin-left:8px;">' + pendientes + ' acciones pendientes</span>' : '');
+            }
         }
     }
 }

@@ -9,11 +9,19 @@
     var SESSION_KEY = 'erp_admin_session';
     var sb = window.supabaseInstance;
 
-    // Verificar si hay sesión activa
+    var SESSION_EXPIRY_MS = 8 * 60 * 60 * 1000; // 8 horas
+
+    // Verificar si hay sesión activa (con expiración)
     function getSession() {
         try {
             var session = JSON.parse(sessionStorage.getItem(SESSION_KEY));
             if (session && session.userId && session.rol) {
+                var loginTime = new Date(session.loginTime);
+                var now = new Date();
+                if ((now - loginTime) > SESSION_EXPIRY_MS) {
+                    sessionStorage.removeItem(SESSION_KEY);
+                    return null;
+                }
                 return session;
             }
         } catch (e) {}
@@ -25,9 +33,20 @@
             userId: data.user_id,
             nombre: data.user_nombre,
             rol: data.user_rol,
+            permisos: data.user_permisos || {},
             loginTime: new Date().toISOString()
         }));
     }
+
+    // Verificar si el usuario tiene un permiso específico
+    // Admin siempre tiene todos los permisos
+    window.tienePermiso = function(permiso) {
+        var session = getSession();
+        if (!session) return false;
+        if (session.rol === 'admin') return true;
+        if (!session.permisos) return false;
+        return session.permisos[permiso] === true;
+    };
 
     function clearSession() {
         sessionStorage.removeItem(SESSION_KEY);
@@ -162,42 +181,17 @@
                     errorEl.style.display = 'block';
                 }
             } else {
-                // Fallback: login local simple
-                doLocalLogin(username, password, errorEl);
+                errorEl.textContent = 'Servicio no disponible. Intenta más tarde.';
+                errorEl.style.display = 'block';
             }
         } catch (err) {
             console.error('[Auth] Error en login:', err.message);
-            // Fallback a login local
-            doLocalLogin(username, password, errorEl);
+            errorEl.textContent = 'Error de conexión. Verifica tu internet e intenta de nuevo.';
+            errorEl.style.display = 'block';
         }
 
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Ingresar';
-    }
-
-    // Login local como fallback
-    function doLocalLogin(username, password, errorEl) {
-        var requiredRole = getRequiredRole();
-        // Credenciales por defecto para fallback
-        var validUsers = {
-            'admin': { password: '1234', nombre: 'Administrador', rol: 'admin' },
-            'supervisora': { password: '1234', nombre: 'Supervisora', rol: 'supervisora' }
-        };
-
-        var user = validUsers[username.toLowerCase()];
-        if (user && user.password === password) {
-            if (user.rol === requiredRole || user.rol === 'admin') {
-                setSession({ user_id: 0, user_nombre: user.nombre, user_rol: user.rol });
-                removeLoginScreen();
-                return;
-            } else {
-                errorEl.textContent = 'No tienes permiso para este panel';
-                errorEl.style.display = 'block';
-            }
-        } else {
-            errorEl.textContent = 'Usuario o contraseña incorrectos';
-            errorEl.style.display = 'block';
-        }
     }
 
     function removeLoginScreen() {
@@ -221,8 +215,9 @@
             return;
         }
 
-        // Permitir bypass con ?noauth=1 en desarrollo
-        if (window.location.search.includes('noauth=1')) {
+        // Permitir bypass con ?noauth=1 SOLO en localhost
+        if (window.location.search.includes('noauth=1') &&
+            (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
             return;
         }
 

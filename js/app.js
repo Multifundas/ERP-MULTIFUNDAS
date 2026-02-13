@@ -150,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initTopBar();
         initModal();
         initSearchBox();
+        aplicarPermisos();
         loadDashboard();
         loadNotifications();
         initLiveUpdates();
@@ -227,6 +228,26 @@ function sincronizarEstadoOperadoresAlInicio() {
 // ========================================
 // NOTIFICACIONES DE PEDIDOS COMPLETADOS
 // ========================================
+
+// Sonido de notificación via Web Audio API
+function playNotificationSound() {
+    try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        // Tono doble: ding-dong
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.4);
+    } catch (e) { /* Audio no disponible */ }
+}
+
 function initCompletionNotifications() {
     // Rastrear IDs de notificaciones ya mostradas para no repetir
     var _shownCompletionIds = new Set();
@@ -237,36 +258,55 @@ function initCompletionNotifications() {
         existing.forEach(function(n) {
             if (n.tipo === 'pedido_completado') _shownCompletionIds.add(n.id);
         });
+        var existingAdmin = JSON.parse(localStorage.getItem('notificaciones_admin') || '[]');
+        existingAdmin.forEach(function(n) {
+            if (n.tipo === 'pedido_completado') _shownCompletionIds.add(n.id);
+        });
     } catch (e) {}
 
     // Escuchar cambios via realtime-sync
     window.addEventListener('sync-update', function(event) {
-        if (event.detail && event.detail.key === 'notificaciones_coco') {
+        if (event.detail && (event.detail.key === 'notificaciones_coco' || event.detail.key === 'notificaciones_admin')) {
             checkForNewCompletions(event.detail.value);
         }
     });
 
-    // También escuchar storage events (cambios locales)
+    // También escuchar storage events (cambios desde otras pestañas)
     window.addEventListener('storage', function(event) {
-        if (event.key === 'notificaciones_coco' && event.newValue) {
+        if ((event.key === 'notificaciones_coco' || event.key === 'notificaciones_admin') && event.newValue) {
             try {
                 checkForNewCompletions(JSON.parse(event.newValue));
             } catch (e) {}
         }
     });
 
+    // Polling cada 30 segundos como respaldo
+    setInterval(function() {
+        try {
+            var admin = JSON.parse(localStorage.getItem('notificaciones_admin') || '[]');
+            checkForNewCompletions(admin);
+            var coco = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+            checkForNewCompletions(coco);
+        } catch (e) {}
+        updateNotificationBadge();
+    }, 30000);
+
     function checkForNewCompletions(notifs) {
         if (!Array.isArray(notifs)) return;
+        var hasNew = false;
         notifs.forEach(function(n) {
             if (n.tipo === 'pedido_completado' && !_shownCompletionIds.has(n.id)) {
                 _shownCompletionIds.add(n.id);
+                hasNew = true;
                 // Mostrar toast prominente
                 showCompletionToast(n);
-                // Refrescar notificaciones y alertas
-                if (typeof loadNotifications === 'function') loadNotifications();
-                if (typeof loadAlertas === 'function') loadAlertas();
             }
         });
+        if (hasNew) {
+            playNotificationSound();
+            if (typeof loadNotifications === 'function') loadNotifications();
+            if (typeof loadAlertas === 'function') loadAlertas();
+        }
     }
 
     function showCompletionToast(notif) {
@@ -296,6 +336,24 @@ function initCompletionNotifications() {
             if (toastEl.parentElement) toastEl.remove();
         }, 10000);
     }
+}
+
+// Actualizar badge de notificaciones desde todas las fuentes
+function updateNotificationBadge() {
+    var badge = document.querySelector('#notificationsBtn .badge');
+    if (!badge) return;
+    var count = 0;
+    try {
+        // Contar no leídas de db (notificaciones internas)
+        if (typeof db !== 'undefined' && typeof db.getNotificacionesNoLeidas === 'function') {
+            count += db.getNotificacionesNoLeidas().length;
+        }
+        // Contar no leídas de notificaciones_admin (de supervisora)
+        var admin = JSON.parse(localStorage.getItem('notificaciones_admin') || '[]');
+        count += admin.filter(function(n) { return !n.leida; }).length;
+    } catch (e) {}
+    badge.textContent = count;
+    badge.style.display = count > 0 ? 'block' : 'none';
 }
 
 // ========================================
@@ -369,6 +427,36 @@ function loadSectionContent(section) {
         case 'auditoria':
             loadAuditoria();
             break;
+    }
+}
+
+// ========================================
+// PERMISOS: Ocultar secciones según permisos del usuario
+// ========================================
+function aplicarPermisos() {
+    if (typeof tienePermiso !== 'function') return;
+
+    // Mapa de secciones a permisos requeridos
+    var seccionPermisos = {
+        'costeo': 'ver_costos',
+        'personal': 'gestionar_personal',
+        'auditoria': 'ver_auditoria'
+    };
+
+    // Ocultar items del sidebar según permisos
+    document.querySelectorAll('.nav-item[data-section]').forEach(function(item) {
+        var seccion = item.dataset.section;
+        var permiso = seccionPermisos[seccion];
+        if (permiso && !tienePermiso(permiso)) {
+            item.style.display = 'none';
+        }
+    });
+
+    // Ocultar botones de exportación si no tiene permiso
+    if (!tienePermiso('exportar_datos')) {
+        document.querySelectorAll('[onclick*="exportar"], [onclick*="export"]').forEach(function(btn) {
+            btn.style.display = 'none';
+        });
     }
 }
 
@@ -514,7 +602,74 @@ function calcularCostoRealVsEstimado() {
     };
 }
 
+// ========================================
+// DASHBOARD CONFIGURABLE
+// ========================================
+var DASHBOARD_WIDGETS = {
+    kpis: 'KPIs Principales',
+    metricas: 'Métricas (Efectividad / Costos)',
+    alertas: 'Alertas Activas',
+    costos: 'Comparación Costo Real vs Estimado',
+    pedidos_pendientes: 'Pedidos Pendientes',
+    pedidos_criticos: 'Pedidos Críticos'
+};
+
+function getDashboardConfig() {
+    try {
+        return JSON.parse(localStorage.getItem('erp_dashboard_config') || '{}');
+    } catch(e) { return {}; }
+}
+
+function applyDashboardConfig() {
+    var config = getDashboardConfig();
+    document.querySelectorAll('[data-widget]').forEach(function(el) {
+        var key = el.dataset.widget;
+        if (config[key] === false) {
+            el.style.display = 'none';
+        } else {
+            el.style.display = '';
+        }
+    });
+}
+
+function showDashboardConfig() {
+    var config = getDashboardConfig();
+    var html = '<div style="padding:8px 0;">';
+    Object.keys(DASHBOARD_WIDGETS).forEach(function(key) {
+        var checked = config[key] !== false ? 'checked' : '';
+        html += '<label style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(100,116,139,0.15);cursor:pointer;">' +
+            '<input type="checkbox" ' + checked + ' onchange="toggleDashboardWidget(\'' + key + '\', this.checked)" ' +
+            'style="width:18px;height:18px;accent-color:#667eea;">' +
+            '<span style="flex:1;">' + DASHBOARD_WIDGETS[key] + '</span>' +
+            '</label>';
+    });
+    html += '</div>';
+    html += '<div style="margin-top:12px;text-align:right;">' +
+        '<button class="btn btn-secondary btn-sm" onclick="resetDashboardConfig()" style="margin-right:8px;">' +
+        '<i class="fas fa-undo"></i> Restaurar</button>' +
+        '<button class="btn btn-primary btn-sm" onclick="closeModal()">' +
+        '<i class="fas fa-check"></i> Listo</button></div>';
+
+    openModal('Configurar Dashboard', html);
+}
+
+function toggleDashboardWidget(key, visible) {
+    var config = getDashboardConfig();
+    config[key] = visible;
+    localStorage.setItem('erp_dashboard_config', JSON.stringify(config));
+    applyDashboardConfig();
+}
+
+function resetDashboardConfig() {
+    localStorage.removeItem('erp_dashboard_config');
+    applyDashboardConfig();
+    showDashboardConfig();
+}
+
 function loadDashboard() {
+    // Aplicar configuración de widgets visibles
+    applyDashboardConfig();
+
     const periodo = document.getElementById('periodFilter')?.value || 'month';
     const stats = db.getDashboardStats(periodo);
 
@@ -718,14 +873,14 @@ function loadPlantMap() {
             }
 
             const tooltip = tieneAsignacion
-                ? `${operadorNombre || 'Operador'} - ${procesoTooltip}${piezasHoy > 0 ? ` (${piezasHoy} pzas)` : ''}`
+                ? `${S(operadorNombre || 'Operador')} - ${S(procesoTooltip)}${piezasHoy > 0 ? ` (${piezasHoy} pzas)` : ''}`
                 : operadorNombre
-                    ? `${operadorNombre} - Sin proceso`
-                    : pos.nombre;
+                    ? `${S(operadorNombre)} - Sin proceso`
+                    : S(pos.nombre);
 
             if (!operadorNombre && !tieneAsignacion) {
                 return `
-                    <div class="workstation empty clickable" data-tooltip="${pos.nombre}" data-id="${pos.id}" onclick="showPosicionDetalle('${pos.id}')">
+                    <div class="workstation empty clickable" data-tooltip="${S(pos.nombre)}" data-id="${pos.id}" onclick="showPosicionDetalle('${pos.id}')">
                         <span class="workstation-code">${pos.id}</span>
                     </div>
                 `;
@@ -740,10 +895,10 @@ function loadPlantMap() {
             const badgeMultiple = totalProcesos > 1 ? `<span class="workstation-multi-badge">${totalProcesos}</span>` : '';
 
             return `
-                <div class="workstation ${estado} clickable" data-tooltip="${tooltip}" data-id="${pos.id}" onclick="showPosicionDetalle('${pos.id}')" style="${colorBorde ? `border-color: ${colorBorde}; border-width: 2px;` : ''}">
-                    <span class="workstation-initials">${iniciales}</span>
+                <div class="workstation ${estado} clickable" data-tooltip="${S(tooltip)}" data-id="${pos.id}" onclick="showPosicionDetalle('${pos.id}')" style="${colorBorde ? `border-color: ${S(colorBorde)}; border-width: 2px;` : ''}">
+                    <span class="workstation-initials">${S(iniciales)}</span>
                     <span class="workstation-code">${pos.id}</span>
-                    ${tieneAsignacion ? `<span class="workstation-proceso" title="${procesoTooltip}">${procesoTexto.substring(0, 10)}${procesoTexto.length > 10 ? '..' : ''}</span>` : ''}
+                    ${tieneAsignacion ? `<span class="workstation-proceso" title="${S(procesoTooltip)}">${S(procesoTexto.substring(0, 10))}${procesoTexto.length > 10 ? '..' : ''}</span>` : ''}
                     ${estaTrabajando ? '<span class="workstation-trabajando"><i class="fas fa-circle"></i></span>' : ''}
                     ${badgeMultiple}
                 </div>
@@ -756,7 +911,7 @@ function loadPlantMap() {
         return `
             <div class="map-area" style="border-color: ${area.color}20;">
                 <div class="map-area-header" style="color: ${area.color};">
-                    ${area.nombre}${posicionesLabel}
+                    ${S(area.nombre)}${posicionesLabel}
                 </div>
                 <div class="map-area-positions">
                     ${posicionesHtml}
@@ -821,7 +976,7 @@ function showGestionAreasPlanta() {
                             <div class="area-planta-info">
                                 <div class="area-planta-header">
                                     <span class="area-planta-color" style="background: ${area.color}"></span>
-                                    <h4>${area.nombre}</h4>
+                                    <h4>${S(area.nombre)}</h4>
                                 </div>
                                 <div class="area-planta-stats">
                                     <span><i class="fas fa-desktop"></i> ${estacionesArea.length} posiciones</span>
@@ -953,7 +1108,7 @@ function editarAreaPlanta(areaId) {
         <form id="formEditarArea" data-area-id="${areaId}">
             <div class="form-group">
                 <label>Nombre del Área *</label>
-                <input type="text" name="nombre" value="${area.nombre}" required>
+                <input type="text" name="nombre" value="${S(area.nombre)}" required>
             </div>
 
             <div class="form-group">
@@ -1080,7 +1235,7 @@ function eliminarAreaPlanta(areaId) {
     const content = `
         <div class="confirm-delete">
             <i class="fas fa-exclamation-triangle text-warning" style="font-size: 3rem;"></i>
-            <h4>¿Eliminar área "${area.nombre}"?</h4>
+            <h4>¿Eliminar área "${S(area.nombre)}"?</h4>
             <p class="text-muted">Esta acción eliminará el área y sus ${estacionesArea.length} posiciones.</p>
             <p class="text-danger"><strong>Esta acción no se puede deshacer.</strong></p>
         </div>
@@ -1114,7 +1269,7 @@ function verEstacionesAreaModal(areaId) {
     const content = `
         <div class="area-estaciones-modal">
             <div class="area-info-header" style="border-left: 4px solid ${area.color}; padding-left: 15px; margin-bottom: 20px;">
-                <h4 style="margin: 0; color: ${area.color}">${area.nombre}</h4>
+                <h4 style="margin: 0; color: ${S(area.color)}">${S(area.nombre)}</h4>
                 <p class="text-muted">${estaciones.length} posiciones</p>
             </div>
 
@@ -1128,11 +1283,11 @@ function verEstacionesAreaModal(areaId) {
                         <div class="estacion-list-item ${operador ? 'ocupada' : 'libre'}">
                             <div class="estacion-list-info">
                                 <span class="estacion-list-id" id="estacion-id-${est.id}">${est.id}</span>
-                                <span class="estacion-list-nombre">${est.nombre}</span>
+                                <span class="estacion-list-nombre">${S(est.nombre)}</span>
                             </div>
                             <div class="estacion-list-operador">
                                 ${operador ? `
-                                    <span class="badge badge-${estado?.estado || 'empty'}">${operador.nombre}</span>
+                                    <span class="badge badge-${estado?.estado || 'empty'}">${S(operador.nombre)}</span>
                                 ` : `
                                     <span class="badge badge-empty">Vacante</span>
                                 `}
@@ -1835,19 +1990,15 @@ function loadCostoVsEstimado() {
 // ========================================
 // PEDIDOS PENDIENTES POR ENTREGAR
 // ========================================
-function loadPedidosPendientes() {
-    console.log('[loadPedidosPendientes] === INICIANDO ===');
+var _pedidosPendientesPage = 1;
+
+function loadPedidosPendientes(page) {
+    if (page) _pedidosPendientesPage = page;
 
     const tbody = document.getElementById('pendingDeliveryTable');
-    if (!tbody) {
-        console.error('[loadPedidosPendientes] ERROR: Tabla pendingDeliveryTable NO ENCONTRADA');
-        return;
-    }
-    console.log('[loadPedidosPendientes] Tabla encontrada OK');
+    if (!tbody) return;
 
-    // Verificar que db existe
     if (typeof db === 'undefined') {
-        console.error('[loadPedidosPendientes] ERROR: db no está definido');
         tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error: Base de datos no disponible</td></tr>';
         return;
     }
@@ -1855,45 +2006,32 @@ function loadPedidosPendientes() {
     let todosPedidos = [];
     try {
         todosPedidos = db.getPedidos() || [];
-        console.log('[loadPedidosPendientes] Total pedidos en DB:', todosPedidos.length);
-        if (todosPedidos.length > 0) {
-            console.log('[loadPedidosPendientes] Pedidos raw:', JSON.stringify(todosPedidos.map(p => ({id: p.id, estado: p.estado}))));
-        } else {
-            console.warn('[loadPedidosPendientes] ADVERTENCIA: No hay pedidos en la base de datos');
-        }
     } catch (e) {
-        console.error('[loadPedidosPendientes] ERROR al obtener pedidos:', e);
         tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error al obtener pedidos: ' + e.message + '</td></tr>';
         return;
     }
 
-    // Mostrar TODOS los pedidos que NO estén entregados
     const estadosEntregados = ['entregado', 'cancelado', 'anulado'];
     const pedidos = todosPedidos.filter(p => {
         const estado = (p.estado || 'pendiente').toLowerCase().trim();
-        const incluir = !estadosEntregados.includes(estado);
-        console.log(`[loadPedidosPendientes] Pedido #${p.id} estado="${estado}" -> incluir=${incluir}`);
-        return incluir;
+        return !estadosEntregados.includes(estado);
     });
-
-    console.log('[loadPedidosPendientes] Pedidos filtrados:', pedidos.length);
 
     const clientes = db.getClientes();
     const productos = db.getProductos();
 
-    // Ordenar por fecha de entrega
     pedidos.sort((a, b) => new Date(a.fechaEntrega || '2099-12-31') - new Date(b.fechaEntrega || '2099-12-31'));
 
     if (pedidos.length === 0) {
-        console.log('[loadPedidosPendientes] No hay pedidos, mostrando mensaje vacío');
         tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No hay pedidos pendientes</td></tr>';
         return;
     }
 
-    console.log('[loadPedidosPendientes] Generando HTML para', pedidos.length, 'pedidos...');
+    // Paginación
+    var pedidosPagina = typeof paginarArray === 'function' ? paginarArray(pedidos, _pedidosPendientesPage) : pedidos;
 
     try {
-        tbody.innerHTML = pedidos.map(pedido => {
+        tbody.innerHTML = pedidosPagina.map(pedido => {
             const cliente = clientes.find(c => c.id === pedido.clienteId);
             const productosArr = pedido.productos || [];
             const totalCantidad = productosArr.reduce((sum, p) => sum + (p.cantidad || 0), 0);
@@ -1964,9 +2102,17 @@ function loadPedidosPendientes() {
             `;
         }).join('');
 
-    console.log('[loadPedidosPendientes] HTML generado exitosamente');
+    // Agregar paginación
+    var paginacionEl = document.getElementById('pedidosPendientesPaginacion');
+    if (!paginacionEl) {
+        paginacionEl = document.createElement('div');
+        paginacionEl.id = 'pedidosPendientesPaginacion';
+        tbody.closest('.orders-table-container')?.after(paginacionEl);
+    }
+    if (typeof renderPaginacion === 'function') {
+        paginacionEl.innerHTML = renderPaginacion('pedidosPendientesPaginacion', pedidos.length, _pedidosPendientesPage, 'loadPedidosPendientes');
+    }
     } catch (error) {
-        console.error('[loadPedidosPendientes] ERROR al generar HTML:', error);
         tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error al cargar pedidos: ' + error.message + '</td></tr>';
     }
 }
@@ -2036,7 +2182,7 @@ function generarEtapasPedido(pedido, productos) {
             if (rutaProcesos.length === 0) {
                 return `
                     <div class="etapas-producto">
-                        <h5>${producto.nombre} (${pp.cantidad} piezas)</h5>
+                        <h5>${S(producto.nombre)} (${pp.cantidad} piezas)</h5>
                         <p class="text-muted text-small">Este producto no tiene procesos definidos</p>
                     </div>
                 `;
@@ -2096,7 +2242,7 @@ function generarEtapasPedido(pedido, productos) {
 
         return `
             <div class="etapas-producto">
-                <h5>${producto.nombre} <span class="text-muted">(${pp.completadas}/${pp.cantidad} piezas)</span></h5>
+                <h5>${S(producto.nombre)} <span class="text-muted">(${pp.completadas}/${pp.cantidad} piezas)</span></h5>
                 <div class="etapas-timeline">
                     ${avanceProcesos.map(proc => {
                         const porcentaje = pp.cantidad > 0 ? Math.round((proc.completadas / pp.cantidad) * 100) : 0;
@@ -2158,7 +2304,7 @@ function loadAreasLive() {
         return `
             <div class="area-card">
                 <div class="area-header">
-                    <span class="area-name">${area.nombre}</span>
+                    <span class="area-name">${S(area.nombre)}</span>
                     <span class="area-status ${produccionEnArea.length > 0 ? '' : 'inactive'}"></span>
                 </div>
                 <div class="area-stats">
@@ -2180,7 +2326,7 @@ function loadAreasLive() {
                         const enProduccion = produccionEnArea.find(p => p.operadorId === op.id);
                         return `<span class="operator-chip">
                             <span class="status-dot ${enProduccion ? '' : 'paused'}"></span>
-                            ${op.nombre.split(' ')[0]}
+                            ${S(op.nombre.split(' ')[0])}
                         </span>`;
                     }).join('')}
                     ${operadoresEnArea.length > 4 ? `<span class="operator-chip">+${operadoresEnArea.length - 4}</span>` : ''}
@@ -2251,8 +2397,8 @@ function loadPedidosLegacy() {
                         return `
                             <tr data-estado="${pedido.estado}" class="pedido-row">
                                 <td><strong>#${pedido.id}</strong></td>
-                                <td>${cliente ? cliente.nombreComercial : 'N/A'}</td>
-                                <td title="${productosNombres}">${pedido.productos.length} producto(s)</td>
+                                <td>${cliente ? S(cliente.nombreComercial) : 'N/A'}</td>
+                                <td title="${S(productosNombres)}">${pedido.productos.length} producto(s)</td>
                                 <td>${totalCantidad.toLocaleString()}</td>
                                 <td>
                                     <div class="progress-bar">
@@ -2404,7 +2550,7 @@ function updateProductosCliente(clienteId) {
                    data-precio="${p.precioVenta || 0}"
                    onchange="calcularPresupuestoPedido()">
             <label for="prod_${p.id}" class="producto-pedido-label">
-                <span class="producto-nombre">${p.nombre}</span>
+                <span class="producto-nombre">${S(p.nombre)}</span>
                 <span class="producto-precio">$${(p.precioVenta || 0).toFixed(2)}</span>
             </label>
             <input type="number" name="cantidad_${p.id}" placeholder="Cant" min="1"
@@ -2790,7 +2936,7 @@ function viewPedido(id) {
                             <div class="proceso-avance-item ${estadoClass}">
                                 <div class="proceso-avance-header">
                                     <span class="proceso-orden">${proc.procesoOrden}</span>
-                                    <span class="proceso-nombre">${proc.nombre}</span>
+                                    <span class="proceso-nombre">${S(proc.nombre)}</span>
                                     <span class="proceso-estado-icon">${estadoIcon}</span>
                                 </div>
                                 <div class="proceso-avance-bar">
@@ -2811,7 +2957,7 @@ function viewPedido(id) {
         return `
             <div class="producto-detalle-card">
                 <div class="producto-detalle-header">
-                    <h5>${prod ? prod.nombre : 'N/A'}</h5>
+                    <h5>${prod ? S(prod.nombre) : 'N/A'}</h5>
                     <div class="producto-avance-general">
                         <div class="progress-bar">
                             <div class="progress" style="width: ${avanceGeneral}%"></div>
@@ -2832,7 +2978,7 @@ function viewPedido(id) {
         <div class="pedido-detalle-info">
             <div class="info-row">
                 <span class="info-label"><i class="fas fa-user"></i> Cliente:</span>
-                <span class="info-value">${cliente ? cliente.nombreComercial : 'N/A'}</span>
+                <span class="info-value">${cliente ? S(cliente.nombreComercial) : 'N/A'}</span>
             </div>
             <div class="info-row">
                 <span class="info-label"><i class="fas fa-calendar-plus"></i> Fecha Carga:</span>
@@ -3103,14 +3249,14 @@ function loadClientesLegacy() {
                 return `
                 <div class="card cliente-card">
                     <div class="card-header">
-                        <span class="card-title">${cliente.nombreComercial}</span>
-                        <span class="status-badge ${cliente.tipo === 'estrategico' ? 'success' : cliente.tipo === 'interno' ? 'info' : 'warning'}">${cliente.tipo}</span>
+                        <span class="card-title">${S(cliente.nombreComercial)}</span>
+                        <span class="status-badge ${cliente.tipo === 'estrategico' ? 'success' : cliente.tipo === 'interno' ? 'info' : 'warning'}">${S(cliente.tipo)}</span>
                     </div>
-                    <p class="text-muted mb-1">${cliente.razonSocial}</p>
+                    <p class="text-muted mb-1">${S(cliente.razonSocial)}</p>
                     <div class="mb-1">
-                        <i class="fas fa-user"></i> ${cliente.contacto}<br>
-                        <i class="fas fa-envelope"></i> ${cliente.email}<br>
-                        <i class="fas fa-phone"></i> ${cliente.telefono}
+                        <i class="fas fa-user"></i> ${S(cliente.contacto)}<br>
+                        <i class="fas fa-envelope"></i> ${S(cliente.email)}<br>
+                        <i class="fas fa-phone"></i> ${S(cliente.telefono)}
                     </div>
 
                     <!-- Artículos Frecuentes -->
@@ -3127,8 +3273,8 @@ function loadClientesLegacy() {
                                     const prod = productos.find(p => p.id === art.productoId);
                                     return `
                                         <div class="articulo-item">
-                                            <span class="articulo-nombre" title="${prod ? prod.nombre : 'Producto no encontrado'}">
-                                                ${prod ? prod.nombre.substring(0, 25) + (prod.nombre.length > 25 ? '...' : '') : 'N/A'}
+                                            <span class="articulo-nombre" title="${prod ? S(prod.nombre) : 'Producto no encontrado'}">
+                                                ${prod ? S(prod.nombre.substring(0, 25)) + (prod.nombre.length > 25 ? '...' : '') : 'N/A'}
                                             </span>
                                             <span class="articulo-precio">$${(art.ultimoPrecio || 0).toFixed(2)}</span>
                                             <button class="btn-icon-tiny" onclick="removeArticuloFrecuente(${cliente.id}, ${art.productoId})" title="Quitar">
@@ -6937,14 +7083,7 @@ function loadPersonalPlantMap() {
     }).join('');
 }
 
-function getIniciales(nombre) {
-    if (!nombre || typeof nombre !== 'string') return '??';
-    const partes = nombre.trim().split(' ');
-    if (partes.length >= 2 && partes[0] && partes[1]) {
-        return (partes[0][0] + partes[1][0]).toUpperCase();
-    }
-    return nombre.substring(0, 2).toUpperCase();
-}
+// getIniciales() movida a utils.js
 
 function getEstadoTexto(estado) {
     const textos = {
@@ -9989,68 +10128,11 @@ function togglePortalCliente(id) {
 // ========================================
 // AUDITORÍA
 // ========================================
+// loadAuditoria: usa versión enhanced (definida más abajo)
 function loadAuditoria() {
-    const section = document.getElementById('section-auditoria');
-    const auditoria = db.getAuditoria();
-
-    section.innerHTML = `
-        <div class="section-header">
-            <h1>Bitácora de Auditoría</h1>
-            <div>
-                <select id="auditFilter" style="padding:8px 15px; border-radius:var(--radius-md); margin-right:10px">
-                    <option value="">Todas las acciones</option>
-                    <option value="cliente">Clientes</option>
-                    <option value="pedido">Pedidos</option>
-                    <option value="producto">Productos</option>
-                    <option value="proceso">Procesos</option>
-                    <option value="material">Materiales</option>
-                </select>
-                <button class="btn btn-secondary" onclick="exportAuditoria()">
-                    <i class="fas fa-download"></i> Exportar
-                </button>
-            </div>
-        </div>
-
-        <div class="orders-table-container">
-            <table class="data-table" id="auditoriaTable">
-                <thead>
-                    <tr>
-                        <th>Fecha/Hora</th>
-                        <th>Usuario</th>
-                        <th>Acción</th>
-                        <th>Detalle</th>
-                        <th>Entidad</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${auditoria.map(log => `
-                        <tr data-entidad="${log.entidad}">
-                            <td>${formatDateTime(log.fecha)}</td>
-                            <td>${log.usuario}</td>
-                            <td><strong>${log.accion}</strong></td>
-                            <td>${log.detalle}</td>
-                            <td><span class="status-badge info">${capitalizeFirst(log.entidad)}</span></td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
-
-    document.getElementById('auditFilter').addEventListener('change', (e) => {
-        const filter = e.target.value;
-        document.querySelectorAll('#auditoriaTable tbody tr').forEach(row => {
-            if (!filter || row.dataset.entidad === filter) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
-        });
-    });
-}
-
-function exportAuditoria() {
-    alert('Exportación en desarrollo');
+    if (typeof loadAuditoriaEnhanced === 'function') {
+        loadAuditoriaEnhanced();
+    }
 }
 
 // ========================================
@@ -10058,33 +10140,102 @@ function exportAuditoria() {
 // ========================================
 function loadNotifications() {
     const list = document.getElementById('notificationsList');
-    const notifications = db.getNotificaciones();
-    const badge = document.querySelector('.btn-icon .badge');
-    const unread = db.getNotificacionesNoLeidas().length;
+    // Combinar notificaciones internas (db) con las de administración (localStorage)
+    const dbNotifs = db.getNotificaciones() || [];
+    var adminNotifs = [];
+    try {
+        adminNotifs = JSON.parse(localStorage.getItem('notificaciones_admin') || '[]');
+    } catch (e) {}
 
-    badge.textContent = unread;
-    badge.style.display = unread > 0 ? 'block' : 'none';
+    // Mapear admin notifs al mismo formato
+    var adminMapped = adminNotifs.map(function(n) {
+        return {
+            id: 'admin_' + n.id,
+            _adminId: n.id,
+            tipo: n.tipo === 'pedido_completado' ? 'success' : (n.tipo || 'info'),
+            titulo: n.titulo || 'Notificación',
+            mensaje: n.mensaje || '',
+            fecha: n.fecha,
+            leida: !!n.leida,
+            pedidoId: n.pedidoId,
+            _source: 'admin'
+        };
+    });
 
-    list.innerHTML = notifications.map(notif => `
-        <div class="notification-item ${notif.leida ? '' : 'unread'}" onclick="markNotificationRead(${notif.id})">
-            <div class="notification-title">
-                <i class="fas ${notif.tipo === 'warning' ? 'fa-exclamation-triangle text-warning' : notif.tipo === 'danger' ? 'fa-times-circle text-danger' : 'fa-info-circle text-info'}"></i>
-                ${notif.titulo}
-            </div>
-            <div class="notification-text">${notif.mensaje}</div>
-            <div class="notification-time">${formatDateTime(notif.fecha)}</div>
-        </div>
-    `).join('');
+    var dbMapped = dbNotifs.map(function(n) {
+        n._source = 'db';
+        return n;
+    });
+
+    // Combinar y ordenar por fecha (más recientes primero)
+    var allNotifs = dbMapped.concat(adminMapped);
+    allNotifs.sort(function(a, b) {
+        return new Date(b.fecha) - new Date(a.fecha);
+    });
+
+    // Limitar a 50
+    allNotifs = allNotifs.slice(0, 50);
+
+    // Actualizar badge
+    updateNotificationBadge();
+
+    // Función para obtener icono según tipo
+    function getNotifIcon(tipo) {
+        if (tipo === 'warning') return 'fa-exclamation-triangle text-warning';
+        if (tipo === 'danger') return 'fa-times-circle text-danger';
+        if (tipo === 'success' || tipo === 'pedido_completado') return 'fa-check-circle text-success';
+        return 'fa-info-circle text-info';
+    }
+
+    if (allNotifs.length === 0) {
+        list.innerHTML = '<div class="notification-empty"><i class="fas fa-bell-slash"></i><p>No hay notificaciones</p></div>';
+    } else {
+        list.innerHTML = allNotifs.map(function(notif) {
+            var readClass = notif.leida ? '' : 'unread';
+            var sourceLabel = notif._source === 'admin' ? '<span class="notif-source">Supervisora</span>' : '';
+            return '<div class="notification-item ' + readClass + '" onclick="markNotificationRead(\'' + S(String(notif.id)) + '\')">' +
+                '<div class="notification-title">' +
+                    '<i class="fas ' + getNotifIcon(notif.tipo) + '"></i> ' +
+                    S(notif.titulo) + sourceLabel +
+                '</div>' +
+                '<div class="notification-text">' + S(notif.mensaje) + '</div>' +
+                '<div class="notification-time">' + formatDateTime(notif.fecha) + '</div>' +
+            '</div>';
+        }).join('');
+    }
 
     // Marcar todas como leídas
-    document.querySelector('.notifications-header .btn-link').onclick = () => {
-        db.marcarTodasLeidas();
-        loadNotifications();
-    };
+    var markAllBtn = document.querySelector('.notifications-header .btn-link');
+    if (markAllBtn) {
+        markAllBtn.onclick = function() {
+            db.marcarTodasLeidas();
+            // Marcar admin notifs como leídas
+            try {
+                var an = JSON.parse(localStorage.getItem('notificaciones_admin') || '[]');
+                an.forEach(function(n) { n.leida = true; });
+                localStorage.setItem('notificaciones_admin', JSON.stringify(an));
+            } catch (e) {}
+            loadNotifications();
+        };
+    }
 }
 
 function markNotificationRead(id) {
-    db.marcarNotificacionLeida(id);
+    // Determinar si es notificación admin o db
+    if (typeof id === 'string' && id.indexOf('admin_') === 0) {
+        var adminId = parseInt(id.replace('admin_', ''));
+        try {
+            var notifs = JSON.parse(localStorage.getItem('notificaciones_admin') || '[]');
+            var notif = notifs.find(function(n) { return n.id === adminId; });
+            if (notif) {
+                notif.leida = true;
+                localStorage.setItem('notificaciones_admin', JSON.stringify(notifs));
+            }
+        } catch (e) {}
+    } else {
+        db.marcarNotificacionLeida(id);
+    }
+    loadNotifications();
     loadNotifications();
 }
 
@@ -10243,27 +10394,7 @@ function registrarPausaOperador(alertaId) {
 }
 
 // Función para mostrar toast de confirmación
-function showToast(mensaje, tipo = 'success') {
-    const toast = document.createElement('div');
-    toast.className = `toast-message ${tipo}`;
-
-    const iconos = {
-        'success': 'fa-check-circle',
-        'error': 'fa-times-circle',
-        'warning': 'fa-exclamation-triangle',
-        'info': 'fa-info-circle'
-    };
-    const icono = iconos[tipo] || 'fa-check-circle';
-
-    toast.innerHTML = `<i class="fas ${icono}"></i> ${S(mensaje)}`;
-    document.body.appendChild(toast);
-
-    setTimeout(() => toast.classList.add('show'), 10);
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-}
+// showToast() en utils.js
 
 // ========================================
 // AJUSTES DEL SISTEMA
@@ -14245,8 +14376,11 @@ function loadPersonalEnhanced() {
                 <button class="btn btn-info" onclick="showReporteAsistencia()">
                     <i class="fas fa-clipboard-check"></i> Asistencia
                 </button>
+                <button class="btn btn-secondary" onclick="exportarPersonalPDF()">
+                    <i class="fas fa-file-pdf"></i> PDF
+                </button>
                 <button class="btn btn-secondary" onclick="exportPersonalToExcel()">
-                    <i class="fas fa-file-excel"></i> Exportar
+                    <i class="fas fa-file-excel"></i> Excel
                 </button>
                 <button class="btn btn-primary" onclick="showNuevoEmpleadoModal()">
                     <i class="fas fa-plus"></i> Nuevo Empleado
@@ -14391,8 +14525,9 @@ function loadPersonalEnhanced() {
     });
 }
 
-// Filtrar tabla de personal
+// Filtrar tabla de personal (con persistencia)
 function filterPersonalTable(filter) {
+    if (typeof saveFilter === 'function') saveFilter('personal_rol', filter);
     const rows = document.querySelectorAll('#personalTableEnhanced tbody tr');
     rows.forEach(row => {
         if (filter === 'todos' || row.dataset.rol === filter) {
@@ -14403,9 +14538,10 @@ function filterPersonalTable(filter) {
     });
 }
 
-// Buscar personal
+// Buscar personal (con persistencia)
 function searchPersonal() {
     const search = document.getElementById('searchPersonal').value.toLowerCase();
+    if (typeof saveFilter === 'function') saveFilter('personal_search', search);
     const rows = document.querySelectorAll('#personalTableEnhanced tbody tr');
 
     rows.forEach(row => {
@@ -15174,12 +15310,6 @@ window.loadCosteo = function() {
     loadCosteoEnhanced();
 };
 
-// Reemplazar carga de auditoría con versión mejorada
-const originalLoadAuditoria = window.loadAuditoria;
-window.loadAuditoria = function() {
-    loadAuditoriaEnhanced();
-};
-
 // ========================================
 // FUNCIONES AUXILIARES ADICIONALES
 // ========================================
@@ -15395,15 +15525,7 @@ function editAreaPlanta(areaId) {
     });
 }
 
-// Obtener iniciales de un nombre
-function getIniciales(nombre) {
-    if (!nombre) return '??';
-    const partes = nombre.split(' ');
-    if (partes.length >= 2) {
-        return (partes[0][0] + partes[1][0]).toUpperCase();
-    }
-    return nombre.substring(0, 2).toUpperCase();
-}
+// getIniciales() en utils.js
 
 // Obtener texto de estado
 function getEstadoTexto(estado) {
@@ -18719,6 +18841,129 @@ function addThemeToggleButton() {
 // ========================================
 // GENERACIÓN DE PDFs
 // ========================================
+
+// Función genérica para exportar reportes a PDF
+function exportarReportePDF(titulo, columnas, datos, nombreArchivo) {
+    if (typeof window.jspdf === 'undefined') {
+        showToast('Librería jsPDF no disponible', 'error');
+        return;
+    }
+
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF();
+
+    // Header
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 0, 210, 30, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('MULTIFUNDAS', 15, 12);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(titulo, 15, 22);
+    doc.setFontSize(8);
+    doc.text('Generado: ' + new Date().toLocaleString('es-MX'), 195, 22, { align: 'right' });
+
+    doc.setTextColor(0, 0, 0);
+
+    // Tabla con autotable
+    if (doc.autoTable) {
+        doc.autoTable({
+            head: [columnas],
+            body: datos,
+            startY: 38,
+            styles: { fontSize: 8, cellPadding: 3 },
+            headStyles: { fillColor: [102, 126, 234], textColor: 255, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [245, 247, 250] },
+            margin: { left: 10, right: 10 }
+        });
+    }
+
+    // Footer
+    var pageCount = doc.internal.getNumberOfPages();
+    for (var i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7);
+        doc.setTextColor(150);
+        doc.text('ERP Multifundas - Página ' + i + ' de ' + pageCount, 105, 290, { align: 'center' });
+    }
+
+    doc.save((nombreArchivo || 'reporte') + '.pdf');
+    showToast('PDF generado: ' + (nombreArchivo || 'reporte') + '.pdf', 'success');
+}
+
+// Exportar Dashboard a PDF
+function exportarDashboardPDF() {
+    var stats = db.getDashboardStats('month');
+    var pedidos = db.getPedidos().filter(function(p) {
+        return !['entregado', 'cancelado', 'anulado'].includes((p.estado || '').toLowerCase());
+    });
+    var clientes = db.getClientes();
+
+    var columnas = ['Pedido', 'Cliente', 'Estado', 'Fecha Entrega', 'Avance'];
+    var datos = pedidos.slice(0, 50).map(function(p) {
+        var cliente = clientes.find(function(c) { return c.id === p.clienteId; });
+        return [
+            '#' + p.id,
+            cliente ? cliente.nombreComercial : 'N/A',
+            p.estado || 'pendiente',
+            p.fechaEntrega ? new Date(p.fechaEntrega).toLocaleDateString('es-MX') : '-',
+            (calcularAvancePedido(p, db.getProductos()) || 0) + '%'
+        ];
+    });
+
+    exportarReportePDF(
+        'Reporte Dashboard - Pedidos Activos',
+        columnas, datos,
+        'dashboard_' + new Date().toISOString().split('T')[0]
+    );
+}
+
+// Exportar Personal a PDF
+function exportarPersonalPDF() {
+    var personal = db.getPersonal().filter(function(p) { return p.activo; });
+
+    var columnas = ['Nombre', 'Rol', 'Entrada', 'Salida', 'Salario/Hr'];
+    var datos = personal.map(function(emp) {
+        return [
+            emp.nombre,
+            emp.rol || '-',
+            emp.horaEntrada || '08:00',
+            emp.horaSalida || '17:00',
+            '$' + (emp.salarioHora || 0).toFixed(2)
+        ];
+    });
+
+    exportarReportePDF(
+        'Reporte de Personal',
+        columnas, datos,
+        'personal_' + new Date().toISOString().split('T')[0]
+    );
+}
+
+// Exportar Asistencia a PDF
+function exportarAsistenciaPDF() {
+    var historial = JSON.parse(localStorage.getItem('historial_asistencia') || '[]');
+    var personal = db.getPersonal();
+
+    var columnas = ['Fecha', 'Empleado', 'Tipo', 'Motivo'];
+    var datos = historial.slice(0, 100).map(function(reg) {
+        var emp = personal.find(function(p) { return p.id === reg.personal_id; });
+        return [
+            reg.fecha || '-',
+            emp ? emp.nombre : 'ID:' + reg.personal_id,
+            reg.tipo || '-',
+            reg.motivo || '-'
+        ];
+    });
+
+    exportarReportePDF(
+        'Reporte de Asistencia',
+        columnas, datos,
+        'asistencia_' + new Date().toISOString().split('T')[0]
+    );
+}
 
 function generarOrdenTrabajoPDF(pedidoId) {
     if (typeof window.jspdf === 'undefined') {

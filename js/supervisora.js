@@ -213,7 +213,7 @@ function renderLayoutInSupervisora(layout) {
                 letter-spacing: 1px;
                 text-transform: uppercase;
                 box-shadow: 0 2px 8px ${colors.border}40;
-            ">${element.name || colors.label}</div>
+            ">${S(element.name || colors.label)}</div>
             <div class="zone-stats" style="
                 position: absolute;
                 bottom: 8px;
@@ -1109,8 +1109,8 @@ function renderPedidosList() {
                             <span class="pedido-badge ${pedido.prioridad}">${pedido.prioridad}</span>
                             ${esListoEntrega ? '<span class="pedido-badge listo-entrega-badge"><i class="fas fa-check-circle"></i> Listo</span>' : ''}
                         </div>
-                        <div class="pedido-cliente-name">${clienteNombre}</div>
-                        ${articulosTexto ? `<div class="pedido-articulo-name"><i class="fas fa-box-open"></i> ${articulosTexto}</div>` : ''}
+                        <div class="pedido-cliente-name">${S(clienteNombre)}</div>
+                        ${articulosTexto ? `<div class="pedido-articulo-name"><i class="fas fa-box-open"></i> ${S(articulosTexto)}</div>` : ''}
                         ${pedido.notas ? `<div class="pedido-notas-preview"><i class="fas fa-sticky-note"></i> ${S(pedido.notas.substring(0, 80))}${pedido.notas.length > 80 ? '...' : ''}</div>` : ''}
                         <div class="pedido-avance-bar">
                             <div class="pedido-avance-fill ${avancePedido >= 100 ? 'completado' : avancePedido >= 70 ? 'avanzado' : avancePedido >= 30 ? 'medio' : ''}" style="width:${Math.min(avancePedido, 100)}%"></div>
@@ -1865,7 +1865,7 @@ function renderProcesosActivos() {
     container.innerHTML = activos.map(m => `
         <div class="proceso-item">
             <span class="proceso-estacion">${m.id}</span>
-            <span class="proceso-nombre">${m.procesoNombre}</span>
+            <span class="proceso-nombre">${S(m.procesoNombre)}</span>
             <span class="proceso-piezas">${m.piezasHoy} pzas</span>
         </div>
     `).join('');
@@ -1965,8 +1965,8 @@ function renderAlertas() {
         <div class="alerta-item ${a.tipo}">
             <i class="fas ${a.icono}"></i>
             <div class="alerta-content">
-                <span class="alerta-mensaje">${a.mensaje}</span>
-                ${a.detalle ? `<span class="alerta-detalle">${a.detalle}</span>` : ''}
+                <span class="alerta-mensaje">${S(a.mensaje)}</span>
+                ${a.detalle ? `<span class="alerta-detalle">${S(a.detalle)}</span>` : ''}
             </div>
         </div>
     `).join('');
@@ -2925,9 +2925,7 @@ function toggleFullscreen() {
     }
 }
 
-function getIniciales(nombre) {
-    return nombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-}
+// getIniciales() en utils.js
 
 function selectPedido(pedidoId) {
     // Highlight pedido
@@ -2951,21 +2949,7 @@ function closeModal() {
     document.getElementById('modalOverlay').classList.remove('active');
 }
 
-// ========================================
-// TOAST
-// ========================================
-
-function showToast(message, type = 'info') {
-    const container = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-
-    const icon = type === 'success' ? 'check' : type === 'error' ? 'times' : type === 'warning' ? 'exclamation' : 'info';
-    toast.innerHTML = `<i class="fas fa-${icon}-circle"></i> ${message}`;
-
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-}
+// showToast() en utils.js
 
 // ========================================
 // SISTEMA LIBERAR OPERADOR

@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ERP Multifundas - Sistema de Producción</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#667eea">
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
@@ -135,6 +137,12 @@
                     <div class="section-header">
                         <h1>Dashboard Ejecutivo</h1>
                         <div class="date-filter">
+                            <button class="btn btn-secondary btn-sm" onclick="exportarDashboardPDF()" title="Exportar PDF">
+                                <i class="fas fa-file-pdf"></i>
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="showDashboardConfig()" title="Configurar widgets">
+                                <i class="fas fa-cog"></i>
+                            </button>
                             <select id="periodFilter">
                                 <option value="day">Día</option>
                                 <option value="week">Semana</option>
@@ -147,7 +155,7 @@
                     </div>
 
                     <!-- KPI Cards - Primera fila -->
-                    <div class="kpi-grid">
+                    <div class="kpi-grid" data-widget="kpis">
                         <div class="kpi-card clickable" onclick="showKPIDetalle('procesos')">
                             <div class="kpi-icon green">
                                 <i class="fas fa-play-circle"></i>
@@ -187,7 +195,7 @@
                     </div>
 
                     <!-- Segunda fila KPIs -->
-                    <div class="kpi-grid kpi-grid-2">
+                    <div class="kpi-grid kpi-grid-2" data-widget="metricas">
                         <div class="kpi-card metric-card clickable" onclick="showKPIDetalle('efectividad')">
                             <div class="metric-header">
                                 <span class="metric-title">% Efectividad Promedio</span>
@@ -219,7 +227,7 @@
                     </div>
 
                     <!-- Alertas Activas -->
-                    <div class="alerts-section">
+                    <div class="alerts-section" data-widget="alertas">
                         <h3><i class="fas fa-exclamation-triangle"></i> Alertas Activas</h3>
                         <div class="alerts-grid" id="alertsContainer">
                             <!-- Las alertas se cargan dinámicamente -->
@@ -227,7 +235,7 @@
                     </div>
 
                     <!-- Costo vs Estimado -->
-                    <div class="cost-comparison-section">
+                    <div class="cost-comparison-section" data-widget="costos">
                         <div class="section-header-inline">
                             <h3><i class="fas fa-balance-scale-right"></i> Costo Real vs Estimado</h3>
                             <select id="costPeriodFilter" onchange="loadCostoVsEstimado()">
@@ -245,7 +253,7 @@
                     </div>
 
                     <!-- Pedidos Pendientes por Entregar -->
-                    <div class="orders-section pending-delivery-section">
+                    <div class="orders-section pending-delivery-section" data-widget="pedidos_pendientes">
                         <h3><i class="fas fa-truck"></i> Pedidos Pendientes por Entregar</h3>
                         <div class="orders-table-container">
                             <table class="data-table">
@@ -269,7 +277,7 @@
                     </div>
 
                     <!-- Pedidos Críticos -->
-                    <div class="orders-section">
+                    <div class="orders-section" data-widget="pedidos_criticos">
                         <h3><i class="fas fa-clock"></i> Pedidos Críticos</h3>
                         <div class="orders-table-container">
                             <table class="data-table">
@@ -527,6 +535,7 @@
     <script src="js/realtime-sync.js"></script>
     <script src="js/database-adapter.js"></script>
     <script src="js/sanitize.js"></script>
+    <script src="js/utils.js"></script>
 
     <script src="js/data.js"></script>
     <script src="js/app.js"></script>

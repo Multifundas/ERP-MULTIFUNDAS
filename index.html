@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ERP Multifundas - Acceso</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -123,12 +127,63 @@
             line-height: 1.4;
         }
 
+        .landing-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 12px;
+        }
+
+        .landing-clock {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .landing-conexion {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #64748b;
+        }
+
+        .status-dot.online { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.5); }
+        .status-dot.offline { background: #ef4444; }
+
+        .landing-card-meta {
+            margin-top: 10px;
+            font-size: 0.7rem;
+            color: #64748b;
+        }
+
         .landing-footer {
             margin-top: 48px;
             text-align: center;
             color: #475569;
             font-size: 0.75rem;
         }
+
+        /* Animaciones de entrada */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .landing-header { animation: fadeInUp 0.6s ease; }
+        .landing-card:nth-child(1) { animation: fadeInUp 0.6s ease 0.1s both; }
+        .landing-card:nth-child(2) { animation: fadeInUp 0.6s ease 0.2s both; }
+        .landing-card:nth-child(3) { animation: fadeInUp 0.6s ease 0.3s both; }
+        .landing-card:nth-child(4) { animation: fadeInUp 0.6s ease 0.4s both; }
+        .landing-footer { animation: fadeInUp 0.6s ease 0.5s both; }
 
         @media (max-width: 600px) {
             .landing-grid {
@@ -153,6 +208,13 @@
         </div>
         <h1>ERP Multifundas</h1>
         <p>Sistema de Control de Produccion</p>
+        <div class="landing-status">
+            <span class="landing-clock" id="landingClock"></span>
+            <span class="landing-conexion">
+                <span class="status-dot" id="supabaseStatus"></span>
+                <span id="supabaseLabel">Verificando...</span>
+            </span>
+        </div>
     </div>
 
     <div class="landing-grid">
@@ -162,6 +224,7 @@
             </div>
             <h3>Administracion</h3>
             <p>Dashboard, pedidos, clientes, productos, reportes y costeo</p>
+            <div class="landing-card-meta" id="lastAccess-admin"></div>
         </a>
 
         <a href="supervisora.html" class="landing-card">
@@ -170,6 +233,7 @@
             </div>
             <h3>Supervisora</h3>
             <p>Mapa de planta, asignaciones, control de produccion en tiempo real</p>
+            <div class="landing-card-meta" id="lastAccess-supervisora"></div>
         </a>
 
         <a href="panel-operadora/operadora.html" class="landing-card">
@@ -178,6 +242,7 @@
             </div>
             <h3>Operadora</h3>
             <p>Captura de piezas, registro de produccion y estado de maquinas</p>
+            <div class="landing-card-meta" id="lastAccess-operadora"></div>
         </a>
 
         <a href="layout-editor.html" class="landing-card">
@@ -186,11 +251,82 @@
             </div>
             <h3>Editor de Planta</h3>
             <p>Diseño y configuracion del layout de la planta de produccion</p>
+            <div class="landing-card-meta" id="lastAccess-layout"></div>
         </a>
     </div>
 
     <div class="landing-footer">
         ERP Multifundas &copy; 2025
     </div>
+
+    <script src="js/supabase-config.js"></script>
+    <script src="js/supabase-client.js"></script>
+    <script>
+    // Registrar Service Worker
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').then(function(reg) {
+            console.log('[PWA] Service Worker registrado:', reg.scope);
+        }).catch(function(err) {
+            console.log('[PWA] Error registrando SW:', err);
+        });
+    }
+    </script>
+    <script>
+    (function() {
+        // Reloj en vivo
+        function actualizarReloj() {
+            var now = new Date();
+            var opciones = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+            var el = document.getElementById('landingClock');
+            if (el) el.textContent = now.toLocaleDateString('es-MX', opciones);
+        }
+        actualizarReloj();
+        setInterval(actualizarReloj, 30000);
+
+        // Verificar conexión a Supabase
+        var dot = document.getElementById('supabaseStatus');
+        var label = document.getElementById('supabaseLabel');
+        if (window.supabaseInstance) {
+            window.supabaseInstance.from('config_sistema').select('id').limit(1).then(function(res) {
+                if (res.error) {
+                    dot.className = 'status-dot offline';
+                    label.textContent = 'Sin conexión a BD';
+                } else {
+                    dot.className = 'status-dot online';
+                    label.textContent = 'Conectado';
+                }
+            }).catch(function() {
+                dot.className = 'status-dot offline';
+                label.textContent = 'Sin conexión';
+            });
+        } else {
+            dot.className = 'status-dot offline';
+            label.textContent = 'BD no configurada';
+        }
+
+        // Último acceso por panel
+        var paneles = ['admin', 'supervisora', 'operadora', 'layout'];
+        paneles.forEach(function(panel) {
+            var el = document.getElementById('lastAccess-' + panel);
+            var last = localStorage.getItem('erp_last_access_' + panel);
+            if (el && last) {
+                var d = new Date(last);
+                el.innerHTML = '<i class="fas fa-clock"></i> ' + d.toLocaleDateString('es-MX') + ' ' + d.toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit'});
+            }
+        });
+
+        // Registrar acceso al hacer click en las cards
+        document.querySelectorAll('.landing-card').forEach(function(card) {
+            card.addEventListener('click', function() {
+                var href = card.getAttribute('href') || '';
+                var panel = 'admin';
+                if (href.includes('supervisora')) panel = 'supervisora';
+                else if (href.includes('operadora')) panel = 'operadora';
+                else if (href.includes('layout')) panel = 'layout';
+                localStorage.setItem('erp_last_access_' + panel, new Date().toISOString());
+            });
+        });
+    })();
+    </script>
 </body>
 </html>

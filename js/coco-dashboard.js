@@ -205,12 +205,12 @@ function renderCocoDashboard() {
                                     <i class="fas ${alerta.icono}"></i>
                                 </div>
                                 <div class="alerta-content">
-                                    <h4>${alerta.titulo}</h4>
-                                    <p>${alerta.mensaje}</p>
+                                    <h4>${S(alerta.titulo)}</h4>
+                                    <p>${S(alerta.mensaje)}</p>
                                 </div>
                                 ${alerta.accion ? `
-                                    <button class="alerta-action" onclick="${alerta.accion}">
-                                        ${alerta.accionTexto}
+                                    <button class="alerta-action" onclick="${S(alerta.accion)}">
+                                        ${S(alerta.accionTexto)}
                                     </button>
                                 ` : ''}
                             </div>
@@ -759,6 +759,7 @@ function renderCocoCalendario() {
             <!-- Leyenda -->
             <div class="calendario-leyenda">
                 <span class="leyenda-item"><span class="dot entrega"></span> Entrega</span>
+                <span class="leyenda-item"><span class="dot urgente"></span> Urgente</span>
                 <span class="leyenda-item"><span class="dot ausencia"></span> Ausencia</span>
                 <span class="leyenda-item"><span class="dot pedido"></span> Inicio Pedido</span>
                 <span class="leyenda-item"><span class="dot mantenimiento"></span> Mantenimiento</span>
@@ -808,6 +809,16 @@ function renderDiasCalendario(anio, mes, diasMes, primerDia, eventos) {
     let html = '';
     const hoy = new Date();
 
+    // Calcular carga máxima del mes para normalizar barras
+    var maxEventos = 1;
+    for (let d = 1; d <= diasMes; d++) {
+        var c = eventos.filter(function(e) {
+            var f = new Date(e.fecha);
+            return f.getDate() === d && f.getMonth() === mes;
+        }).length;
+        if (c > maxEventos) maxEventos = c;
+    }
+
     // Dias vacios antes del primer dia
     for (let i = 0; i < primerDia; i++) {
         html += '<div class="dia vacio"></div>';
@@ -825,21 +836,35 @@ function renderDiasCalendario(anio, mes, diasMes, primerDia, eventos) {
         });
 
         const tieneEntrega = eventosDelDia.some(e => e.tipo === 'entrega');
+        const tieneUrgente = eventosDelDia.some(e => e.tipo === 'urgente');
         const tieneAusencia = eventosDelDia.some(e => e.tipo === 'ausencia');
         const tienePedido = eventosDelDia.some(e => e.tipo === 'pedido');
         const tieneMantenimiento = eventosDelDia.some(e => e.tipo === 'mantenimiento');
 
+        // Tooltip con resumen de eventos
+        var tooltipText = '';
+        if (eventosDelDia.length > 0) {
+            tooltipText = eventosDelDia.map(function(e) { return e.titulo; }).join(' | ');
+        }
+
+        // Barra de carga de trabajo (proporción del máximo)
+        var cargaPct = eventosDelDia.length > 0 ? Math.round((eventosDelDia.length / maxEventos) * 100) : 0;
+        var cargaColor = cargaPct > 66 ? '#ef4444' : cargaPct > 33 ? '#f59e0b' : '#22c55e';
+
         html += `
             <div class="dia ${esHoy ? 'hoy' : ''} ${esSeleccionado ? 'seleccionado' : ''} ${eventosDelDia.length > 0 ? 'con-eventos' : ''}"
-                 onclick="seleccionarDia(${anio}, ${mes}, ${dia})">
+                 onclick="seleccionarDia(${anio}, ${mes}, ${dia})"
+                 ${tooltipText ? 'title="' + S(tooltipText) + '"' : ''}>
                 <span class="dia-numero">${dia}</span>
                 <div class="dia-eventos">
                     ${tieneEntrega ? '<span class="evento-dot entrega"></span>' : ''}
+                    ${tieneUrgente ? '<span class="evento-dot urgente"></span>' : ''}
                     ${tieneAusencia ? '<span class="evento-dot ausencia"></span>' : ''}
                     ${tienePedido ? '<span class="evento-dot pedido"></span>' : ''}
                     ${tieneMantenimiento ? '<span class="evento-dot mantenimiento"></span>' : ''}
                 </div>
                 ${eventosDelDia.length > 1 ? `<span class="eventos-count">+${eventosDelDia.length}</span>` : ''}
+                ${eventosDelDia.length > 0 ? `<div class="dia-carga"><div class="dia-carga-bar" style="width:${cargaPct}%;background:${cargaColor}"></div></div>` : ''}
             </div>
         `;
     }
@@ -856,11 +881,16 @@ function getEventosCalendario(anio, mes) {
         if (pedido.fechaEntrega) {
             const fecha = new Date(pedido.fechaEntrega);
             if (fecha.getMonth() === mes && fecha.getFullYear() === anio) {
+                // Detectar pedidos urgentes (prioridad alta o entrega en menos de 2 días)
+                var hoy = new Date();
+                var diasRestantes = Math.ceil((fecha - hoy) / (1000 * 60 * 60 * 24));
+                var esUrgente = pedido.prioridad === 'alta' || pedido.prioridad === 'urgente' || diasRestantes <= 2;
+
                 eventos.push({
                     id: `entrega-${pedido.id}`,
-                    tipo: 'entrega',
-                    titulo: `Entrega Pedido #${pedido.id}`,
-                    descripcion: pedido.clienteNombre || 'Cliente',
+                    tipo: esUrgente ? 'urgente' : 'entrega',
+                    titulo: (esUrgente ? '⚡ ' : '') + `Entrega Pedido #${pedido.id}`,
+                    descripcion: (pedido.clienteNombre || 'Cliente') + (esUrgente ? ' - URGENTE' : ''),
                     fecha: pedido.fechaEntrega,
                     prioridad: pedido.prioridad
                 });
@@ -885,23 +915,35 @@ function renderEventosDelDia(fecha, eventos) {
     });
 
     if (eventosDelDia.length === 0) {
-        return '<p class="sin-eventos">No hay eventos para este dia</p>';
+        return '<div class="sin-eventos"><i class="fas fa-calendar-check"></i><p>No hay eventos para este día</p></div>';
     }
 
-    return eventosDelDia.map(e => `
-        <div class="evento-item ${e.tipo}">
-            <div class="evento-tipo-badge ${e.tipo}">${e.tipo}</div>
-            <div class="evento-info">
-                <strong>${e.titulo}</strong>
-                <span>${e.descripcion || ''}</span>
-            </div>
-            ${e.tipo !== 'entrega' ? `
-                <button class="btn-icon" onclick="eliminarEvento('${e.id}')" title="Eliminar">
-                    <i class="fas fa-trash"></i>
-                </button>
-            ` : ''}
-        </div>
-    `).join('');
+    // Resumen rápido
+    var entregas = eventosDelDia.filter(function(e) { return e.tipo === 'entrega' || e.tipo === 'urgente'; }).length;
+    var ausencias = eventosDelDia.filter(function(e) { return e.tipo === 'ausencia'; }).length;
+    var otros = eventosDelDia.length - entregas - ausencias;
+
+    var resumen = '<div class="eventos-dia-resumen">' +
+        '<span class="resumen-badge">' + eventosDelDia.length + ' evento' + (eventosDelDia.length > 1 ? 's' : '') + '</span>';
+    if (entregas > 0) resumen += '<span class="resumen-tag entrega">' + entregas + ' entrega' + (entregas > 1 ? 's' : '') + '</span>';
+    if (ausencias > 0) resumen += '<span class="resumen-tag ausencia">' + ausencias + ' ausencia' + (ausencias > 1 ? 's' : '') + '</span>';
+    if (otros > 0) resumen += '<span class="resumen-tag otro">' + otros + ' otro' + (otros > 1 ? 's' : '') + '</span>';
+    resumen += '</div>';
+
+    var items = eventosDelDia.map(function(e) {
+        var tipoLabel = e.tipo === 'urgente' ? '⚡ Urgente' : e.tipo.charAt(0).toUpperCase() + e.tipo.slice(1);
+        return '<div class="evento-item ' + S(e.tipo) + '">' +
+            '<div class="evento-tipo-badge ' + S(e.tipo) + '">' + S(tipoLabel) + '</div>' +
+            '<div class="evento-info">' +
+                '<strong>' + S(e.titulo) + '</strong>' +
+                '<span>' + S(e.descripcion || '') + '</span>' +
+                (e.prioridad ? '<span class="evento-prioridad">Prioridad: ' + S(e.prioridad) + '</span>' : '') +
+            '</div>' +
+            (e.tipo !== 'entrega' && e.tipo !== 'urgente' ? '<button class="btn-icon" onclick="eliminarEvento(\'' + S(e.id) + '\')" title="Eliminar"><i class="fas fa-trash"></i></button>' : '') +
+        '</div>';
+    }).join('');
+
+    return resumen + items;
 }
 
 function renderProximasEntregas() {

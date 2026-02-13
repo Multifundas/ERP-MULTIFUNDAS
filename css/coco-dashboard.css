@@ -899,6 +899,7 @@
 }
 
 .dot.entrega { background: var(--coco-danger); }
+.dot.urgente { background: #ff3333; box-shadow: 0 0 4px #ff3333; }
 .dot.ausencia { background: var(--coco-warning); }
 .dot.pedido { background: var(--coco-primary); }
 .dot.mantenimiento { background: #8b5cf6; }
@@ -984,9 +985,28 @@
 }
 
 .evento-dot.entrega { background: var(--coco-danger); }
+.evento-dot.urgente { background: #ff3333; box-shadow: 0 0 4px #ff3333; }
 .evento-dot.ausencia { background: var(--coco-warning); }
 .evento-dot.pedido { background: var(--coco-primary); }
 .evento-dot.mantenimiento { background: #8b5cf6; }
+
+/* Barra de carga de trabajo por día */
+.dia-carga {
+    position: absolute;
+    bottom: 2px;
+    left: 4px;
+    right: 4px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.dia-carga-bar {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
 
 .eventos-count {
     position: absolute;
@@ -1049,9 +1069,69 @@
 }
 
 .evento-tipo-badge.entrega { background: rgba(239, 68, 68, 0.2); color: var(--coco-danger); }
+.evento-tipo-badge.urgente { background: rgba(255, 51, 51, 0.3); color: #ff5555; border: 1px solid rgba(255, 51, 51, 0.4); }
 .evento-tipo-badge.ausencia { background: rgba(245, 158, 11, 0.2); color: var(--coco-warning); }
 .evento-tipo-badge.pedido { background: rgba(102, 126, 234, 0.2); color: var(--coco-primary); }
 .evento-tipo-badge.mantenimiento { background: rgba(139, 92, 246, 0.2); color: #8b5cf6; }
+
+/* Resumen de eventos del día */
+.eventos-dia-resumen {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.resumen-badge {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #e5e7eb;
+    padding: 3px 10px;
+    background: rgba(102, 126, 234, 0.2);
+    border-radius: 12px;
+}
+
+.resumen-tag {
+    font-size: 0.7rem;
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.resumen-tag.entrega { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+.resumen-tag.ausencia { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+.resumen-tag.otro { background: rgba(139, 92, 246, 0.15); color: #c4b5fd; }
+
+.evento-prioridad {
+    display: block;
+    font-size: 0.7rem;
+    color: #9ca3af;
+    margin-top: 2px;
+}
+
+/* Sin eventos mejorado */
+.sin-eventos {
+    text-align: center;
+    padding: 20px;
+}
+
+.sin-eventos i {
+    font-size: 1.5rem;
+    display: block;
+    margin-bottom: 8px;
+    color: #4b5563;
+}
+
+.sin-eventos p {
+    margin: 0;
+}
+
+/* Evento item urgente highlight */
+.evento-item.urgente {
+    border-left: 3px solid #ff3333;
+}
 
 .evento-info {
     flex: 1;
