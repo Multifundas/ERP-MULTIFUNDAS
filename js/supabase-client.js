@@ -4,11 +4,12 @@
 // ========================================
 
 // Inicializar cliente Supabase
-let supabase;
+// NOTA: usamos _sbClient para NO colisionar con window.supabase (el SDK)
+let _sbClient;
 try {
     const supabaseLib = window.supabase;
     if (supabaseLib && supabaseLib.createClient) {
-        supabase = supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        _sbClient = supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         console.log('[Supabase] Cliente creado exitosamente');
     } else {
         console.error('[Supabase] SDK no disponible. window.supabase:', typeof window.supabase);
@@ -24,7 +25,7 @@ try {
 const SupabaseClient = {
     // SELECT * FROM tabla
     async getAll(table, options = {}) {
-        let query = supabase.from(table).select(options.select || '*');
+        let query = _sbClient.from(table).select(options.select || '*');
 
         if (options.filter) {
             for (const [col, val] of Object.entries(options.filter)) {
@@ -48,7 +49,7 @@ const SupabaseClient = {
 
     // SELECT * FROM tabla WHERE id = ?
     async getById(table, id, idColumn = 'id') {
-        const { data, error } = await supabase
+        const { data, error } = await _sbClient
             .from(table)
             .select('*')
             .eq(idColumn, id)
@@ -64,7 +65,7 @@ const SupabaseClient = {
 
     // INSERT INTO tabla
     async insert(table, record) {
-        const { data, error } = await supabase
+        const { data, error } = await _sbClient
             .from(table)
             .insert(record)
             .select()
@@ -79,7 +80,7 @@ const SupabaseClient = {
 
     // INSERT INTO tabla (múltiples registros)
     async insertMany(table, records) {
-        const { data, error } = await supabase
+        const { data, error } = await _sbClient
             .from(table)
             .insert(records)
             .select();
@@ -93,7 +94,7 @@ const SupabaseClient = {
 
     // UPDATE tabla SET ... WHERE id = ?
     async update(table, id, updates, idColumn = 'id') {
-        const { data, error } = await supabase
+        const { data, error } = await _sbClient
             .from(table)
             .update(updates)
             .eq(idColumn, id)
@@ -109,7 +110,7 @@ const SupabaseClient = {
 
     // DELETE FROM tabla WHERE id = ?
     async remove(table, id, idColumn = 'id') {
-        const { error } = await supabase
+        const { error } = await _sbClient
             .from(table)
             .delete()
             .eq(idColumn, id);
@@ -123,7 +124,7 @@ const SupabaseClient = {
 
     // SELECT * FROM tabla WHERE column = value
     async getWhere(table, column, value) {
-        const { data, error } = await supabase
+        const { data, error } = await _sbClient
             .from(table)
             .select('*')
             .eq(column, value);
@@ -137,7 +138,7 @@ const SupabaseClient = {
 
     // Llamar función RPC
     async rpc(functionName, params = {}) {
-        const { data, error } = await supabase.rpc(functionName, params);
+        const { data, error } = await _sbClient.rpc(functionName, params);
 
         if (error) {
             console.error(`[Supabase] Error rpc ${functionName}:`, error.message);
@@ -148,7 +149,7 @@ const SupabaseClient = {
 
     // Suscripción Realtime a una tabla
     subscribe(table, callback, event = '*') {
-        const channel = supabase
+        const channel = _sbClient
             .channel(`realtime-${table}`)
             .on('postgres_changes',
                 { event, schema: 'public', table },
@@ -165,13 +166,13 @@ const SupabaseClient = {
     // Cancelar suscripción
     unsubscribe(channel) {
         if (channel) {
-            supabase.removeChannel(channel);
+            _sbClient.removeChannel(channel);
         }
     }
 };
 
 // Exportar
-window.supabaseInstance = supabase;
+window.supabaseInstance = _sbClient;
 window.SupabaseClient = SupabaseClient;
 
 console.log('[Supabase] Client inicializado');

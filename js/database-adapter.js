@@ -1146,7 +1146,7 @@ class SupabaseDatabase {
             this.data.clientes[index].articulosFrecuentes = this.data.clientes[index].articulosFrecuentes.filter(a => a.productoId !== productoId);
         }
         // Delete from DB where cliente_id and producto_id match
-        supabaseInstance.from('articulos_frecuentes').delete().eq('cliente_id', clienteId).eq('producto_id', productoId).then(() => {});
+        window.supabaseInstance.from('articulos_frecuentes').delete().eq('cliente_id', clienteId).eq('producto_id', productoId).then(() => {});
     }
 }
 
