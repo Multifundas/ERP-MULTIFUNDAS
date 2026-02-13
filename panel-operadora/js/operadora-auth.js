@@ -17,34 +17,20 @@ const CONFIG_ESTACION = {
     nombre: localStorage.getItem('estacion_nombre') || 'Estación 1'
 };
 
-// Base de datos de operadoras (en producción vendría del servidor)
+// Base de datos de operadoras (fallback local si no hay Supabase)
 function getOperadorasDB() {
     const saved = localStorage.getItem('operadoras_db');
     if (saved) {
         return JSON.parse(saved);
     }
-
-    // Datos de ejemplo
-    const operadorasDefault = [
-        { id: 1, numEmpleado: '101', pin: '1234', nombre: 'María García', area: 'costura', foto: null },
-        { id: 2, numEmpleado: '102', pin: '5678', nombre: 'Ana Rodríguez', area: 'costura', foto: null },
-        { id: 3, numEmpleado: '103', pin: '1111', nombre: 'Carmen López', area: 'corte', foto: null },
-        { id: 4, numEmpleado: '104', pin: '2222', nombre: 'Rosa Martínez', area: 'corte', foto: null },
-        { id: 5, numEmpleado: '105', pin: '3333', nombre: 'Laura Sánchez', area: 'empaque', foto: null },
-        { id: 6, numEmpleado: '106', pin: '4444', nombre: 'Patricia Hernández', area: 'empaque', foto: null },
-        { id: 7, numEmpleado: '107', pin: '5555', nombre: 'Sofía González', area: 'serigrafia', foto: null },
-        { id: 8, numEmpleado: '108', pin: '6666', nombre: 'Elena Torres', area: 'calidad', foto: null }
-    ];
-
-    localStorage.setItem('operadoras_db', JSON.stringify(operadorasDefault));
-    return operadorasDefault;
+    return [];
 }
 
 // ========================================
 // FUNCIONES DE AUTENTICACIÓN
 // ========================================
 
-function iniciarSesion() {
+async function iniciarSesion() {
     const numEmpleado = document.getElementById('numEmpleado').value.trim();
     const pin = document.getElementById('pinInput').value.trim();
 
@@ -58,6 +44,85 @@ function iniciarSesion() {
         return;
     }
 
+    // Intentar validación via Supabase RPC (server-side, bcrypt)
+    var sb = window.supabaseInstance;
+    if (sb) {
+        try {
+            var result = await sb.rpc('validate_pin', {
+                p_num_empleado: numEmpleado,
+                p_pin: pin
+            });
+
+            if (result.error) {
+                console.error('[AUTH] Error RPC validate_pin:', result.error.message);
+                // Fallback a validación local si RPC falla
+                return iniciarSesionLocal(numEmpleado, pin);
+            }
+
+            var row = result.data && result.data[0];
+            if (!row) {
+                mostrarErrorLogin('Error de conexión. Intenta de nuevo.');
+                document.getElementById('pinInput').value = '';
+                return;
+            }
+
+            if (row.bloqueado) {
+                mostrarErrorLogin(row.mensaje);
+                document.getElementById('pinInput').value = '';
+                return;
+            }
+
+            if (!row.valid) {
+                mostrarErrorLogin(row.mensaje);
+                document.getElementById('pinInput').value = '';
+                return;
+            }
+
+            // Login exitoso via Supabase
+            var operadora = {
+                id: row.empleado_id,
+                numEmpleado: numEmpleado,
+                nombre: row.empleado_nombre,
+                rol: row.empleado_rol,
+                areaId: row.empleado_area_id
+            };
+
+            // Enriquecer con datos de operadoras_db local si existen
+            var operadorasLocal = getOperadorasDB();
+            var localData = operadorasLocal.find(function(op) { return op.id === row.empleado_id; });
+            if (localData) {
+                operadora.area = localData.area || operadora.area;
+                operadora.foto = localData.foto;
+                operadora.permisos = localData.permisos || {};
+                operadora.horaEntrada = localData.horaEntrada;
+                operadora.horaSalida = localData.horaSalida;
+            }
+
+            authState.operadoraActual = operadora;
+            authState.sesionActiva = true;
+            authState.inicioTurno = new Date();
+
+            guardarSesion();
+            ocultarLogin();
+            mostrarPanel();
+
+            if (typeof initPanelOperadora === 'function') {
+                initPanelOperadora();
+            }
+            return;
+
+        } catch (e) {
+            console.error('[AUTH] Error en validate_pin:', e.message);
+            // Fallback a validación local
+        }
+    }
+
+    // Fallback: validación local (sin Supabase)
+    iniciarSesionLocal(numEmpleado, pin);
+}
+
+// Fallback para cuando Supabase no está disponible
+function iniciarSesionLocal(numEmpleado, pin) {
     const operadoras = getOperadorasDB();
     const operadora = operadoras.find(op =>
         op.numEmpleado === numEmpleado && op.pin === pin
@@ -75,12 +140,9 @@ function iniciarSesion() {
     authState.inicioTurno = new Date();
 
     guardarSesion();
-
-    // Mostrar panel principal
     ocultarLogin();
     mostrarPanel();
 
-    // Inicializar panel
     if (typeof initPanelOperadora === 'function') {
         initPanelOperadora();
     }

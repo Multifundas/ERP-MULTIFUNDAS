@@ -174,7 +174,7 @@ class SupabaseDatabase {
     _mapPersonalFromDB(p) {
         return {
             id: p.id, numEmpleado: p.num_empleado, nombre: p.nombre, rol: p.rol,
-            areaId: p.area_id, pin: p.pin_hash, // En Fase 4 se cambia a hash
+            areaId: p.area_id, // PIN ya no se expone (hash en DB, validación via RPC)
             horaEntrada: p.hora_entrada, horaSalida: p.hora_salida,
             foto: p.foto, activo: p.activo, bloqueado: p.bloqueado,
             permisos: p.permisos || {},
@@ -312,7 +312,7 @@ class SupabaseDatabase {
         if (p.nombre !== undefined) mapped.nombre = p.nombre;
         if (p.rol !== undefined) mapped.rol = p.rol;
         if (p.areaId !== undefined) mapped.area_id = p.areaId;
-        if (p.pin !== undefined) mapped.pin_hash = p.pin;
+        // PIN se maneja via RPC set_pin(), no se escribe directo a pin_hash
         if (p.horaEntrada !== undefined) mapped.hora_entrada = p.horaEntrada;
         if (p.horaSalida !== undefined) mapped.hora_salida = p.horaSalida;
         if (p.foto !== undefined) mapped.foto = p.foto;
@@ -641,6 +641,11 @@ class SupabaseDatabase {
             if (result) {
                 const idx = this.data.personal.findIndex(p => p.id === tempId);
                 if (idx !== -1) this.data.personal[idx] = this._mapPersonalFromDB(result);
+
+                // Hash PIN via server-side RPC
+                if (empleado.pin) {
+                    SupabaseClient.rpc('set_pin', { p_empleado_id: result.id, p_new_pin: empleado.pin });
+                }
             }
         });
 
@@ -653,6 +658,12 @@ class SupabaseDatabase {
         if (index !== -1) {
             this.data.personal[index] = { ...this.data.personal[index], ...updates };
             SupabaseClient.update('personal', id, this._mapPersonalToDB(updates));
+
+            // Si se cambió el PIN, hashear via RPC server-side
+            if (updates.pin) {
+                SupabaseClient.rpc('set_pin', { p_empleado_id: id, p_new_pin: updates.pin });
+            }
+
             return this.data.personal[index];
         }
         return null;

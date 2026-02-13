@@ -1311,7 +1311,7 @@ function sincronizarOperadorasDB() {
         .map(p => ({
             id: p.id,
             numEmpleado: p.numEmpleado || String(100 + p.id),
-            pin: p.pin || '1234',
+            // PIN ya no se expone - validación via Supabase RPC
             nombre: p.nombre,
             area: getAreaPlantaFromAreaId(p.areaId),
             foto: p.foto || null,
@@ -1390,7 +1390,7 @@ function sincronizarOperadorasParaLogin() {
         .map(p => ({
             id: p.id,
             numEmpleado: p.numEmpleado || String(100 + p.id),
-            pin: p.pin || '1234',
+            // PIN ya no se expone aquí - validación via Supabase RPC
             nombre: p.nombre,
             area: obtenerNombreAreaParaSync(p.areaId),
             foto: p.foto || null,

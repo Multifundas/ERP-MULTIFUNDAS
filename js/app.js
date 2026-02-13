@@ -1440,8 +1440,8 @@ function loadAlertas() {
                 <i class="fas ${alerta.tipo === 'warning' ? 'fa-exclamation-circle' : alerta.tipo === 'danger' ? 'fa-times-circle' : 'fa-info-circle'}"></i>
             </div>
             <div class="alert-content">
-                <span class="alert-title">${alerta.titulo}</span>
-                <span class="alert-detail">${alerta.mensaje}</span>
+                <span class="alert-title">${S(alerta.titulo)}</span>
+                <span class="alert-detail">${S(alerta.mensaje)}</span>
             </div>
             ${alerta.accion ? `<button class="btn-small" onclick="${alerta.accion}">Revisar</button>` : ''}
         </div>
@@ -1864,8 +1864,8 @@ function loadPedidosPendientes() {
             return `
                 <tr>
                     <td><strong>#${pedido.id}</strong></td>
-                    <td>${cliente?.nombreComercial || 'N/A'}</td>
-                    <td title="${nombresProductos}">${nombresProductos.substring(0, 30)}${nombresProductos.length > 30 ? '...' : ''}</td>
+                    <td>${S(cliente?.nombreComercial || 'N/A')}</td>
+                    <td title="${S(nombresProductos)}">${S(nombresProductos.substring(0, 30))}${nombresProductos.length > 30 ? '...' : ''}</td>
                     <td>
                         ${totalCompletadas.toLocaleString()} / ${totalCantidad.toLocaleString()}
                         <div class="progress-bar-small">
@@ -2032,10 +2032,10 @@ function generarEtapasPedido(pedido, productos) {
                         const iconClass = proc.estado === 'completado' ? 'fa-check' : proc.estado === 'en_proceso' ? 'fa-cog fa-spin' : 'fa-clock';
 
                         return `
-                            <div class="etapa-item ${estadoClass}" title="${proc.nombre}: ${proc.completadas}/${pp.cantidad} (${porcentaje}%)">
+                            <div class="etapa-item ${estadoClass}" title="${S(proc.nombre)}: ${proc.completadas}/${pp.cantidad} (${porcentaje}%)">
                                 <div class="etapa-numero">${proc.procesoOrden}</div>
                                 <div class="etapa-info">
-                                    <span class="etapa-nombre">${proc.nombre}</span>
+                                    <span class="etapa-nombre">${S(proc.nombre)}</span>
                                     <div class="etapa-progress">
                                         <div class="etapa-progress-bar">
                                             <div class="etapa-progress-fill" style="width:${porcentaje}%"></div>
@@ -2800,8 +2800,8 @@ function generarSeccionImagenesApoyo(pedido) {
             <h4><i class="fas fa-images"></i> Imágenes de Apoyo (${imagenes.length})</h4>
             <div class="imagenes-apoyo-grid">
                 ${imagenes.map((img, index) => `
-                    <div class="imagen-apoyo-item" onclick="ampliarImagen('${img.data}')" title="${img.nombre || 'Imagen ' + (index + 1)}">
-                        <img src="${img.data}" alt="${img.nombre || 'Imagen de apoyo'}">
+                    <div class="imagen-apoyo-item" onclick="ampliarImagen('${S(img.data)}')" title="${S(img.nombre || 'Imagen ' + (index + 1))}">
+                        <img src="${S(img.data)}" alt="${S(img.nombre || 'Imagen de apoyo')}">
                     </div>
                 `).join('')}
             </div>
@@ -10174,7 +10174,7 @@ function showToast(mensaje, tipo = 'success') {
     };
     const icono = iconos[tipo] || 'fa-check-circle';
 
-    toast.innerHTML = `<i class="fas ${icono}"></i> ${mensaje}`;
+    toast.innerHTML = `<i class="fas ${icono}"></i> ${S(mensaje)}`;
     document.body.appendChild(toast);
 
     setTimeout(() => toast.classList.add('show'), 10);
@@ -16434,11 +16434,9 @@ function escapeRegex(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Escapar HTML
+// Escapar HTML (usa la función global S/sanitizeHTML)
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return S(text);
 }
 
 // Funciones auxiliares para abrir detalles

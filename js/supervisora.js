@@ -306,9 +306,9 @@ function renderLayoutInSupervisora(layout) {
 
         if (operadoresCount > 0) {
             operadoresHTML = maquinaState.operadores.map(op => `
-                <div class="operador-chip" data-operador-id="${op.id}" title="${op.nombre}">
-                    <span class="operador-iniciales">${getIniciales(op.nombre)}</span>
-                    <button class="remove-operador" onclick="event.stopPropagation(); removeOperadorFromEstacion('${element.id}', ${op.id})" title="Quitar">&times;</button>
+                <div class="operador-chip" data-operador-id="${op.id}" title="${S(op.nombre)}">
+                    <span class="operador-iniciales">${S(getIniciales(op.nombre))}</span>
+                    <button class="remove-operador" onclick="event.stopPropagation(); removeOperadorFromEstacion('${S(element.id)}', ${op.id})" title="Quitar">&times;</button>
                 </div>
             `).join('');
         } else {
@@ -373,8 +373,8 @@ function renderLayoutInSupervisora(layout) {
             procesosHTML = `
                 <div class="estacion-proceso-new simultaneo">
                     <i class="fas fa-layer-group"></i> ${procesosSimultaneos.length} simultáneos
-                    <span class="procesos-simultaneos-tooltip" title="${procesosSimultaneos.map(p => p.procesoNombre).join(', ')}">
-                        ${procesosSimultaneos.slice(0, 2).map(p => p.procesoNombre.substring(0, 10)).join(', ')}${procesosSimultaneos.length > 2 ? '...' : ''}
+                    <span class="procesos-simultaneos-tooltip" title="${S(procesosSimultaneos.map(p => p.procesoNombre).join(', '))}">
+                        ${S(procesosSimultaneos.slice(0, 2).map(p => p.procesoNombre.substring(0, 10)).join(', '))}${procesosSimultaneos.length > 2 ? '...' : ''}
                     </span>
                     ${iconoTrabajo}
                 </div>
@@ -383,9 +383,9 @@ function renderLayoutInSupervisora(layout) {
             // Proceso único
             procesosHTML = `
                 <div class="estacion-proceso-new">
-                    <i class="fas fa-cog ${estaTrabajando ? 'fa-spin' : ''}"></i> ${maquinaState.procesoNombre}
+                    <i class="fas fa-cog ${estaTrabajando ? 'fa-spin' : ''}"></i> ${S(maquinaState.procesoNombre)}
                     ${maquinaState.colaProcesos && maquinaState.colaProcesos.length > 0 ?
-                        `<span class="cola-badge-mini" title="${maquinaState.colaProcesos.map(p => p.procesoNombre).join(' → ')}">+${maquinaState.colaProcesos.length}</span>`
+                        `<span class="cola-badge-mini" title="${S(maquinaState.colaProcesos.map(p => p.procesoNombre).join(' → '))}">+${maquinaState.colaProcesos.length}</span>`
                     : ''}
                     ${iconoTrabajo}
                 </div>
@@ -1234,7 +1234,7 @@ function renderProcesoItem(proceso, pedidoId) {
              data-proceso-id="${proceso.id}"
              data-orden="${proceso.orden || 0}"
              data-simultaneo="${proceso.simultaneo || false}"
-             title="${titleAttr}">
+             title="${S(titleAttr)}">
             ${tieneInventario ? `
                 <div class="proceso-inventario-completo">
                     <div class="inventario-listo-badge">

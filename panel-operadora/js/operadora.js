@@ -1169,7 +1169,7 @@ function renderizarColaProcesosOperadora(asignacion) {
                     <div class="proceso-operadora-item en-cola ${estaSeleccionado ? 'seleccionado' : ''} ${estaBloqueado ? 'bloqueado' : ''}"
                          data-proceso-id="${proceso.procesoId}"
                          onclick="toggleDetallesProceso('${proceso.procesoId}')"
-                         ${estaBloqueado ? `title="${motivoBloqueo}"` : ''}>
+                         ${estaBloqueado ? `title="${S(motivoBloqueo)}"` : ''}>
                         <div class="proceso-check">
                             ${puedeSeleccionar ? `
                                 <input type="checkbox"
@@ -1177,11 +1177,11 @@ function renderizarColaProcesosOperadora(asignacion) {
                                        onchange="event.stopPropagation(); toggleProcesoSimultaneo('${proceso.procesoId}', '${proceso.procesoNombre}', '${proceso.pedidoId || ''}', '${proceso.productoId || ''}')"
                                        id="check-${proceso.procesoId}">
                             ` : estaBloqueado ? `
-                                <i class="fas fa-lock" title="${motivoBloqueo}"></i>
+                                <i class="fas fa-lock" title="${S(motivoBloqueo)}"></i>
                             ` : `<span class="cola-num">${idx + 1}</span>`}
                         </div>
                         <div class="proceso-info">
-                            <span class="proceso-nombre">${proceso.procesoNombre}</span>
+                            <span class="proceso-nombre">${S(proceso.procesoNombre)}</span>
                             ${estaBloqueado ? `
                                 <span class="proceso-bloqueado-msg"><i class="fas fa-exclamation-triangle"></i> ${motivoBloqueo}</span>
                             ` : `
@@ -2397,7 +2397,7 @@ function mostrarModal(titulo, contenido, botones) {
 
     const footer = document.getElementById('modalFooter');
     footer.innerHTML = botones.map(btn =>
-        `<button class="btn ${btn.class}" onclick="${btn.onclick}">${btn.text}</button>`
+        `<button class="btn ${btn.class}" onclick="${btn.onclick}">${S(btn.text)}</button>`
     ).join('');
 
     document.getElementById('modalOverlay').style.display = 'flex';
@@ -2516,7 +2516,7 @@ function mostrarMotivoPausa() {
                 <button class="btn-motivo-pausa" onclick="pausarProceso('${motivo.id}')"
                         style="--motivo-color: ${motivo.color}">
                     <i class="fas ${motivo.icono}"></i>
-                    <span>${motivo.nombre}</span>
+                    <span>${S(motivo.nombre)}</span>
                     <small>${motivo.detieneTiempo ? 'Detiene tiempo' : 'Sigue contando'}</small>
                 </button>
             `).join('')}
