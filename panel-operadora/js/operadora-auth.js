@@ -821,18 +821,20 @@ function guardarConfigEstacion() {
 // ========================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Verificar si hay sesión activa
-    if (verificarSesionActiva()) {
-        ocultarLogin();
-        mostrarPanel();
-        if (typeof initPanelOperadora === 'function') {
-            initPanelOperadora();
+    dbReady.then(() => {
+        // Verificar si hay sesión activa
+        if (verificarSesionActiva()) {
+            ocultarLogin();
+            mostrarPanel();
+            if (typeof initPanelOperadora === 'function') {
+                initPanelOperadora();
+            }
+        } else {
+            mostrarLogin();
+            ocultarPanel();
         }
-    } else {
-        mostrarLogin();
-        ocultarPanel();
-    }
 
-    // Enfocar primer campo
-    setTimeout(() => enfocarCampo('numEmpleado'), 100);
+        // Enfocar primer campo
+        setTimeout(() => enfocarCampo('numEmpleado'), 100);
+    });
 });

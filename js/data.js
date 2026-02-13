@@ -1358,7 +1358,19 @@ function generarNumEmpleado() {
 }
 
 // Instancia global de la base de datos
-const db = new Database();
+// Si USE_SUPABASE está definido y es true, usa SupabaseDatabase
+let db;
+let dbReady;
+
+if (typeof USE_SUPABASE !== 'undefined' && USE_SUPABASE && typeof SupabaseDatabase !== 'undefined') {
+    console.log('[DB] Usando Supabase como backend');
+    db = new SupabaseDatabase();
+    dbReady = db.ready;
+} else {
+    console.log('[DB] Usando localStorage como backend');
+    db = new Database();
+    dbReady = Promise.resolve();
+}
 
 // ========================================
 // FUNCIONES DE SINCRONIZACIÓN ENTRE PANELES

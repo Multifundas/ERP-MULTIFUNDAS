@@ -145,26 +145,28 @@ window.cerrarDropdownTools = cerrarDropdownTools;
 // INICIALIZACIÓN
 // ========================================
 document.addEventListener('DOMContentLoaded', () => {
-    initNavigation();
-    initTopBar();
-    initModal();
-    initSearchBox();
-    loadDashboard();
-    loadNotifications();
-    initLiveUpdates();
+    dbReady.then(() => {
+        initNavigation();
+        initTopBar();
+        initModal();
+        initSearchBox();
+        loadDashboard();
+        loadNotifications();
+        initLiveUpdates();
 
-    // Sincronización inicial de datos para otros paneles
-    setTimeout(() => {
-        if (typeof sincronizarOperadorasParaLogin === 'function') {
-            sincronizarOperadorasParaLogin();
-        }
-        if (typeof sincronizarPedidosParaOperadoras === 'function') {
-            sincronizarPedidosParaOperadoras();
-        }
-        // Sincronizar estado de operadores al inicio
-        sincronizarEstadoOperadoresAlInicio();
-        console.log('[ADMIN] Sincronización inicial ejecutada');
-    }, 1500);
+        // Sincronización inicial de datos para otros paneles
+        setTimeout(() => {
+            if (typeof sincronizarOperadorasParaLogin === 'function') {
+                sincronizarOperadorasParaLogin();
+            }
+            if (typeof sincronizarPedidosParaOperadoras === 'function') {
+                sincronizarPedidosParaOperadoras();
+            }
+            // Sincronizar estado de operadores al inicio
+            sincronizarEstadoOperadoresAlInicio();
+            console.log('[ADMIN] Sincronización inicial ejecutada');
+        }, 1500);
+    });
 });
 
 // Sincronizar estado de operadores al inicio de la aplicación

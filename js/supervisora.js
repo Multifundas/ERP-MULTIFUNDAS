@@ -43,14 +43,16 @@ const MOTIVOS_TIEMPO_MUERTO = [
 // ========================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    loadThemePreference();
-    loadLayoutFromEditor();
-    loadDataFromERP();
-    initRefreshInterval();
-    initKeyboardShortcuts();
-    initAlertasProximoTermino();
-    cargarColaProcesos();
-    cargarTiemposMuertos();
+    dbReady.then(() => {
+        loadThemePreference();
+        loadLayoutFromEditor();
+        loadDataFromERP();
+        initRefreshInterval();
+        initKeyboardShortcuts();
+        initAlertasProximoTermino();
+        cargarColaProcesos();
+        cargarTiemposMuertos();
+    });
 });
 
 // ========================================
