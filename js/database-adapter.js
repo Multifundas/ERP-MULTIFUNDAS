@@ -149,7 +149,7 @@ class SupabaseDatabase {
     _mapClienteFromDB(c) {
         return {
             id: c.id, nombreComercial: c.nombre_comercial, razonSocial: c.razon_social,
-            rfc: c.rfc, contacto: c.contacto, telefono: c.telefono, email: c.email,
+            rfc: c.rfc, tipo: c.tipo || 'externo', contacto: c.contacto, telefono: c.telefono, email: c.email,
             direccion: c.direccion, ciudad: c.ciudad, estado: c.estado,
             codigoPostal: c.codigo_postal, notas: c.notas, activo: c.activo,
             fechaAlta: c.fecha_alta, articulosFrecuentes: []
@@ -257,6 +257,7 @@ class SupabaseDatabase {
         if (c.ciudad !== undefined) mapped.ciudad = c.ciudad;
         if (c.estado !== undefined) mapped.estado = c.estado;
         if (c.codigoPostal !== undefined) mapped.codigo_postal = c.codigoPostal;
+        if (c.tipo !== undefined) mapped.tipo = c.tipo;
         if (c.notas !== undefined) mapped.notas = c.notas;
         if (c.activo !== undefined) mapped.activo = c.activo;
         return mapped;
