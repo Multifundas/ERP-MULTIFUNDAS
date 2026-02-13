@@ -209,9 +209,9 @@
 
     // Verificar al cargar la página
     function checkAuth() {
-        // Skip si estamos en operadora o layout-editor
+        // Skip si estamos en operadora o landing (tienen su propio auth)
         var path = window.location.pathname.toLowerCase();
-        if (path.includes('operadora') || path.includes('layout-editor') || path.includes('landing')) {
+        if (path.includes('operadora') || path.includes('landing')) {
             return;
         }
 

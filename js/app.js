@@ -424,10 +424,115 @@ function loadSectionContent(section) {
         case 'portal-clientes':
             loadPortalClientes();
             break;
+        case 'usuarios':
+            loadUsuarios();
+            break;
         case 'auditoria':
             loadAuditoria();
             break;
     }
+}
+
+// ========================================
+// USUARIOS Y PERMISOS
+// ========================================
+
+var _permisosDisponibles = [
+    { key: 'ver_costos', label: 'Ver Costeo', icon: 'fa-dollar-sign', desc: 'Acceso a la sección de costeo y márgenes' },
+    { key: 'gestionar_personal', label: 'Gestionar Personal', icon: 'fa-id-badge', desc: 'Ver y editar registros de personal' },
+    { key: 'ver_auditoria', label: 'Ver Auditoría', icon: 'fa-history', desc: 'Acceso al log de auditoría del sistema' },
+    { key: 'exportar_datos', label: 'Exportar Datos', icon: 'fa-file-export', desc: 'Exportar reportes a PDF' },
+    { key: 'gestionar_pedidos', label: 'Gestionar Pedidos', icon: 'fa-clipboard-list', desc: 'Crear, editar y eliminar pedidos' },
+    { key: 'gestionar_clientes', label: 'Gestionar Clientes', icon: 'fa-users', desc: 'Crear, editar y eliminar clientes' },
+    { key: 'gestionar_productos', label: 'Gestionar Productos', icon: 'fa-box', desc: 'Crear, editar y eliminar productos' },
+    { key: 'gestionar_areas', label: 'Gestionar Áreas', icon: 'fa-th-large', desc: 'Modificar áreas y estaciones de planta' },
+    { key: 'gestionar_usuarios', label: 'Gestionar Usuarios', icon: 'fa-user-shield', desc: 'Administrar usuarios y permisos' }
+];
+
+function loadUsuarios() {
+    var section = document.querySelector('.content-area');
+    if (!section) return;
+
+    // Solo admin puede ver esta sección
+    var session = typeof getAdminSession === 'function' ? getAdminSession() : null;
+    if (!session || session.rol !== 'admin') {
+        section.innerHTML = '<div class="section-header"><h2><i class="fas fa-user-shield"></i> Usuarios y Permisos</h2></div>' +
+            '<div class="empty-state"><i class="fas fa-lock"></i><p>Solo el administrador puede gestionar usuarios y permisos.</p></div>';
+        return;
+    }
+
+    var personal = db.getPersonal();
+    // Filtrar solo admin y supervisora
+    var usuarios = personal.filter(function(p) {
+        return p.rol === 'administrador' || p.rol === 'admin' || p.rol === 'supervisora';
+    });
+
+    var listaHTML = usuarios.length === 0
+        ? '<p class="text-muted">No hay usuarios administrativos registrados. Crea un empleado con rol "administrador" o "supervisora" en la sección Personal.</p>'
+        : usuarios.map(function(u) {
+            var permisos = u.permisos || {};
+            var rolBadge = (u.rol === 'admin' || u.rol === 'administrador')
+                ? '<span class="badge badge-primary">Admin</span>'
+                : '<span class="badge badge-info">Supervisora</span>';
+
+            var permisosHTML = _permisosDisponibles.map(function(p) {
+                var checked = (u.rol === 'admin' || u.rol === 'administrador') ? 'checked disabled' : (permisos[p.key] ? 'checked' : '');
+                var isAdmin = (u.rol === 'admin' || u.rol === 'administrador');
+                return '<label class="permiso-toggle" title="' + S(p.desc) + '">' +
+                    '<input type="checkbox" ' + checked + ' data-user-id="' + u.id + '" data-permiso="' + p.key + '"' +
+                    (isAdmin ? '' : ' onchange="togglePermisoUsuario(this)"') + '>' +
+                    '<span><i class="fas ' + p.icon + '"></i> ' + S(p.label) + '</span>' +
+                '</label>';
+            }).join('');
+
+            return '<div class="usuario-card">' +
+                '<div class="usuario-header">' +
+                    '<div class="usuario-info">' +
+                        '<div class="usuario-avatar">' + S(getIniciales(u.nombre)) + '</div>' +
+                        '<div>' +
+                            '<strong>' + S(u.nombre) + '</strong>' +
+                            '<span class="text-muted"> #' + S(u.numEmpleado || '') + '</span><br>' +
+                            rolBadge +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="usuario-permisos">' +
+                    '<h5><i class="fas fa-key"></i> Permisos' +
+                    ((u.rol === 'admin' || u.rol === 'administrador') ? ' <span class="text-muted">(Admin tiene todos los permisos)</span>' : '') +
+                    '</h5>' +
+                    '<div class="permisos-grid-admin">' + permisosHTML + '</div>' +
+                '</div>' +
+            '</div>';
+        }).join('');
+
+    section.innerHTML =
+        '<div class="section-header">' +
+            '<h2><i class="fas fa-user-shield"></i> Usuarios y Permisos</h2>' +
+            '<p class="text-muted">Gestiona los permisos de acceso de administradores y supervisoras</p>' +
+        '</div>' +
+        '<div class="usuarios-list">' + listaHTML + '</div>' +
+        '<div class="usuarios-help">' +
+            '<i class="fas fa-info-circle"></i> ' +
+            'Para agregar nuevos usuarios administrativos, ve a <strong>Personal</strong> y asigna el rol "administrador" o "supervisora". ' +
+            'Los administradores tienen todos los permisos automáticamente.' +
+        '</div>';
+}
+
+function togglePermisoUsuario(checkbox) {
+    var userId = parseInt(checkbox.dataset.userId);
+    var permiso = checkbox.dataset.permiso;
+    var activo = checkbox.checked;
+
+    var personal = db.getPersonal();
+    var usuario = personal.find(function(p) { return p.id === userId; });
+    if (!usuario) return;
+
+    var permisos = usuario.permisos || {};
+    permisos[permiso] = activo;
+
+    // Guardar via db
+    db.updatePersonal(userId, { permisos: permisos });
+    showToast('Permiso "' + permiso.replace(/_/g, ' ') + '" ' + (activo ? 'activado' : 'desactivado') + ' para ' + usuario.nombre, 'success');
 }
 
 // ========================================
@@ -440,7 +545,8 @@ function aplicarPermisos() {
     var seccionPermisos = {
         'costeo': 'ver_costos',
         'personal': 'gestionar_personal',
-        'auditoria': 'ver_auditoria'
+        'auditoria': 'ver_auditoria',
+        'usuarios': 'gestionar_usuarios'
     };
 
     // Ocultar items del sidebar según permisos
