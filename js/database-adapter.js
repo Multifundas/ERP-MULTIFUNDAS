@@ -149,9 +149,11 @@ class SupabaseDatabase {
     _mapClienteFromDB(c) {
         return {
             id: c.id, nombreComercial: c.nombre_comercial, razonSocial: c.razon_social,
-            rfc: c.rfc, tipo: c.tipo || 'externo', contacto: c.contacto, telefono: c.telefono, email: c.email,
+            rfc: c.rfc, tipo: c.tipo || 'externo', contacto: c.contacto,
+            telefono: c.telefono, telefonoAlt: c.telefono_alt, email: c.email,
             direccion: c.direccion, ciudad: c.ciudad, estado: c.estado,
             codigoPostal: c.codigo_postal, notas: c.notas, activo: c.activo,
+            usuario: c.usuario, accesoPortal: c.acceso_portal || false,
             fechaAlta: c.fecha_alta, articulosFrecuentes: []
         };
     }
@@ -162,6 +164,9 @@ class SupabaseDatabase {
             familiaId: p.familia_id, subfamiliaId: p.subfamilia_id,
             precioVenta: parseFloat(p.precio_venta || 0), costoEstimado: parseFloat(p.costo_estimado || 0),
             version: p.version, activo: p.activo, imagen: p.imagen, notas: p.notas,
+            medidas: p.medidas, mtsPorPieza: parseFloat(p.mts_por_pieza || 0),
+            comentarios: p.comentarios, listaMateriales: p.lista_materiales || [],
+            descripcionTecnica: p.descripcion_tecnica, costosMO: p.costos_mo || {},
             rutaProcesos: []
         };
     }
@@ -172,7 +177,19 @@ class SupabaseDatabase {
             areaId: p.area_id, pin: p.pin_hash, // En Fase 4 se cambia a hash
             horaEntrada: p.hora_entrada, horaSalida: p.hora_salida,
             foto: p.foto, activo: p.activo, bloqueado: p.bloqueado,
-            permisos: p.permisos || {}
+            permisos: p.permisos || {},
+            salarioSemanal: parseFloat(p.salario_semanal || 0),
+            salarioHora: parseFloat(p.salario_hora || 0),
+            horasRealesDia: parseFloat(p.horas_reales_dia || 8),
+            premioPuntualidad: parseFloat(p.premio_puntualidad || 0),
+            premioProduccion: parseFloat(p.premio_produccion || 0),
+            previsionSocial: parseFloat(p.prevision_social || 0),
+            sinHoraComida: p.sin_hora_comida || false,
+            horaComidaInicio: p.hora_comida_inicio || '13:00',
+            horaComidaFin: p.hora_comida_fin || '14:00',
+            posiciones: p.posiciones || [],
+            ultimoAcceso: p.ultimo_acceso,
+            intentosFallidos: p.intentos_fallidos || 0
         };
     }
 
@@ -184,6 +201,7 @@ class SupabaseDatabase {
             fechaCompletado: p.fecha_completado, descripcion: p.descripcion,
             notas: p.notas, presupuestoEstimado: parseFloat(p.presupuesto_estimado || 0),
             costoReal: parseFloat(p.costo_real || 0), imagen: p.imagen,
+            imagenesApoyo: p.imagenes_apoyo || [],
             productos: []
         };
     }
@@ -250,14 +268,17 @@ class SupabaseDatabase {
         if (c.nombreComercial !== undefined) mapped.nombre_comercial = c.nombreComercial;
         if (c.razonSocial !== undefined) mapped.razon_social = c.razonSocial;
         if (c.rfc !== undefined) mapped.rfc = c.rfc;
+        if (c.tipo !== undefined) mapped.tipo = c.tipo;
         if (c.contacto !== undefined) mapped.contacto = c.contacto;
         if (c.telefono !== undefined) mapped.telefono = c.telefono;
+        if (c.telefonoAlt !== undefined) mapped.telefono_alt = c.telefonoAlt;
         if (c.email !== undefined) mapped.email = c.email;
         if (c.direccion !== undefined) mapped.direccion = c.direccion;
         if (c.ciudad !== undefined) mapped.ciudad = c.ciudad;
         if (c.estado !== undefined) mapped.estado = c.estado;
         if (c.codigoPostal !== undefined) mapped.codigo_postal = c.codigoPostal;
-        if (c.tipo !== undefined) mapped.tipo = c.tipo;
+        if (c.usuario !== undefined) mapped.usuario = c.usuario;
+        if (c.accesoPortal !== undefined) mapped.acceso_portal = c.accesoPortal;
         if (c.notas !== undefined) mapped.notas = c.notas;
         if (c.activo !== undefined) mapped.activo = c.activo;
         return mapped;
@@ -276,6 +297,12 @@ class SupabaseDatabase {
         if (p.activo !== undefined) mapped.activo = p.activo;
         if (p.imagen !== undefined) mapped.imagen = p.imagen;
         if (p.notas !== undefined) mapped.notas = p.notas;
+        if (p.medidas !== undefined) mapped.medidas = p.medidas;
+        if (p.mtsPorPieza !== undefined) mapped.mts_por_pieza = p.mtsPorPieza;
+        if (p.comentarios !== undefined) mapped.comentarios = p.comentarios;
+        if (p.listaMateriales !== undefined) mapped.lista_materiales = p.listaMateriales;
+        if (p.descripcionTecnica !== undefined) mapped.descripcion_tecnica = p.descripcionTecnica;
+        if (p.costosMO !== undefined) mapped.costos_mo = p.costosMO;
         return mapped;
     }
 
@@ -292,6 +319,18 @@ class SupabaseDatabase {
         if (p.activo !== undefined) mapped.activo = p.activo;
         if (p.bloqueado !== undefined) mapped.bloqueado = p.bloqueado;
         if (p.permisos !== undefined) mapped.permisos = p.permisos;
+        if (p.salarioSemanal !== undefined) mapped.salario_semanal = p.salarioSemanal;
+        if (p.salarioHora !== undefined) mapped.salario_hora = p.salarioHora;
+        if (p.horasRealesDia !== undefined) mapped.horas_reales_dia = p.horasRealesDia;
+        if (p.premioPuntualidad !== undefined) mapped.premio_puntualidad = p.premioPuntualidad;
+        if (p.premioProduccion !== undefined) mapped.premio_produccion = p.premioProduccion;
+        if (p.previsionSocial !== undefined) mapped.prevision_social = p.previsionSocial;
+        if (p.sinHoraComida !== undefined) mapped.sin_hora_comida = p.sinHoraComida;
+        if (p.horaComidaInicio !== undefined) mapped.hora_comida_inicio = p.horaComidaInicio;
+        if (p.horaComidaFin !== undefined) mapped.hora_comida_fin = p.horaComidaFin;
+        if (p.posiciones !== undefined) mapped.posiciones = p.posiciones;
+        if (p.ultimoAcceso !== undefined) mapped.ultimo_acceso = p.ultimoAcceso;
+        if (p.intentosFallidos !== undefined) mapped.intentos_fallidos = p.intentosFallidos;
         return mapped;
     }
 
@@ -309,6 +348,7 @@ class SupabaseDatabase {
         if (p.presupuestoEstimado !== undefined) mapped.presupuesto_estimado = p.presupuestoEstimado;
         if (p.costoReal !== undefined) mapped.costo_real = p.costoReal;
         if (p.imagen !== undefined) mapped.imagen = p.imagen;
+        if (p.imagenesApoyo !== undefined) mapped.imagenes_apoyo = p.imagenesApoyo;
         return mapped;
     }
 
