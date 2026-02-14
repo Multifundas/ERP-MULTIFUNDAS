@@ -8945,7 +8945,7 @@ body {
 
 .pedido-tab-content {
     padding: 10px 0;
-    max-height: 200px;
+    max-height: clamp(180px, 30vh, 350px);
     overflow-y: auto;
 }
 
@@ -9094,7 +9094,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 12px;
-    z-index: 800;
+    z-index: 1100;
     transition: top 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
     box-shadow: 0 4px 20px rgba(0,0,0,0.15);
 }
@@ -9148,44 +9148,41 @@ body {
    PHASE B: BIGGER TOUCH TARGETS
    ======================================== */
 
-/* Problem report buttons - larger for operators */
-.problemas-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
+/* Quantity buttons - ensure min 60px */
+.panel-operadora .btn-cantidad {
+    min-width: var(--touch-ideal);
+    min-height: var(--touch-ideal);
 }
 
-.btn-problema {
-    min-height: var(--touch-ideal) !important;
-    font-size: 14px !important;
-    padding: 12px !important;
-}
-
-.btn-problema i {
-    font-size: 22px !important;
-}
-
-/* Quantity buttons - larger */
-.btn-cantidad {
-    min-width: var(--touch-ideal) !important;
-    min-height: var(--touch-ideal) !important;
-}
-
-.btn-rapido {
-    min-height: var(--touch-min) !important;
-    min-width: 56px !important;
-    font-size: 15px !important;
-    font-weight: 700 !important;
+.panel-operadora .btn-rapido {
+    min-height: var(--touch-min);
+    min-width: 56px;
+    font-size: 15px;
+    font-weight: 700;
 }
 
 /* Capture button - prominent */
-.btn-capturar {
-    min-height: var(--touch-ideal) !important;
-    font-size: 17px !important;
+.panel-operadora .btn-capturar {
+    min-height: var(--touch-ideal);
+    font-size: 17px;
 }
 
-/* Timer controls - larger */
-.btn-temporizador {
-    min-height: 54px !important;
-    font-size: 15px !important;
+/* Timer controls - comfortable */
+.panel-operadora .btn-temporizador {
+    min-height: 54px;
+    font-size: 15px;
+}
+
+/* Header primary buttons - bigger for factory use */
+.panel-operadora .btn-header.btn-ayuda-primary,
+.panel-operadora .btn-header.btn-resumen-primary {
+    height: var(--touch-ideal);
+}
+
+.panel-operadora .btn-header.btn-more,
+.panel-operadora .btn-header.btn-logout {
+    width: var(--touch-ideal);
+    height: var(--touch-ideal);
 }
 
 /* ========================================

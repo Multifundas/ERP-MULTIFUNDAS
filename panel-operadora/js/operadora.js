@@ -9002,15 +9002,27 @@ function cerrarCelebracionBanner() {
     }
 }
 
-// Override celebrarMeta to use banner instead of fullscreen
+// Override celebrarMeta to use banner instead of fullscreen (with fallback)
+const _originalCelebrarMeta = typeof celebrarMeta === 'function' ? celebrarMeta : null;
 celebrarMeta = function() {
-    mostrarCelebracionBanner('meta-cumplida', '¡Meta Cumplida!', 'Excelente trabajo');
+    try {
+        mostrarCelebracionBanner('meta-cumplida', '¡Meta Cumplida!', 'Excelente trabajo');
+    } catch (e) {
+        console.error('[OPERADORA] Error en banner celebración, usando fallback:', e);
+        if (_originalCelebrarMeta) _originalCelebrarMeta();
+    }
 };
 
-// Override mostrarLogroCelebracion to use banner instead of fullscreen
+// Override mostrarLogroCelebracion to use banner instead of fullscreen (with fallback)
+const _originalMostrarLogro = typeof mostrarLogroCelebracion === 'function' ? mostrarLogroCelebracion : null;
 mostrarLogroCelebracion = function(logro) {
     if (!logro) return;
-    mostrarCelebracionBanner('logro', logro.titulo, logro.mensaje);
+    try {
+        mostrarCelebracionBanner('logro', logro.titulo, logro.mensaje);
+    } catch (e) {
+        console.error('[OPERADORA] Error en banner logro, usando fallback:', e);
+        if (_originalMostrarLogro) _originalMostrarLogro(logro);
+    }
 };
 
 // ---- PROCESS LOCK INLINE EXPLANATION ----
@@ -9053,9 +9065,16 @@ function renderizarLockBanner(proceso) {
 
 // ---- INLINE CAMERA FOR PROBLEM REPORT ----
 
+// State for inline photo
+var _fotoProblemaInline = null;
+var _streamCamaraInline = null;
+
 function reportarProblemaConFoto(tipoId) {
     const tipo = TIPOS_PROBLEMA.find(t => t.id === tipoId);
     if (!tipo) return;
+
+    // Reset photo state
+    _fotoProblemaInline = null;
 
     const content = `
         <div class="problema-form">
@@ -9086,43 +9105,99 @@ function reportarProblemaConFoto(tipoId) {
 
     mostrarModal('Reportar Problema', content, [
         { text: 'Cancelar', class: 'btn-secondary', onclick: 'cerrarModal()' },
-        { text: 'Enviar a Coco', class: 'btn-danger', onclick: `enviarProblema('${tipoId}')` }
+        { text: 'Enviar a Coco', class: 'btn-danger', onclick: `enviarProblemaConFoto('${tipoId}')` }
     ]);
 }
 
 function iniciarCamaraInline() {
-    // Use the existing camera system but capture inline
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const camaraContainer = document.getElementById('camaraContainer');
-        if (camaraContainer) {
-            camaraContainer.style.display = 'flex';
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-                .then(stream => {
-                    const video = document.getElementById('cameraVideo');
-                    if (video) {
-                        video.srcObject = stream;
-                    }
-                })
-                .catch(() => {
-                    mostrarToast('No se pudo acceder a la cámara', 'warning');
-                    if (camaraContainer) camaraContainer.style.display = 'none';
-                });
-        }
-    } else {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         mostrarToast('Cámara no disponible en este dispositivo', 'warning');
+        return;
     }
+
+    // Use the existing fullscreen camera container but hook into usarFoto
+    // Set a flag so usarFoto knows to redirect to inline preview
+    operadoraState._camaraInlineActiva = true;
+
+    abrirCamara();
 }
+
+// Override usarFoto to support inline camera mode
+const _originalUsarFoto = typeof usarFoto === 'function' ? usarFoto : null;
+usarFoto = function() {
+    if (operadoraState._camaraInlineActiva && fotoCapturadaData) {
+        // Save photo data for the inline problem report
+        _fotoProblemaInline = fotoCapturadaData;
+
+        // Close camera properly (stops stream)
+        cerrarCamara();
+
+        // Update the inline preview in the modal
+        const preview = document.getElementById('problemaFotoPreview');
+        const img = document.getElementById('problemaFotoImg');
+        const btn = document.getElementById('btnTomarFotoInline');
+
+        if (preview && img) {
+            img.src = _fotoProblemaInline;
+            preview.style.display = 'block';
+        }
+        if (btn) {
+            btn.style.display = 'none';
+        }
+
+        operadoraState._camaraInlineActiva = false;
+    } else if (_originalUsarFoto) {
+        // Fallback to original behavior
+        _originalUsarFoto();
+    }
+};
 
 function quitarFotoProblema() {
     const preview = document.getElementById('problemaFotoPreview');
     const btn = document.getElementById('btnTomarFotoInline');
     if (preview) preview.style.display = 'none';
     if (btn) btn.style.display = 'flex';
-    operadoraState.fotoProblemaActual = null;
+    _fotoProblemaInline = null;
+}
+
+function enviarProblemaConFoto(tipoId) {
+    const tipo = TIPOS_PROBLEMA.find(t => t.id === tipoId);
+    const descripcion = document.getElementById('problemaDescripcion')?.value || '';
+
+    const problema = {
+        id: Date.now(),
+        tipo: tipoId,
+        tipoNombre: tipo.nombre,
+        tipoIcono: tipo.icono,
+        tipoColor: tipo.color,
+        descripcion: descripcion,
+        foto: _fotoProblemaInline || null,
+        operadoraId: authState.operadoraActual.id,
+        operadoraNombre: authState.operadoraActual.nombre,
+        estacionId: CONFIG_ESTACION.id,
+        estacionNombre: CONFIG_ESTACION.nombre,
+        pedidoId: operadoraState.pedidoActual?.id,
+        fecha: new Date().toISOString(),
+        estado: 'pendiente'
+    };
+
+    // Notificar a supervisora
+    notificarSupervisora(problema);
+
+    // Guardar problema activo
+    operadoraState.problemaActivo = problema;
+    mostrarProblemaActivo(problema);
+
+    // Cleanup
+    _fotoProblemaInline = null;
+    operadoraState._camaraInlineActiva = false;
+
+    cerrarModal();
+    mostrarToast('Coco ha sido notificada', 'success');
 }
 
 // Override the original reportarProblema to use the enhanced version
-const _originalReportarProblema = reportarProblema;
+const _originalReportarProblema = typeof reportarProblema === 'function' ? reportarProblema : null;
 reportarProblema = function(tipoId) {
     reportarProblemaConFoto(tipoId);
 };

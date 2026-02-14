@@ -135,46 +135,46 @@
                     <i class="fas fa-sign-out-alt"></i>
                 </button>
             </div>
-
-            <!-- Menú extra slide-out -->
-            <div class="menu-extra-overlay" id="menuExtraOverlay" style="display:none;" onclick="cerrarMenuExtra()"></div>
-            <div class="menu-extra-panel" id="menuExtraPanel">
-                <div class="menu-extra-header">
-                    <h4><i class="fas fa-th-large"></i> Más opciones</h4>
-                    <button class="btn-cerrar-menu" onclick="cerrarMenuExtra()"><i class="fas fa-times"></i></button>
-                </div>
-                <div class="menu-extra-items">
-                    <button class="menu-extra-item" onclick="mostrarMisGanancias(); cerrarMenuExtra();">
-                        <i class="fas fa-coins" style="color: var(--warning)"></i>
-                        <span>Mis Ganancias</span>
-                    </button>
-                    <button class="menu-extra-item" onclick="mostrarPanelMotivacion(); cerrarMenuExtra();">
-                        <i class="fas fa-fire" style="color: var(--danger)"></i>
-                        <span>Motivación</span>
-                    </button>
-                    <button class="menu-extra-item" onclick="mostrarMisReportes(); cerrarMenuExtra();">
-                        <i class="fas fa-chart-bar" style="color: var(--info)"></i>
-                        <span>Mis Reportes</span>
-                    </button>
-                    <button class="menu-extra-item" onclick="mostrarHistorialDias(); cerrarMenuExtra();">
-                        <i class="fas fa-calendar-alt" style="color: var(--primary)"></i>
-                        <span>Mi Historial</span>
-                    </button>
-                    <button class="menu-extra-item" onclick="mostrarRankingPersonal(); cerrarMenuExtra();">
-                        <i class="fas fa-trophy" style="color: var(--warning)"></i>
-                        <span>Ranking</span>
-                    </button>
-                    <button class="menu-extra-item" onclick="mostrarInstrucciones(); cerrarMenuExtra();">
-                        <i class="fas fa-book" style="color: var(--primary-dark)"></i>
-                        <span>Instrucciones</span>
-                    </button>
-                    <button class="menu-extra-item" onclick="toggleSonidos(); cerrarMenuExtra();" id="btnSonidos">
-                        <i class="fas fa-volume-up" style="color: var(--gray-600)"></i>
-                        <span>Sonidos</span>
-                    </button>
-                </div>
-            </div>
         </header>
+
+        <!-- Menú extra slide-out (fuera del header para z-index correcto) -->
+        <div class="menu-extra-overlay" id="menuExtraOverlay" style="display:none;" onclick="cerrarMenuExtra()"></div>
+        <div class="menu-extra-panel" id="menuExtraPanel">
+            <div class="menu-extra-header">
+                <h4><i class="fas fa-th-large"></i> Más opciones</h4>
+                <button class="btn-cerrar-menu" onclick="cerrarMenuExtra()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="menu-extra-items">
+                <button class="menu-extra-item" onclick="mostrarMisGanancias(); cerrarMenuExtra();">
+                    <i class="fas fa-coins" style="color: var(--warning)"></i>
+                    <span>Mis Ganancias</span>
+                </button>
+                <button class="menu-extra-item" onclick="mostrarPanelMotivacion(); cerrarMenuExtra();">
+                    <i class="fas fa-fire" style="color: var(--danger)"></i>
+                    <span>Motivación</span>
+                </button>
+                <button class="menu-extra-item" onclick="mostrarMisReportes(); cerrarMenuExtra();">
+                    <i class="fas fa-chart-bar" style="color: var(--info)"></i>
+                    <span>Mis Reportes</span>
+                </button>
+                <button class="menu-extra-item" onclick="mostrarHistorialDias(); cerrarMenuExtra();">
+                    <i class="fas fa-calendar-alt" style="color: var(--primary)"></i>
+                    <span>Mi Historial</span>
+                </button>
+                <button class="menu-extra-item" onclick="mostrarRankingPersonal(); cerrarMenuExtra();">
+                    <i class="fas fa-trophy" style="color: var(--warning)"></i>
+                    <span>Ranking</span>
+                </button>
+                <button class="menu-extra-item" onclick="mostrarInstrucciones(); cerrarMenuExtra();">
+                    <i class="fas fa-book" style="color: var(--primary-dark)"></i>
+                    <span>Instrucciones</span>
+                </button>
+                <button class="menu-extra-item" onclick="toggleSonidos(); cerrarMenuExtra();" id="btnSonidos">
+                    <i class="fas fa-volume-up" style="color: var(--gray-600)"></i>
+                    <span>Sonidos</span>
+                </button>
+            </div>
+        </div>
 
         <!-- Contenido principal -->
         <main class="panel-main">
