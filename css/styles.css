@@ -2581,10 +2581,10 @@ html {
 .config-field input[type="number"],
 .config-field input[type="text"] {
     padding: 8px 12px;
-    border: 1px solid var(--border-color);
+    border: 1px solid rgba(100, 116, 139, 0.3);
     border-radius: 8px;
-    background: var(--bg-color, #0f172a);
-    color: var(--text-primary);
+    background: #0f172a;
+    color: #e2e8f0;
     font-size: 0.9rem;
 }
 
@@ -2666,7 +2666,7 @@ html {
     border: 1px solid transparent;
     border-radius: 6px;
     padding: 4px 8px;
-    color: var(--text-primary);
+    color: #e2e8f0;
     width: 100%;
 }
 
@@ -2694,10 +2694,10 @@ html {
 
 .tier-field input {
     padding: 6px 10px;
-    border: 1px solid var(--border-color);
+    border: 1px solid rgba(100, 116, 139, 0.3);
     border-radius: 6px;
-    background: var(--bg-color, #0f172a);
-    color: var(--text-primary);
+    background: #0f172a;
+    color: #e2e8f0;
     font-size: 0.85rem;
 }
 
