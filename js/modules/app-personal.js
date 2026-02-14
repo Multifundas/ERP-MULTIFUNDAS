@@ -1,6 +1,6 @@
 // ========================================
-// ERP MULTIFUNDAS - Módulo Personal y Áreas
-// Extraído de app.js líneas 7771-9502 + 15210-15920
+// ERP MULTIFUNDAS - MÓDULO: PERSONAL Y ÁREAS
+// Extraído de app.js para modularización
 // ========================================
 
 // ========================================
@@ -1734,11 +1734,6 @@ function toggleEmpleado(id) {
     // Función legacy - redirigir a la nueva
     toggleEmpleadoEstado(id);
 }
-
-
-// ========================================
-// ENHANCED v2 - Personal
-// ========================================
 
 // SECCIÓN ÁREAS DE PLANTA MEJORADA v2
 // ========================================

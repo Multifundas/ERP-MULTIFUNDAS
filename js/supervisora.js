@@ -1167,6 +1167,9 @@ function renderPedidosList() {
                     ${procesos.map(proceso => renderProcesoItem(proceso, pedido.id)).join('')}
 
                     <div class="pedido-acciones-cierre">
+                        <button class="btn-cerrar-pedido-manual" onclick="event.stopPropagation(); verDetallePedido(${pedido.id})" style="background:rgba(16,185,129,0.15);color:#10b981;border-color:rgba(16,185,129,0.3);">
+                            <i class="fas fa-eye"></i> Ver Detalles
+                        </button>
                         <button class="btn-cerrar-pedido-manual" onclick="event.stopPropagation(); resaltarFlujoPedido(${pedido.id})" style="background:rgba(102,126,234,0.15);color:#667eea;border-color:rgba(102,126,234,0.3);">
                             <i class="fas fa-route"></i> Ver en Mapa
                         </button>
@@ -3304,9 +3307,301 @@ function openModal(title, content, footer = '') {
 
 function closeModal() {
     document.getElementById('modalOverlay').classList.remove('active');
+    // Limpiar clases especiales del modal
+    const modal = document.querySelector('.modal-overlay .modal');
+    if (modal) modal.classList.remove('modal-detalle-pedido');
 }
 
 // showToast() en utils.js
+
+// ========================================
+// VER DETALLE COMPLETO DE PEDIDO
+// ========================================
+
+function verDetallePedido(pedidoId) {
+    // Buscar pedido en estado local o DB
+    const pedido = supervisoraState.pedidosHoy.find(p => p.id == pedidoId)
+        || (typeof db !== 'undefined' ? db.getPedido(pedidoId) : null);
+
+    if (!pedido) {
+        openModal('Error', '<p>Pedido no encontrado</p>');
+        return;
+    }
+
+    // Datos del cliente
+    const cliente = typeof db !== 'undefined' ? db.getCliente(pedido.clienteId) : null;
+    const clienteNombre = cliente?.nombreComercial || pedido.clienteNombre || 'N/A';
+
+    // Datos de pedido ERP (sincronizado)
+    let pedidoERP = null;
+    try {
+        const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+        pedidoERP = pedidosERP.find(pe => pe.id == pedidoId);
+    } catch (e) {}
+
+    // Formatear fecha
+    function fmtFecha(f) {
+        if (!f) return '---';
+        try {
+            const d = new Date(f);
+            return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+        } catch (e) { return f; }
+    }
+
+    // Calcular días restantes
+    let diasRestantes = '';
+    if (pedido.fechaEntrega) {
+        const hoy = new Date();
+        const entrega = new Date(pedido.fechaEntrega);
+        const diff = Math.ceil((entrega - hoy) / (1000 * 60 * 60 * 24));
+        if (diff < 0) {
+            diasRestantes = `<span style="color:#ef4444;font-weight:600;">Vencido hace ${Math.abs(diff)} día(s)</span>`;
+        } else if (diff === 0) {
+            diasRestantes = '<span style="color:#f59e0b;font-weight:600;">Entrega HOY</span>';
+        } else if (diff <= 3) {
+            diasRestantes = `<span style="color:#f59e0b;font-weight:600;">${diff} día(s) restantes</span>`;
+        } else {
+            diasRestantes = `<span style="color:#10b981;">${diff} días restantes</span>`;
+        }
+    }
+
+    // Obtener productos y sus procesos
+    const productos = typeof db !== 'undefined' ? db.getProductos() : [];
+    let productosHTML = '';
+
+    if (pedido.productos && pedido.productos.length > 0) {
+        productosHTML = pedido.productos.map(p => {
+            const prod = productos.find(pr => pr.id == p.productoId);
+            const nombre = prod ? S(prod.nombre) : (p.nombre ? S(p.nombre) : 'Producto');
+            const cantidad = p.cantidad || 0;
+            const completadas = p.completadas || 0;
+            const avance = cantidad > 0 ? Math.round((completadas / cantidad) * 100) : 0;
+
+            // Obtener procesos del producto
+            let procesos = p.avanceProcesos || [];
+            if ((!procesos || procesos.length === 0) && pedidoERP) {
+                const prodERP = pedidoERP.productos?.find(pe => pe.productoId == p.productoId);
+                if (prodERP?.procesos) {
+                    procesos = prodERP.procesos.map(proc => ({
+                        nombre: proc.nombre || proc.procesoNombre || '',
+                        completadas: proc.piezasCompletadas || proc.piezas || proc.completadas || 0,
+                        estado: proc.estado || 'pendiente'
+                    }));
+                } else if (pedidoERP.procesos) {
+                    procesos = pedidoERP.procesos.map(proc => ({
+                        nombre: proc.nombre || proc.procesoNombre || '',
+                        completadas: proc.piezas || proc.piezasCompletadas || 0,
+                        estado: proc.estado || 'pendiente'
+                    }));
+                }
+            }
+            // Fallback: rutaProcesos del catálogo
+            if ((!procesos || procesos.length === 0) && prod?.rutaProcesos) {
+                procesos = prod.rutaProcesos.map(rp => ({
+                    nombre: rp.nombre || '',
+                    completadas: 0,
+                    estado: 'pendiente'
+                }));
+            }
+
+            let procesosHTML = '';
+            if (procesos.length > 0) {
+                procesosHTML = '<div class="detalle-procesos-grid">' + procesos.map(proc => {
+                    const pct = cantidad > 0 ? Math.round(((proc.completadas || 0) / cantidad) * 100) : 0;
+                    const estadoNorm = (proc.estado || '').toLowerCase().replace(/[-_\s]/g, '');
+                    let icon = '<i class="fas fa-clock" style="color:#94a3b8"></i>';
+                    let barColor = '#e2e8f0';
+                    if (estadoNorm === 'completado' || estadoNorm === 'terminado' || pct >= 100) {
+                        icon = '<i class="fas fa-check-circle" style="color:#10b981"></i>';
+                        barColor = '#10b981';
+                    } else if (estadoNorm === 'enproceso' || pct > 0) {
+                        icon = '<i class="fas fa-spinner fa-spin" style="color:#3b82f6"></i>';
+                        barColor = '#3b82f6';
+                    }
+                    return `
+                        <div class="detalle-proceso-item" style="margin-bottom:6px;">
+                            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                                ${icon}
+                                <span style="font-weight:500;font-size:0.82rem;color:#cbd5e1;">${S(proc.nombre)}</span>
+                                <span style="margin-left:auto;font-size:0.78rem;color:#8b9dc3;">${proc.completadas || 0}/${cantidad} (${pct}%)</span>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.1);border-radius:4px;height:6px;overflow:hidden;">
+                                <div style="background:${barColor};height:100%;width:${Math.min(pct,100)}%;border-radius:4px;transition:width 0.3s;"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('') + '</div>';
+            }
+
+            return `
+                <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px;margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <strong style="font-size:0.9rem;color:#e2e8f0;"><i class="fas fa-box" style="color:#8b5cf6;margin-right:6px;"></i>${nombre}</strong>
+                        <span style="font-size:0.8rem;color:#8b9dc3;">${completadas}/${cantidad} pzas (${avance}%)</span>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.1);border-radius:4px;height:8px;overflow:hidden;margin-bottom:8px;">
+                        <div style="background:${avance >= 100 ? '#10b981' : avance >= 50 ? '#3b82f6' : '#f59e0b'};height:100%;width:${Math.min(avance,100)}%;border-radius:4px;"></div>
+                    </div>
+                    ${procesosHTML}
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Recopilar TODAS las notas y comentarios
+    let notasHTML = '';
+    const notas = [];
+
+    // Notas del pedido
+    if (pedido.notas) {
+        notas.push({ tipo: 'Nota', icono: 'fa-sticky-note', color: '#f59e0b', texto: pedido.notas });
+    }
+    // Observaciones
+    if (pedido.observaciones) {
+        notas.push({ tipo: 'Observación', icono: 'fa-eye', color: '#8b5cf6', texto: pedido.observaciones });
+    }
+    // Instrucciones
+    if (pedido.instrucciones) {
+        notas.push({ tipo: 'Instrucciones', icono: 'fa-clipboard-list', color: '#3b82f6', texto: pedido.instrucciones });
+    }
+    // Comentarios (array)
+    if (pedido.comentarios && Array.isArray(pedido.comentarios)) {
+        pedido.comentarios.forEach(c => {
+            const texto = typeof c === 'string' ? c : (c.texto || c.mensaje || c.contenido || '');
+            const autor = typeof c === 'object' ? (c.autor || c.usuario || '') : '';
+            const fecha = typeof c === 'object' && c.fecha ? fmtFecha(c.fecha) : '';
+            if (texto) {
+                notas.push({
+                    tipo: 'Comentario',
+                    icono: 'fa-comment',
+                    color: '#06b6d4',
+                    texto: texto,
+                    autor: autor,
+                    fecha: fecha
+                });
+            }
+        });
+    }
+    // Notas del pedido ERP
+    if (pedidoERP) {
+        if (pedidoERP.notas && pedidoERP.notas !== pedido.notas) {
+            notas.push({ tipo: 'Nota ERP', icono: 'fa-file-alt', color: '#10b981', texto: pedidoERP.notas });
+        }
+        if (pedidoERP.observaciones && pedidoERP.observaciones !== pedido.observaciones) {
+            notas.push({ tipo: 'Observación ERP', icono: 'fa-eye', color: '#8b5cf6', texto: pedidoERP.observaciones });
+        }
+        if (pedidoERP.instrucciones && pedidoERP.instrucciones !== pedido.instrucciones) {
+            notas.push({ tipo: 'Instrucciones ERP', icono: 'fa-clipboard-list', color: '#3b82f6', texto: pedidoERP.instrucciones });
+        }
+    }
+
+    if (notas.length > 0) {
+        notasHTML = `
+            <div style="margin-top:16px;">
+                <h4 style="font-size:0.9rem;color:#e2e8f0;margin-bottom:10px;"><i class="fas fa-comments" style="color:#667eea;margin-right:6px;"></i>Notas y Comentarios (${notas.length})</h4>
+                ${notas.map(n => `
+                    <div style="background:rgba(255,255,255,0.05);border-left:3px solid ${n.color};padding:10px 12px;border-radius:0 8px 8px 0;margin-bottom:8px;">
+                        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                            <i class="fas ${n.icono}" style="color:${n.color};font-size:0.75rem;"></i>
+                            <span style="font-weight:600;font-size:0.75rem;color:#8b9dc3;text-transform:uppercase;">${S(n.tipo)}</span>
+                            ${n.autor ? `<span style="font-size:0.75rem;color:#64748b;">— ${S(n.autor)}</span>` : ''}
+                            ${n.fecha ? `<span style="font-size:0.7rem;color:#64748b;margin-left:auto;">${S(n.fecha)}</span>` : ''}
+                        </div>
+                        <div style="font-size:0.85rem;color:#cbd5e1;line-height:1.5;">${S(n.texto)}</div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } else {
+        notasHTML = `
+            <div style="margin-top:16px;text-align:center;color:#64748b;font-size:0.85rem;padding:16px;">
+                <i class="fas fa-sticky-note" style="font-size:1.2rem;margin-bottom:6px;display:block;"></i>
+                Sin notas ni comentarios
+            </div>
+        `;
+    }
+
+    // Imágenes de apoyo
+    let imagenesHTML = '';
+    const imagenes = pedido.imagenesApoyo || pedido.imagenes || [];
+    if (imagenes.length > 0) {
+        imagenesHTML = `
+            <div style="margin-top:16px;">
+                <h4 style="font-size:0.9rem;color:#e2e8f0;margin-bottom:10px;"><i class="fas fa-images" style="color:#ec4899;margin-right:6px;"></i>Imágenes de Apoyo (${imagenes.length})</h4>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;">
+                    ${imagenes.map((img, i) => {
+                        const src = typeof img === 'string' ? img : (img.url || img.src || '');
+                        const nombre = typeof img === 'object' ? (img.nombre || img.name || '') : '';
+                        return src ? `
+                            <div style="border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.1);cursor:pointer;" onclick="window.open('${S(src)}','_blank')">
+                                <img src="${S(src)}" alt="${S(nombre || 'Imagen ' + (i+1))}" style="width:100%;height:80px;object-fit:cover;display:block;">
+                                ${nombre ? `<div style="font-size:0.7rem;padding:4px;text-align:center;color:#8b9dc3;">${S(nombre)}</div>` : ''}
+                            </div>
+                        ` : '';
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    // Prioridad badge
+    const prioridadColor = pedido.prioridad === 'alta' || pedido.prioridad === 'urgente' ? '#ef4444' :
+                           pedido.prioridad === 'media' ? '#f59e0b' : '#3b82f6';
+    const estadoColor = (pedido.estado || '').toLowerCase().includes('listo') ? '#10b981' :
+                        (pedido.estado || '').toLowerCase().includes('proceso') ? '#3b82f6' : '#64748b';
+
+    const content = `
+        <div style="max-height:70vh;overflow-y:auto;padding:4px;">
+            <!-- Info principal -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+                <div style="background:rgba(59,130,246,0.1);padding:10px 12px;border-radius:8px;border:1px solid rgba(59,130,246,0.2);">
+                    <div style="font-size:0.72rem;color:#8b9dc3;text-transform:uppercase;font-weight:600;margin-bottom:2px;">Cliente</div>
+                    <div style="font-size:0.9rem;font-weight:600;color:#e2e8f0;">${S(clienteNombre)}</div>
+                </div>
+                <div style="background:rgba(16,185,129,0.1);padding:10px 12px;border-radius:8px;border:1px solid rgba(16,185,129,0.2);">
+                    <div style="font-size:0.72rem;color:#8b9dc3;text-transform:uppercase;font-weight:600;margin-bottom:2px;">Estado</div>
+                    <div><span style="background:${estadoColor};color:white;padding:2px 8px;border-radius:10px;font-size:0.78rem;font-weight:600;">${S(pedido.estado || 'pendiente')}</span></div>
+                </div>
+                <div style="background:rgba(245,158,11,0.1);padding:10px 12px;border-radius:8px;border:1px solid rgba(245,158,11,0.2);">
+                    <div style="font-size:0.72rem;color:#8b9dc3;text-transform:uppercase;font-weight:600;margin-bottom:2px;">Prioridad</div>
+                    <div><span style="background:${prioridadColor};color:white;padding:2px 8px;border-radius:10px;font-size:0.78rem;font-weight:600;">${S(pedido.prioridad || 'normal')}</span></div>
+                </div>
+                <div style="background:rgba(236,72,153,0.1);padding:10px 12px;border-radius:8px;border:1px solid rgba(236,72,153,0.2);">
+                    <div style="font-size:0.72rem;color:#8b9dc3;text-transform:uppercase;font-weight:600;margin-bottom:2px;">Entrega</div>
+                    <div style="font-size:0.85rem;font-weight:500;color:#e2e8f0;">${fmtFecha(pedido.fechaEntrega)}</div>
+                    ${diasRestantes ? `<div style="font-size:0.75rem;margin-top:2px;">${diasRestantes}</div>` : ''}
+                </div>
+            </div>
+
+            <!-- Fechas -->
+            <div style="display:flex;gap:16px;font-size:0.8rem;color:#8b9dc3;margin-bottom:16px;padding:0 4px;">
+                <span><i class="fas fa-calendar-plus" style="margin-right:4px;"></i>Carga: ${fmtFecha(pedido.fechaCarga)}</span>
+                <span><i class="fas fa-calendar-check" style="margin-right:4px;"></i>Entrega: ${fmtFecha(pedido.fechaEntrega)}</span>
+            </div>
+
+            <!-- Productos y procesos -->
+            ${productosHTML ? `
+                <div style="margin-bottom:4px;">
+                    <h4 style="font-size:0.9rem;color:#e2e8f0;margin-bottom:10px;"><i class="fas fa-boxes" style="color:#8b5cf6;margin-right:6px;"></i>Productos y Avance</h4>
+                    ${productosHTML}
+                </div>
+            ` : ''}
+
+            <!-- Notas y comentarios -->
+            ${notasHTML}
+
+            <!-- Imágenes -->
+            ${imagenesHTML}
+        </div>
+    `;
+
+    openModal(`Pedido #${pedidoId} — Detalle Completo`, content);
+    // Ampliar modal y ocultar footer
+    const modalEl = document.querySelector('.modal-overlay .modal');
+    if (modalEl) modalEl.classList.add('modal-detalle-pedido');
+    const footerEl = document.getElementById('modalFooter');
+    if (footerEl) footerEl.style.display = 'none';
+}
 
 // ========================================
 // SISTEMA LIBERAR OPERADOR

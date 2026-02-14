@@ -579,7 +579,8 @@
         }
     </style>
 </head>
-<body>
+<body style="visibility:hidden;">
+    <!-- Contenido oculto hasta verificar autenticación admin -->
     <div class="editor-container">
         <!-- Header -->
         <header class="editor-header">
@@ -1492,6 +1493,26 @@
     <script src="js/database-adapter.js"></script>
     <script src="js/sanitize.js"></script>
     <script src="js/admin-auth.js"></script>
+    <script>
+        // Mostrar contenido solo si hay sesión admin válida
+        // admin-auth.js muestra el overlay de login si no hay sesión
+        (function() {
+            var session = window.getAdminSession ? window.getAdminSession() : null;
+            if (session && session.rol === 'admin') {
+                document.body.style.visibility = 'visible';
+            } else {
+                // Esperar a que admin-auth muestre el login y el usuario se autentique
+                // Revisar periódicamente si ya se autenticó
+                var checkInterval = setInterval(function() {
+                    var s = window.getAdminSession ? window.getAdminSession() : null;
+                    if (s && s.rol === 'admin') {
+                        document.body.style.visibility = 'visible';
+                        clearInterval(checkInterval);
+                    }
+                }, 500);
+            }
+        })();
+    </script>
     <script src="js/dev-switcher.js"></script>
 </body>
 </html>

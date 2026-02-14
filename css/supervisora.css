@@ -1390,6 +1390,16 @@ body {
     max-height: 90vh;
 }
 
+/* Modal ampliado para detalle de pedido */
+.modal.modal-detalle-pedido {
+    max-width: 650px;
+    max-height: 90vh;
+}
+.modal.modal-detalle-pedido .modal-body {
+    max-height: 78vh;
+    padding: 16px;
+}
+
 .modal-header {
     display: flex;
     justify-content: space-between;
