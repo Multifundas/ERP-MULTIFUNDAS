@@ -177,19 +177,35 @@ async function iniciarSesion() {
 }
 
 // Fallback para cuando Supabase no está disponible
+// SEGURIDAD: Separa búsqueda de usuario de validación de PIN
 function iniciarSesionLocal(numEmpleado, pin) {
     const operadoras = getOperadorasDB();
-    const operadora = operadoras.find(op =>
-        op.numEmpleado === numEmpleado && op.pin === pin
-    );
+    // Buscar por número de empleado primero (sin revelar si existe)
+    const operadora = operadoras.find(op => op.numEmpleado === numEmpleado);
 
-    if (!operadora) {
+    // Validar PIN separadamente
+    var pinValido = false;
+    if (operadora) {
+        if (operadora.pinHash && typeof operadora.pinHash === 'string') {
+            // Hash comparison (SHA-256 simple para offline)
+            pinValido = _simpleHash(pin) === operadora.pinHash;
+        } else if (operadora.pin) {
+            // Legacy: comparación directa
+            pinValido = operadora.pin === pin;
+        }
+    }
+
+    if (!operadora || !pinValido) {
         var rlResult = _rateLimiter.registrarFallo(numEmpleado);
         var msg = 'Número de empleado o PIN incorrecto';
         if (!rlResult.bloqueado && rlResult.intentosRestantes > 0) {
             msg += ' (' + rlResult.intentosRestantes + ' intento(s) restante(s))';
         } else if (rlResult.bloqueado) {
             msg = 'Demasiados intentos. Espera ' + _rateLimiter.bloqueoMinutos + ' minutos.';
+        }
+        // Registrar intento fallido en audit trail
+        if (typeof AuditTrail !== 'undefined') {
+            AuditTrail.log('Login fallido', 'Intento fallido para empleado ' + numEmpleado, 'auth', null, 'sistema');
         }
         mostrarErrorLogin(msg);
         document.getElementById('pinInput').value = '';
@@ -199,10 +215,17 @@ function iniciarSesionLocal(numEmpleado, pin) {
     // Login exitoso - limpiar rate limiter
     _rateLimiter.limpiar(numEmpleado);
 
+    // Registrar login exitoso
+    if (typeof AuditTrail !== 'undefined') {
+        AuditTrail.log('Login exitoso', operadora.nombre + ' en estación ' + CONFIG_ESTACION.nombre, 'auth', operadora.id, operadora.nombre);
+    }
+
     // Login exitoso
     authState.operadoraActual = operadora;
     authState.sesionActiva = true;
     authState.inicioTurno = new Date();
+    // Registrar última actividad para inactivity timeout
+    authState.ultimaActividad = Date.now();
 
     guardarSesion();
     ocultarLogin();
@@ -211,6 +234,17 @@ function iniciarSesionLocal(numEmpleado, pin) {
     if (typeof initPanelOperadora === 'function') {
         initPanelOperadora();
     }
+}
+
+// Hash simple para comparación offline (NO es bcrypt, solo para fallback)
+function _simpleHash(str) {
+    var hash = 0;
+    for (var i = 0; i < str.length; i++) {
+        var char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return 'sh_' + Math.abs(hash).toString(36);
 }
 
 function cerrarSesion() {

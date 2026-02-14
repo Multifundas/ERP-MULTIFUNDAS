@@ -3,18 +3,20 @@
 // Network-first para archivos propios, cache-first para CDN
 // ========================================
 
-var CACHE_NAME = 'erp-multifundas-v14';
+var CACHE_NAME = 'erp-multifundas-v15';
 var STATIC_ASSETS = [
     '/',
     '/index.html',
     '/admin.html',
     '/supervisora.html',
     '/layout-editor.html',
+    '/css/erp-base.css',
     '/css/styles.css',
     '/css/supervisora.css',
     '/css/coco-dashboard.css',
     '/js/utils.js',
     '/js/sanitize.js',
+    '/js/erp-core.js',
     '/js/data.js',
     '/js/app.js',
     '/js/supervisora.js',
@@ -25,6 +27,16 @@ var STATIC_ASSETS = [
     '/js/database-adapter.js',
     '/js/realtime-sync.js',
     '/js/coco-dashboard.js',
+    // Módulos ERP (extraídos de app.js)
+    '/js/modules/app-dashboard.js',
+    '/js/modules/app-pedidos.js',
+    '/js/modules/app-clientes.js',
+    '/js/modules/app-productos.js',
+    '/js/modules/app-personal.js',
+    '/js/modules/app-reportes.js',
+    '/js/modules/app-admin.js',
+    '/js/modules/app-advanced.js',
+    '/js/modules/app-ai-assistant.js',
     '/manifest.json',
     // Panel Operadora
     '/panel-operadora/operadora.html',
