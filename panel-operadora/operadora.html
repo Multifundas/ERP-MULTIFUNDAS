@@ -119,33 +119,60 @@
                     <i class="fas fa-wifi"></i>
                 </div>
                 <span class="nivel-badge-header" id="nivelBadgeHeader" style="display:none;"></span>
-                <button class="btn-header btn-ganancias" onclick="mostrarMisGanancias()" title="Mis Ganancias">
-                    <i class="fas fa-coins"></i>
-                </button>
-                <button class="btn-header btn-motivacion" onclick="mostrarPanelMotivacion()" title="Motivación">
-                    <i class="fas fa-fire"></i>
-                </button>
-                <button class="btn-header btn-reportes" onclick="mostrarMisReportes()" title="Mis Reportes">
-                    <i class="fas fa-chart-bar"></i>
-                </button>
-                <button class="btn-header" onclick="mostrarHistorialDias()" title="Mi Historial">
-                    <i class="fas fa-calendar-alt"></i>
-                </button>
-                <button class="btn-header" onclick="mostrarRankingPersonal()" title="Ranking">
-                    <i class="fas fa-trophy"></i>
-                </button>
-                <button class="btn-header" onclick="toggleSonidos()" title="Sonidos" id="btnSonidos">
-                    <i class="fas fa-volume-up"></i>
-                </button>
-                <button class="btn-header" onclick="mostrarInstrucciones()" title="Instrucciones">
-                    <i class="fas fa-book"></i>
-                </button>
-                <button class="btn-header" onclick="llamarCoco()" title="Llamar a Coco">
+                <!-- 3 Primary buttons: Ayuda, Mi Resumen, Salir -->
+                <button class="btn-header btn-ayuda-primary" onclick="llamarCoco()" title="Pedir Ayuda">
                     <i class="fas fa-headset"></i>
+                    <span class="btn-header-label">Ayuda</span>
+                </button>
+                <button class="btn-header btn-resumen-primary" onclick="mostrarResumenMidShift()" title="Mi Resumen">
+                    <i class="fas fa-chart-pie"></i>
+                    <span class="btn-header-label">Mi Día</span>
+                </button>
+                <button class="btn-header btn-more" onclick="toggleMenuExtra()" title="Más opciones" id="btnMenuExtra">
+                    <i class="fas fa-ellipsis-h"></i>
                 </button>
                 <button class="btn-header btn-logout" onclick="cerrarSesion()" title="Cerrar sesión">
                     <i class="fas fa-sign-out-alt"></i>
                 </button>
+            </div>
+
+            <!-- Menú extra slide-out -->
+            <div class="menu-extra-overlay" id="menuExtraOverlay" style="display:none;" onclick="cerrarMenuExtra()"></div>
+            <div class="menu-extra-panel" id="menuExtraPanel">
+                <div class="menu-extra-header">
+                    <h4><i class="fas fa-th-large"></i> Más opciones</h4>
+                    <button class="btn-cerrar-menu" onclick="cerrarMenuExtra()"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="menu-extra-items">
+                    <button class="menu-extra-item" onclick="mostrarMisGanancias(); cerrarMenuExtra();">
+                        <i class="fas fa-coins" style="color: var(--warning)"></i>
+                        <span>Mis Ganancias</span>
+                    </button>
+                    <button class="menu-extra-item" onclick="mostrarPanelMotivacion(); cerrarMenuExtra();">
+                        <i class="fas fa-fire" style="color: var(--danger)"></i>
+                        <span>Motivación</span>
+                    </button>
+                    <button class="menu-extra-item" onclick="mostrarMisReportes(); cerrarMenuExtra();">
+                        <i class="fas fa-chart-bar" style="color: var(--info)"></i>
+                        <span>Mis Reportes</span>
+                    </button>
+                    <button class="menu-extra-item" onclick="mostrarHistorialDias(); cerrarMenuExtra();">
+                        <i class="fas fa-calendar-alt" style="color: var(--primary)"></i>
+                        <span>Mi Historial</span>
+                    </button>
+                    <button class="menu-extra-item" onclick="mostrarRankingPersonal(); cerrarMenuExtra();">
+                        <i class="fas fa-trophy" style="color: var(--warning)"></i>
+                        <span>Ranking</span>
+                    </button>
+                    <button class="menu-extra-item" onclick="mostrarInstrucciones(); cerrarMenuExtra();">
+                        <i class="fas fa-book" style="color: var(--primary-dark)"></i>
+                        <span>Instrucciones</span>
+                    </button>
+                    <button class="menu-extra-item" onclick="toggleSonidos(); cerrarMenuExtra();" id="btnSonidos">
+                        <i class="fas fa-volume-up" style="color: var(--gray-600)"></i>
+                        <span>Sonidos</span>
+                    </button>
+                </div>
             </div>
         </header>
 
@@ -192,10 +219,6 @@
                         <!-- Se carga dinámicamente desde JS -->
                     </div>
 
-                    <div class="pedido-detalles" id="pedidoDetalles">
-                        <!-- Se carga dinámicamente según el área -->
-                    </div>
-
                     <div class="pedido-meta">
                         <div class="meta-item">
                             <label>Meta:</label>
@@ -204,6 +227,37 @@
                         <div class="meta-item">
                             <label>Entrega:</label>
                             <span id="pedidoEntrega">---</span>
+                        </div>
+                    </div>
+
+                    <!-- Tabs de información del pedido -->
+                    <div class="pedido-tabs">
+                        <button class="pedido-tab active" onclick="switchPedidoTab('detalles')" data-tab="detalles">
+                            <i class="fas fa-list"></i> Detalles
+                        </button>
+                        <button class="pedido-tab" onclick="switchPedidoTab('notas')" data-tab="notas">
+                            <i class="fas fa-sticky-note"></i> Notas
+                        </button>
+                        <button class="pedido-tab" onclick="switchPedidoTab('ficha')" data-tab="ficha">
+                            <i class="fas fa-file-alt"></i> Ficha
+                        </button>
+                    </div>
+
+                    <div class="pedido-tab-content" id="tabDetalles" style="display:block;">
+                        <div class="pedido-detalles" id="pedidoDetalles">
+                            <!-- Se carga dinámicamente según el área -->
+                        </div>
+                    </div>
+
+                    <div class="pedido-tab-content" id="tabNotas" style="display:none;">
+                        <div class="pedido-notas" id="pedidoNotas">
+                            <p class="sin-notas"><i class="fas fa-info-circle"></i> Sin notas o comentarios para este pedido</p>
+                        </div>
+                    </div>
+
+                    <div class="pedido-tab-content" id="tabFicha" style="display:none;">
+                        <div class="pedido-ficha" id="pedidoFicha">
+                            <p class="sin-ficha"><i class="fas fa-info-circle"></i> Sin ficha técnica disponible</p>
                         </div>
                     </div>
                 </div>
@@ -459,7 +513,7 @@
                     <span>Última captura: <strong id="ultimaCapturaHora">---</strong></span>
                 </div>
 
-                <!-- Historial reciente -->
+                <!-- Historial reciente con opción de deshacer -->
                 <div class="historial-capturas">
                     <h4><i class="fas fa-history"></i> Últimas capturas</h4>
                     <div class="historial-list" id="historialCapturas">
@@ -640,8 +694,8 @@
         <i class="fas fa-arrow-up micro-feedback-icon"></i>
     </div>
 
-    <!-- Celebración de meta -->
-    <div class="celebracion" id="celebracion">
+    <!-- Celebración de meta (legacy - replaced by banner) -->
+    <div class="celebracion" id="celebracion" style="display:none;">
         <div class="celebracion-content">
             <i class="fas fa-trophy"></i>
             <h2>¡Meta Cumplida!</h2>

@@ -674,6 +674,12 @@ function mostrarPedido(pedido, asignacion) {
     const detallesHTML = cargarDetallesPorArea(pedido, asignacion);
     document.getElementById('pedidoDetalles').innerHTML = detallesHTML;
 
+    // Cargar tabs adicionales (Notas y Ficha Técnica)
+    if (typeof cargarNotasPedido === 'function') cargarNotasPedido(pedido);
+    if (typeof cargarFichaTecnica === 'function') cargarFichaTecnica(pedido);
+    // Reset tab to Detalles
+    if (typeof switchPedidoTab === 'function') switchPedidoTab('detalles');
+
     // *** NUEVO: Mostrar proceso asignado y cola de procesos ***
     const procesoContainer = document.getElementById('procesoAsignado');
     const procesoNombreEl = document.getElementById('procesoNombreTexto');
@@ -8598,3 +8604,525 @@ function resetearPremioWidget() {
     const badgeEl = document.getElementById('nivelBadgeHeader');
     if (badgeEl) badgeEl.style.display = 'none';
 }
+
+// ========================================
+// MEJORAS UX OPERADORA - PHASE A/B/C
+// ========================================
+
+// ---- MENU EXTRA (SLIDE-OUT) ----
+
+function toggleMenuExtra() {
+    const panel = document.getElementById('menuExtraPanel');
+    const overlay = document.getElementById('menuExtraOverlay');
+    if (!panel) return;
+
+    const isOpen = panel.classList.contains('open');
+    if (isOpen) {
+        cerrarMenuExtra();
+    } else {
+        panel.classList.add('open');
+        if (overlay) overlay.style.display = 'block';
+    }
+}
+
+function cerrarMenuExtra() {
+    const panel = document.getElementById('menuExtraPanel');
+    const overlay = document.getElementById('menuExtraOverlay');
+    if (panel) panel.classList.remove('open');
+    if (overlay) overlay.style.display = 'none';
+}
+
+// ---- TABS DE PEDIDO (Detalles/Notas/Ficha) ----
+
+function switchPedidoTab(tabName) {
+    // Ocultar todos los contenidos de tabs
+    document.querySelectorAll('.pedido-tab-content').forEach(el => {
+        el.style.display = 'none';
+    });
+
+    // Desactivar todos los tabs
+    document.querySelectorAll('.pedido-tab').forEach(el => {
+        el.classList.remove('active');
+    });
+
+    // Mostrar el tab seleccionado
+    const tabId = 'tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1);
+    const tabContent = document.getElementById(tabId);
+    if (tabContent) tabContent.style.display = 'block';
+
+    // Activar el botón del tab
+    const tabBtn = document.querySelector(`.pedido-tab[data-tab="${tabName}"]`);
+    if (tabBtn) tabBtn.classList.add('active');
+}
+
+function cargarNotasPedido(pedido) {
+    const container = document.getElementById('pedidoNotas');
+    if (!container) return;
+
+    let notas = [];
+
+    // Recopilar notas de diferentes fuentes
+    if (pedido.observaciones) {
+        notas.push({ texto: pedido.observaciones, autor: 'Pedido', fecha: pedido.fechaCreacion });
+    }
+    if (pedido.notas) {
+        notas.push({ texto: pedido.notas, autor: 'Notas', fecha: pedido.fechaCreacion });
+    }
+    if (pedido.comentarios) {
+        if (Array.isArray(pedido.comentarios)) {
+            pedido.comentarios.forEach(c => {
+                notas.push({ texto: c.texto || c.mensaje || c, autor: c.autor || 'Supervisora', fecha: c.fecha });
+            });
+        } else {
+            notas.push({ texto: pedido.comentarios, autor: 'Supervisora', fecha: null });
+        }
+    }
+    if (pedido.instrucciones) {
+        notas.push({ texto: pedido.instrucciones, autor: 'Instrucciones', fecha: null });
+    }
+
+    // Buscar comentarios de la asignación
+    const asignacion = operadoraState.procesoActual;
+    if (asignacion) {
+        if (asignacion.instrucciones) {
+            notas.push({ texto: asignacion.instrucciones, autor: 'Coco', fecha: null });
+        }
+        if (asignacion.notas) {
+            notas.push({ texto: asignacion.notas, autor: 'Asignación', fecha: null });
+        }
+    }
+
+    if (notas.length === 0) {
+        container.innerHTML = '<p class="sin-notas"><i class="fas fa-info-circle"></i> Sin notas o comentarios para este pedido</p>';
+        return;
+    }
+
+    container.innerHTML = notas.map(n => `
+        <div class="nota-item">
+            <div class="nota-autor"><i class="fas fa-user-circle"></i> ${S(n.autor || 'Sistema')}</div>
+            <div>${S(n.texto)}</div>
+            ${n.fecha ? `<div class="nota-fecha">${new Date(n.fecha).toLocaleString('es-MX')}</div>` : ''}
+        </div>
+    `).join('');
+}
+
+function cargarFichaTecnica(pedido) {
+    const container = document.getElementById('pedidoFicha');
+    if (!container) return;
+
+    let fichaItems = [];
+
+    // Info general del pedido
+    fichaItems.push({ icono: 'fa-building', label: 'Cliente', valor: pedido.cliente || '---' });
+    fichaItems.push({ icono: 'fa-cube', label: 'Producto', valor: pedido.producto || pedido.nombre || pedido.descripcion || '---' });
+    fichaItems.push({ icono: 'fa-hashtag', label: 'Cantidad', valor: `${pedido.cantidad || operadoraState.piezasMeta || '---'} piezas` });
+
+    if (pedido.fechaEntrega) {
+        fichaItems.push({ icono: 'fa-calendar', label: 'Entrega', valor: new Date(pedido.fechaEntrega).toLocaleDateString('es-MX') });
+    }
+    if (pedido.color || pedido.colorPrincipal) {
+        fichaItems.push({ icono: 'fa-palette', label: 'Color', valor: pedido.color || pedido.colorPrincipal });
+    }
+    if (pedido.talla || pedido.tallas) {
+        fichaItems.push({ icono: 'fa-ruler', label: 'Talla', valor: pedido.talla || (Array.isArray(pedido.tallas) ? pedido.tallas.join(', ') : pedido.tallas) });
+    }
+    if (pedido.material || pedido.tipoTela) {
+        fichaItems.push({ icono: 'fa-scroll', label: 'Material', valor: pedido.material || pedido.tipoTela });
+    }
+
+    // Buscar info del producto completo
+    if (typeof db !== 'undefined' && db.getProductos) {
+        const productos = db.getProductos();
+        const productoCompleto = productos.find(p =>
+            p.nombre === pedido.producto || p.id == pedido.productoId
+        );
+        if (productoCompleto) {
+            if (productoCompleto.descripcion && productoCompleto.descripcion !== pedido.producto) {
+                fichaItems.push({ icono: 'fa-info-circle', label: 'Descripción', valor: productoCompleto.descripcion });
+            }
+            if (productoCompleto.categoria) {
+                fichaItems.push({ icono: 'fa-tag', label: 'Categoría', valor: productoCompleto.categoria });
+            }
+        }
+    }
+
+    let html = fichaItems.map(item => `
+        <div class="ficha-item">
+            <i class="fas ${item.icono}"></i>
+            <label>${item.label}:</label>
+            <span>${S(String(item.valor))}</span>
+        </div>
+    `).join('');
+
+    // Imagen del producto si existe
+    const productoImagen = pedido.imagen || pedido.productoImagen;
+    if (productoImagen) {
+        html += `
+            <div class="ficha-imagen-container">
+                <img src="${productoImagen}" alt="Producto" onclick="ampliarImagen()">
+            </div>
+        `;
+    }
+
+    container.innerHTML = html || '<p class="sin-ficha"><i class="fas fa-info-circle"></i> Sin ficha técnica disponible</p>';
+}
+
+// ---- UNDO CAPTURE (2-minute window) ----
+
+const UNDO_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
+
+function puedeDeshacer(captura) {
+    if (!captura || !captura.fecha) return false;
+    const capturaDate = new Date(captura.fecha);
+    return (Date.now() - capturaDate.getTime()) < UNDO_WINDOW_MS;
+}
+
+function deshacerCaptura(capturaId) {
+    const idx = operadoraState.capturasDia.findIndex(c => c.id === capturaId);
+    if (idx === -1) {
+        mostrarToast('Captura no encontrada', 'error');
+        return;
+    }
+
+    const captura = operadoraState.capturasDia[idx];
+
+    if (!puedeDeshacer(captura)) {
+        mostrarToast('Ya pasaron más de 2 minutos, no se puede deshacer', 'warning');
+        return;
+    }
+
+    // Restar piezas
+    operadoraState.piezasCapturadas = Math.max(0, operadoraState.piezasCapturadas - captura.cantidad);
+
+    // Marcar como deshecha (no eliminar, para trazabilidad)
+    captura.deshecha = true;
+    captura.fechaDeshecha = new Date().toISOString();
+
+    // Actualizar localStorage - restar piezas del historial
+    const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const regIdx = historial.findIndex(h =>
+        h.estacionId === CONFIG_ESTACION.id &&
+        h.cantidad === captura.cantidad &&
+        Math.abs(new Date(h.fecha).getTime() - new Date(captura.fecha).getTime()) < 5000
+    );
+    if (regIdx >= 0) {
+        historial[regIdx].deshecha = true;
+        localStorage.setItem('historial_produccion', JSON.stringify(historial));
+    }
+
+    // Actualizar pedidos_erp
+    const pedidoId = operadoraState.pedidoActual?.id;
+    const procesoId = captura.procesoId || operadoraState.procesoActual?.procesoId;
+    if (pedidoId) {
+        const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+        const pedidoIndex = pedidosERP.findIndex(p => p.id == pedidoId);
+        if (pedidoIndex >= 0 && pedidosERP[pedidoIndex].procesos) {
+            const procIdx = pedidosERP[pedidoIndex].procesos.findIndex(p => p.id == procesoId);
+            if (procIdx >= 0) {
+                pedidosERP[pedidoIndex].procesos[procIdx].piezas = Math.max(0,
+                    (pedidosERP[pedidoIndex].procesos[procIdx].piezas || 0) - captura.cantidad
+                );
+                localStorage.setItem('pedidos_erp', JSON.stringify(pedidosERP));
+            }
+        }
+    }
+
+    guardarDatos();
+    actualizarAvance();
+    actualizarHistorialUI();
+
+    mostrarToast(`Deshecho: -${captura.cantidad} piezas`, 'info');
+    if (typeof reproducirSonido === 'function') reproducirSonido('finalizar');
+}
+
+// Override actualizarHistorialUI to include undo buttons
+const _originalActualizarHistorialUI = typeof actualizarHistorialUI === 'function' ? actualizarHistorialUI : null;
+
+// Redefine actualizarHistorialUI with undo support
+actualizarHistorialUI = function() {
+    const container = document.getElementById('historialCapturas');
+    if (!container) return;
+
+    const capturas = operadoraState.capturasDia.slice(-5).reverse();
+
+    if (capturas.length === 0) {
+        container.innerHTML = '<p class="sin-capturas">Sin capturas hoy</p>';
+        return;
+    }
+
+    container.innerHTML = capturas.map(c => {
+        const canUndo = !c.deshecha && puedeDeshacer(c);
+        const undoneClass = c.deshecha ? 'undone' : '';
+
+        return `
+            <div class="historial-item ${undoneClass}">
+                <span class="historial-hora">${c.hora}</span>
+                <span class="historial-cantidad">${c.deshecha ? '<s>' : ''}+${c.cantidad} pzas${c.deshecha ? '</s>' : ''}</span>
+                ${canUndo ? `<button class="btn-undo-captura" onclick="deshacerCaptura(${c.id})" title="Deshacer"><i class="fas fa-undo"></i></button>` : ''}
+            </div>
+        `;
+    }).join('');
+};
+
+// ---- MID-SHIFT SUMMARY ----
+
+function mostrarResumenMidShift() {
+    let stats;
+    try {
+        stats = typeof calcularEstadisticasTurno === 'function' ? calcularEstadisticasTurno() : null;
+    } catch (e) {
+        stats = null;
+    }
+
+    if (!stats) {
+        stats = {
+            piezasTotales: operadoraState.piezasCapturadas || 0,
+            tiempoTrabajado: calcularTiempoTurnoTexto(),
+            eficiencia: calcularEficiencia() || 0,
+            piezasPorMinuto: '0.0',
+            metaDia: operadoraState.piezasMeta || 0,
+            porcentajeMeta: operadoraState.piezasMeta > 0
+                ? Math.round((operadoraState.piezasCapturadas / operadoraState.piezasMeta) * 100)
+                : 0,
+            cumpliMeta: operadoraState.piezasCapturadas >= operadoraState.piezasMeta && operadoraState.piezasMeta > 0,
+            pausas: [],
+            tiempoTotalPausas: '0m'
+        };
+    }
+
+    const content = `
+        <div class="resumen-midshift">
+            <div class="resumen-header-cierre" style="text-align:center; padding: 16px 0;">
+                <h3 style="font-size:18px; color:var(--gray-800); margin-bottom:4px;">
+                    <i class="fas fa-chart-pie" style="color:var(--primary)"></i>
+                    Tu progreso hoy
+                </h3>
+                <p style="color:var(--gray-500); font-size:13px;">${new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+            </div>
+
+            <div class="resumen-stats-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;">
+                <div class="stat-card" style="text-align:center; padding:14px; background:var(--gray-50); border-radius:var(--radius); border-left:3px solid var(--primary);">
+                    <div style="font-size:28px; font-weight:700; color:var(--primary);">${stats.piezasTotales}</div>
+                    <div style="font-size:12px; color:var(--gray-500);">piezas</div>
+                </div>
+                <div class="stat-card" style="text-align:center; padding:14px; background:var(--gray-50); border-radius:var(--radius); border-left:3px solid var(--success);">
+                    <div style="font-size:28px; font-weight:700; color:var(--success);">${stats.eficiencia}%</div>
+                    <div style="font-size:12px; color:var(--gray-500);">eficiencia</div>
+                </div>
+                <div class="stat-card" style="text-align:center; padding:14px; background:var(--gray-50); border-radius:var(--radius); border-left:3px solid var(--info);">
+                    <div style="font-size:28px; font-weight:700; color:var(--info);">${stats.tiempoTrabajado}</div>
+                    <div style="font-size:12px; color:var(--gray-500);">trabajado</div>
+                </div>
+                <div class="stat-card" style="text-align:center; padding:14px; background:var(--gray-50); border-radius:var(--radius); border-left:3px solid var(--warning);">
+                    <div style="font-size:28px; font-weight:700; color:var(--warning);">${stats.porcentajeMeta}%</div>
+                    <div style="font-size:12px; color:var(--gray-500);">de meta</div>
+                </div>
+            </div>
+
+            ${stats.metaDia > 0 ? `
+                <div style="background:var(--gray-50); border-radius:var(--radius); padding:12px; margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--gray-500); margin-bottom:6px;">
+                        <span>Progreso</span>
+                        <span>${stats.piezasTotales} / ${stats.metaDia} piezas</span>
+                    </div>
+                    <div style="height:8px; background:var(--gray-200); border-radius:4px; overflow:hidden;">
+                        <div style="height:100%; width:${Math.min(100, stats.porcentajeMeta)}%; background:${stats.cumpliMeta ? 'var(--success)' : 'var(--primary)'}; border-radius:4px; transition:width 0.3s;"></div>
+                    </div>
+                </div>
+            ` : ''}
+
+            ${stats.cumpliMeta ? `
+                <div style="text-align:center; padding:10px; background:var(--success-light); border-radius:var(--radius); color:var(--success); font-weight:600;">
+                    <i class="fas fa-trophy"></i> ¡Meta cumplida!
+                </div>
+            ` : ''}
+        </div>
+    `;
+
+    mostrarModal('Mi Resumen del Día', content, [
+        { text: 'Cerrar', class: 'btn-primary', onclick: 'cerrarModal()' }
+    ]);
+}
+
+function calcularTiempoTurnoTexto() {
+    if (!authState.inicioTurno) return '0m';
+    const ms = Date.now() - authState.inicioTurno.getTime();
+    const horas = Math.floor(ms / 3600000);
+    const minutos = Math.floor((ms % 3600000) / 60000);
+    return horas > 0 ? `${horas}h ${minutos}m` : `${minutos}m`;
+}
+
+// ---- NON-BLOCKING CELEBRATIONS ----
+
+function mostrarCelebracionBanner(tipo, titulo, subtitulo) {
+    // Remove existing banner if any
+    let banner = document.getElementById('celebracionBanner');
+    if (banner) banner.remove();
+
+    banner = document.createElement('div');
+    banner.id = 'celebracionBanner';
+    banner.className = `celebracion-banner ${tipo}`;
+
+    const iconos = {
+        'meta-cumplida': 'fa-trophy',
+        'logro': 'fa-star',
+        'racha': 'fa-fire'
+    };
+
+    banner.innerHTML = `
+        <i class="fas ${iconos[tipo] || 'fa-star'}"></i>
+        <div>
+            <div class="banner-text">${titulo}</div>
+            ${subtitulo ? `<div class="banner-sub">${subtitulo}</div>` : ''}
+        </div>
+        <button class="banner-close" onclick="cerrarCelebracionBanner()"><i class="fas fa-times"></i></button>
+    `;
+
+    document.body.appendChild(banner);
+
+    // Show with animation
+    requestAnimationFrame(() => {
+        banner.classList.add('show');
+    });
+
+    // Auto-hide after 4 seconds
+    setTimeout(() => {
+        cerrarCelebracionBanner();
+    }, 4000);
+
+    // Play sound
+    if (typeof reproducirSonido === 'function') reproducirSonido('meta');
+}
+
+function cerrarCelebracionBanner() {
+    const banner = document.getElementById('celebracionBanner');
+    if (banner) {
+        banner.classList.remove('show');
+        setTimeout(() => banner.remove(), 400);
+    }
+}
+
+// Override celebrarMeta to use banner instead of fullscreen
+celebrarMeta = function() {
+    mostrarCelebracionBanner('meta-cumplida', '¡Meta Cumplida!', 'Excelente trabajo');
+};
+
+// Override mostrarLogroCelebracion to use banner instead of fullscreen
+mostrarLogroCelebracion = function(logro) {
+    if (!logro) return;
+    mostrarCelebracionBanner('logro', logro.titulo, logro.mensaje);
+};
+
+// ---- PROCESS LOCK INLINE EXPLANATION ----
+
+function renderizarLockBanner(proceso) {
+    if (!proceso) return '';
+
+    const estado = proceso.estado || 'pendiente';
+    const procesoAnterior = proceso.procesoAnterior || 'proceso anterior';
+
+    if (estado === 'bloqueado' || estado === 'pendiente') {
+        if (proceso.avanceAnterior !== undefined) {
+            const porcentaje = Math.round(proceso.avanceAnterior || 0);
+            return `
+                <div class="proceso-lock-banner esperando">
+                    <i class="fas fa-hourglass-half"></i>
+                    <span class="lock-text">Esperando a que <strong>${S(procesoAnterior)}</strong> termine (${porcentaje}% completado)</span>
+                </div>
+            `;
+        }
+        return `
+            <div class="proceso-lock-banner bloqueado">
+                <i class="fas fa-lock"></i>
+                <span class="lock-text">Este proceso se desbloquea cuando <strong>${S(procesoAnterior)}</strong> finalice</span>
+            </div>
+        `;
+    }
+
+    if (estado === 'disponible' || estado === 'en-proceso') {
+        return `
+            <div class="proceso-lock-banner disponible">
+                <i class="fas fa-lock-open"></i>
+                <span class="lock-text">Proceso disponible para trabajar</span>
+            </div>
+        `;
+    }
+
+    return '';
+}
+
+// ---- INLINE CAMERA FOR PROBLEM REPORT ----
+
+function reportarProblemaConFoto(tipoId) {
+    const tipo = TIPOS_PROBLEMA.find(t => t.id === tipoId);
+    if (!tipo) return;
+
+    const content = `
+        <div class="problema-form">
+            <div class="problema-tipo-seleccionado">
+                <i class="fas ${tipo.icono}" style="color: ${tipo.color}"></i>
+                <span>${tipo.nombre}</span>
+            </div>
+
+            <div class="form-group">
+                <label>Describe el problema (opcional)</label>
+                <textarea id="problemaDescripcion" rows="3" placeholder="Detalles adicionales..."></textarea>
+            </div>
+
+            <div class="problema-foto-inline" id="problemaFotoInline">
+                <button class="btn-tomar-foto" onclick="iniciarCamaraInline()" id="btnTomarFotoInline">
+                    <i class="fas fa-camera"></i>
+                    <span>Agregar foto (opcional)</span>
+                </button>
+                <div class="problema-foto-preview" id="problemaFotoPreview" style="display:none;">
+                    <img id="problemaFotoImg" src="" alt="Foto del problema">
+                    <button class="btn-quitar-foto" onclick="quitarFotoProblema()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    mostrarModal('Reportar Problema', content, [
+        { text: 'Cancelar', class: 'btn-secondary', onclick: 'cerrarModal()' },
+        { text: 'Enviar a Coco', class: 'btn-danger', onclick: `enviarProblema('${tipoId}')` }
+    ]);
+}
+
+function iniciarCamaraInline() {
+    // Use the existing camera system but capture inline
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const camaraContainer = document.getElementById('camaraContainer');
+        if (camaraContainer) {
+            camaraContainer.style.display = 'flex';
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(stream => {
+                    const video = document.getElementById('cameraVideo');
+                    if (video) {
+                        video.srcObject = stream;
+                    }
+                })
+                .catch(() => {
+                    mostrarToast('No se pudo acceder a la cámara', 'warning');
+                    if (camaraContainer) camaraContainer.style.display = 'none';
+                });
+        }
+    } else {
+        mostrarToast('Cámara no disponible en este dispositivo', 'warning');
+    }
+}
+
+function quitarFotoProblema() {
+    const preview = document.getElementById('problemaFotoPreview');
+    const btn = document.getElementById('btnTomarFotoInline');
+    if (preview) preview.style.display = 'none';
+    if (btn) btn.style.display = 'flex';
+    operadoraState.fotoProblemaActual = null;
+}
+
+// Override the original reportarProblema to use the enhanced version
+const _originalReportarProblema = reportarProblema;
+reportarProblema = function(tipoId) {
+    reportarProblemaConFoto(tipoId);
+};
