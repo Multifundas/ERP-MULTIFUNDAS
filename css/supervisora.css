@@ -1672,12 +1672,16 @@ body {
     }
 
     .header-left h1 {
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 150px;
     }
 
     .header-left .back-link {
         font-size: 0.85rem;
+        padding: 6px 8px;
     }
 
     .header-badge {
@@ -1687,6 +1691,7 @@ body {
 
     /* Stats bar compact on mobile - full width row below header */
     .header-center {
+        display: flex;
         width: 100%;
         order: 3;
     }
@@ -1720,23 +1725,31 @@ body {
         flex-shrink: 0;
     }
 
-    .btn-outline,
-    .btn-inventario {
-        font-size: 0.7rem;
-        padding: 5px 8px;
+    /* Hide text on header buttons - use font-size trick since text is not in spans */
+    .header-right .btn-outline,
+    .header-right .btn-inventario {
+        font-size: 0;
+        padding: 8px;
         flex-shrink: 0;
-        white-space: nowrap;
+        gap: 0;
+        width: 32px;
+        height: 32px;
+        justify-content: center;
     }
 
-    /* Hide text on header buttons */
-    .btn-outline span,
-    .btn-inventario span {
-        display: none;
+    .header-right .btn-outline i,
+    .header-right .btn-inventario i {
+        font-size: 14px;
     }
 
     .theme-toggle {
-        transform: scale(0.75);
+        transform: scale(0.7);
         flex-shrink: 0;
+    }
+
+    /* On mobile, hide less important header buttons */
+    #btnModoTV {
+        display: none;
     }
 
     /* ---- SIDEBARS MOBILE ---- */
@@ -1937,28 +1950,48 @@ body {
 
 @media (max-width: 480px) {
     .supervisora-header {
-        padding: 8px;
+        padding: 6px;
     }
 
     .header-left h1 {
-        font-size: 0.85rem;
+        font-size: 0.8rem;
+        max-width: 110px;
+    }
+
+    .header-left .back-link {
+        padding: 4px 6px;
+        font-size: 0.8rem;
+    }
+
+    .header-badge {
+        display: none;
+    }
+
+    .header-right {
+        gap: 3px;
     }
 
     .header-right .btn-icon {
-        width: 30px;
-        height: 30px;
-        font-size: 11px;
+        width: 28px;
+        height: 28px;
+        font-size: 10px;
     }
 
-    .btn-outline,
-    .btn-inventario {
-        font-size: 0.7rem;
-        padding: 5px 8px;
+    .header-right .btn-outline,
+    .header-right .btn-inventario {
+        width: 28px;
+        height: 28px;
+        padding: 6px;
     }
 
-    /* Hide text labels on smallest screens, keep only icons */
-    .btn-inventario {
-        padding: 5px 8px;
+    .header-right .btn-outline i,
+    .header-right .btn-inventario i {
+        font-size: 12px;
+    }
+
+    /* Hide theme toggle on very small screens */
+    .theme-toggle {
+        display: none;
     }
 
     /* Sidebars minimal height */

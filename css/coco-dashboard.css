@@ -2616,6 +2616,11 @@
         display: none;
     }
 
+    .coco-section {
+        height: auto;
+        min-height: calc(100vh - 160px);
+    }
+
     .coco-metrics-grid {
         grid-template-columns: 1fr;
     }
