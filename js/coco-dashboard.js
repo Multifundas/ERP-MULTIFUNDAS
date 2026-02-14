@@ -1496,6 +1496,11 @@ function getEventosCalendario(anio, mes) {
     // Cargar eventos guardados (ausencias, mantenimiento, etc)
     const eventosGuardados = JSON.parse(localStorage.getItem('calendario_eventos') || '[]');
     eventos.push(...eventosGuardados.filter(e => {
+        if (e.fechaInicio && e.fechaFin) {
+            var ini = new Date(e.fechaInicio);
+            var fin = new Date(e.fechaFin);
+            return ini <= ultimoDiaMes && fin >= primerDiaMes;
+        }
         const fecha = new Date(e.fecha);
         return fecha.getMonth() === mes && fecha.getFullYear() === anio;
     }));
@@ -1642,9 +1647,15 @@ function agregarEvento() {
                 </select>
             </div>
 
-            <div class="form-group">
-                <label>Fecha</label>
-                <input type="date" id="eventoFecha" class="form-control" value="${new Date().toISOString().split('T')[0]}">
+            <div class="form-group" style="display:flex;gap:10px;">
+                <div style="flex:1;">
+                    <label>Fecha Inicio</label>
+                    <input type="date" id="eventoFechaInicio" class="form-control" value="${new Date().toISOString().split('T')[0]}">
+                </div>
+                <div style="flex:1;">
+                    <label>Fecha Fin</label>
+                    <input type="date" id="eventoFechaFin" class="form-control" value="${new Date().toISOString().split('T')[0]}">
+                </div>
             </div>
 
             <div class="form-group">
@@ -1683,12 +1694,18 @@ function actualizarFormEvento() {
 function guardarEvento() {
     const tipo = document.getElementById('eventoTipo').value;
     const operadora = document.getElementById('eventoOperadora')?.value;
-    const fecha = document.getElementById('eventoFecha').value;
+    const fechaInicio = document.getElementById('eventoFechaInicio').value;
+    const fechaFin = document.getElementById('eventoFechaFin').value;
     const titulo = document.getElementById('eventoTitulo').value;
     const descripcion = document.getElementById('eventoDescripcion').value;
 
-    if (!fecha || !titulo) {
+    if (!fechaInicio || !titulo) {
         showToast('Por favor completa los campos requeridos', 'warning');
+        return;
+    }
+
+    if (fechaFin && fechaFin < fechaInicio) {
+        showToast('La fecha fin no puede ser anterior a la fecha inicio', 'warning');
         return;
     }
 
@@ -1697,7 +1714,9 @@ function guardarEvento() {
         tipo: tipo,
         titulo: titulo,
         descripcion: descripcion,
-        fecha: fecha,
+        fecha: fechaFin || fechaInicio,
+        fechaInicio: fechaInicio,
+        fechaFin: fechaFin || fechaInicio,
         operadoraId: operadora || null
     };
 
