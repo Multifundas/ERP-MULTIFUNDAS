@@ -3,7 +3,7 @@
 // Cache de archivos estáticos, network-first para API
 // ========================================
 
-var CACHE_NAME = 'erp-multifundas-v2';
+var CACHE_NAME = 'erp-multifundas-v3';
 var STATIC_ASSETS = [
     '/',
     '/index.html',
