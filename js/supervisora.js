@@ -6939,6 +6939,51 @@ setInterval(verificarNotificacionesDeOperadoras, 15000);
 setTimeout(verificarNotificacionesDeOperadoras, 2000);
 
 // ========================================
+// NOTIFICACIONES DE DIRECCIÓN (Admin → Supervisora)
+// ========================================
+function verificarNotificacionesDeDireccion() {
+    var notificaciones;
+    try { notificaciones = JSON.parse(localStorage.getItem('notificaciones_admin_to_supervisora') || '[]'); }
+    catch(e) { return; }
+
+    var noLeidas = notificaciones.filter(function(n) { return !n.leida; });
+    if (noLeidas.length === 0) return;
+
+    var huboCambios = false;
+    noLeidas.forEach(function(notif) {
+        // Determinar tipo de notificación para supervisora
+        var tipoNotif = 'info';
+        if (notif.prioridad === 'critica' || notif.prioridad === 'alta') tipoNotif = 'danger';
+        else if (notif.prioridad === 'media') tipoNotif = 'warning';
+
+        var tituloPrefix = '';
+        if (notif.tipo === 'cambio_prioridad') tituloPrefix = '🚩 ';
+        else if (notif.tipo === 'solicitud_reporte') tituloPrefix = '📋 ';
+        else tituloPrefix = '📩 ';
+
+        if (typeof agregarNotificacion === 'function') {
+            agregarNotificacion({
+                titulo: tituloPrefix + (notif.titulo || 'Mensaje de Dirección'),
+                mensaje: notif.mensaje || '',
+                tipo: tipoNotif,
+                accion: notif.pedidoId ? 'verPedido(' + notif.pedidoId + ')' : null
+            });
+        }
+
+        notif.leida = true;
+        huboCambios = true;
+    });
+
+    if (huboCambios) {
+        localStorage.setItem('notificaciones_admin_to_supervisora', JSON.stringify(notificaciones));
+    }
+}
+
+// Verificar notificaciones de dirección cada 15 segundos
+setInterval(verificarNotificacionesDeDireccion, 15000);
+setTimeout(verificarNotificacionesDeDireccion, 3000);
+
+// ========================================
 // POLLING DE PRODUCCIÓN Y ESTADO
 // ========================================
 

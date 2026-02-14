@@ -202,6 +202,50 @@
                         </div>
                     </div>
 
+                    <!-- KPI Cards - Fila Ejecutiva -->
+                    <div class="kpi-grid kpi-grid-exec" data-widget="kpis_ejecutivos">
+                        <div class="kpi-card exec-kpi clickable" onclick="showKPIDetalle('entrega_tiempo')">
+                            <div class="kpi-icon green">
+                                <i class="fas fa-shipping-fast"></i>
+                            </div>
+                            <div class="kpi-info">
+                                <span class="kpi-value" id="kpiOnTimeRate">--</span>
+                                <span class="kpi-label">Entrega a Tiempo</span>
+                                <span class="kpi-trend" id="kpiOnTimeTrend"></span>
+                            </div>
+                        </div>
+                        <div class="kpi-card exec-kpi clickable" onclick="showKPIDetalle('margen')">
+                            <div class="kpi-icon blue">
+                                <i class="fas fa-chart-pie"></i>
+                            </div>
+                            <div class="kpi-info">
+                                <span class="kpi-value" id="kpiMargenBruto">--</span>
+                                <span class="kpi-label">Margen Bruto</span>
+                                <span class="kpi-breakdown" id="kpiMargenDetalle"></span>
+                            </div>
+                        </div>
+                        <div class="kpi-card exec-kpi clickable" onclick="showKPIDetalle('utilizacion')">
+                            <div class="kpi-icon orange">
+                                <i class="fas fa-industry"></i>
+                            </div>
+                            <div class="kpi-info">
+                                <span class="kpi-value" id="kpiUtilizacion">--</span>
+                                <span class="kpi-label">Utilización Planta</span>
+                                <span class="kpi-breakdown" id="kpiUtilizacionDetalle"></span>
+                            </div>
+                        </div>
+                        <div class="kpi-card exec-kpi clickable" onclick="showKPIDetalle('produccion_volumen')">
+                            <div class="kpi-icon purple">
+                                <i class="fas fa-cubes"></i>
+                            </div>
+                            <div class="kpi-info">
+                                <span class="kpi-value" id="kpiPiezasHoy">--</span>
+                                <span class="kpi-label">Piezas Hoy</span>
+                                <span class="kpi-breakdown" id="kpiPiezasSemana"></span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Segunda fila KPIs -->
                     <div class="kpi-grid kpi-grid-2" data-widget="metricas">
                         <div class="kpi-card metric-card clickable" onclick="showKPIDetalle('efectividad')">
@@ -239,6 +283,42 @@
                         <h3><i class="fas fa-exclamation-triangle"></i> Alertas Activas</h3>
                         <div class="alerts-grid" id="alertsContainer">
                             <!-- Las alertas se cargan dinámicamente -->
+                        </div>
+                    </div>
+
+                    <!-- Centro de Acciones Ejecutivo -->
+                    <div class="action-center-section" data-widget="centro_acciones">
+                        <h3><i class="fas fa-bolt"></i> Centro de Acciones</h3>
+                        <div class="action-center-grid">
+                            <button class="action-btn" onclick="abrirMensajeSupervisora()">
+                                <i class="fas fa-comment-dots"></i>
+                                <span>Mensaje a Supervisora</span>
+                            </button>
+                            <button class="action-btn" onclick="abrirFlagPrioridad()">
+                                <i class="fas fa-flag"></i>
+                                <span>Marcar Pedido Prioritario</span>
+                            </button>
+                            <button class="action-btn" onclick="solicitarStatusUpdate()">
+                                <i class="fas fa-clipboard-check"></i>
+                                <span>Solicitar Reporte de Planta</span>
+                            </button>
+                            <button class="action-btn" onclick="verHistorialAcciones()">
+                                <i class="fas fa-history"></i>
+                                <span>Historial de Alertas</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Proyecciones Ejecutivas -->
+                    <div class="projections-section" data-widget="proyecciones">
+                        <div class="section-header-inline">
+                            <h3><i class="fas fa-chess"></i> Proyecciones</h3>
+                            <button class="btn btn-secondary btn-sm" onclick="refreshProjections()">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                        <div class="projections-grid" id="projectionsContainer">
+                            <!-- Se carga dinámicamente -->
                         </div>
                     </div>
 

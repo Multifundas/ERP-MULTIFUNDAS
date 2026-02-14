@@ -952,13 +952,115 @@ function calcularCostoRealVsEstimado() {
     };
 }
 
+// Calcula KPIs ejecutivos avanzados para el dashboard
+function calcularKPIsEjecutivos() {
+    var pedidos = db.getPedidos() || [];
+    var productos = db.getProductos() || [];
+    var hoy = new Date();
+    var hoyStr = hoy.toISOString().split('T')[0];
+
+    // --- 1. ON-TIME DELIVERY RATE ---
+    var pedidosConFecha = pedidos.filter(function(p) { return p.fechaEntrega; });
+    var pedidosVencidos = pedidosConFecha.filter(function(p) {
+        return new Date(p.fechaEntrega) <= hoy;
+    });
+    var pedidosEntregadosATiempo = pedidosVencidos.filter(function(p) {
+        var estado = (p.estado || '').toLowerCase();
+        return estado === 'entregado' || estado === 'completado';
+    });
+    var onTimeDeliveryRate = pedidosVencidos.length > 0
+        ? Math.round((pedidosEntregadosATiempo.length / pedidosVencidos.length) * 100)
+        : 100;
+
+    // --- 2. PROFITABILITY: Margin % ---
+    var pedidosActivos = filtrarPedidosActivos(pedidos);
+    var totalVenta = 0;
+    var totalCostoReal = 0;
+    var totalPresupuesto = 0;
+    pedidosActivos.forEach(function(pedido) {
+        var ventaPedido = (pedido.productos || []).reduce(function(sum, p) {
+            return sum + (p.cantidad || 0) * (p.precioUnitario || 0);
+        }, 0);
+        totalVenta += ventaPedido;
+        totalCostoReal += pedido.costoReal || 0;
+        totalPresupuesto += pedido.presupuestoEstimado || 0;
+    });
+    var margenBruto = totalVenta > 0
+        ? Math.round(((totalVenta - totalCostoReal) / totalVenta) * 1000) / 10
+        : 0;
+
+    // --- 3. OPERATIONAL EFFICIENCY: Plant utilization ---
+    var estaciones = db.data.estaciones || [];
+    var totalEstaciones = estaciones.length;
+    var estacionesOcupadas = estaciones.filter(function(e) { return e.operadorId !== null && e.operadorId !== undefined; }).length;
+    var utilizacionPlanta = totalEstaciones > 0
+        ? Math.round((estacionesOcupadas / totalEstaciones) * 100)
+        : 0;
+
+    // Productive vs Dead time
+    var tiemposMuertos;
+    try { tiemposMuertos = JSON.parse(localStorage.getItem('tiempos_muertos') || '{"activos":{},"historial":[]}'); }
+    catch(e) { tiemposMuertos = {activos:{},historial:[]}; }
+    var tiemposMuertosHoy = (tiemposMuertos.historial || []).filter(function(t) {
+        return t.inicio && t.inicio.startsWith(hoyStr);
+    });
+    var minutosMuertosHoy = 0;
+    tiemposMuertosHoy.forEach(function(t) {
+        if (t.duracion) {
+            minutosMuertosHoy += t.duracion;
+        } else if (t.inicio && t.fin) {
+            minutosMuertosHoy += (new Date(t.fin) - new Date(t.inicio)) / 60000;
+        }
+    });
+    Object.values(tiemposMuertos.activos || {}).forEach(function(t) {
+        if (t.inicio) minutosMuertosHoy += (hoy - new Date(t.inicio)) / 60000;
+    });
+    var horasLaboralesDia = 8.5;
+    var minutosProductivosEsperados = estacionesOcupadas * horasLaboralesDia * 60;
+    var tiempoProductivoPercent = minutosProductivosEsperados > 0
+        ? Math.min(100, Math.round(((minutosProductivosEsperados - minutosMuertosHoy) / minutosProductivosEsperados) * 100))
+        : 100;
+
+    // --- 4. VOLUME METRICS ---
+    var historial;
+    try { historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]'); }
+    catch(e) { historial = []; }
+    var produccionHoy = historial.filter(function(h) { return h.fecha && h.fecha.startsWith(hoyStr); });
+    var piezasHoy = produccionHoy.reduce(function(sum, h) { return sum + (h.cantidad || 0); }, 0);
+
+    var inicioSemana = new Date(hoy);
+    inicioSemana.setDate(hoy.getDate() - hoy.getDay());
+    inicioSemana.setHours(0,0,0,0);
+    var piezasSemana = historial.filter(function(h) {
+        return h.fecha && new Date(h.fecha) >= inicioSemana;
+    }).reduce(function(sum, h) { return sum + (h.cantidad || 0); }, 0);
+
+    return {
+        onTimeDeliveryRate: onTimeDeliveryRate,
+        margenBruto: margenBruto,
+        totalVenta: totalVenta,
+        totalCostoReal: totalCostoReal,
+        utilizacionPlanta: utilizacionPlanta,
+        estacionesOcupadas: estacionesOcupadas,
+        totalEstaciones: totalEstaciones,
+        tiempoProductivoPercent: tiempoProductivoPercent,
+        minutosMuertosHoy: Math.round(minutosMuertosHoy),
+        piezasHoy: piezasHoy,
+        piezasSemana: piezasSemana,
+        pedidosActivosCount: pedidosActivos.length
+    };
+}
+
 // ========================================
 // DASHBOARD CONFIGURABLE
 // ========================================
 var DASHBOARD_WIDGETS = {
     kpis: 'KPIs Principales',
+    kpis_ejecutivos: 'KPIs Ejecutivos',
     metricas: 'Métricas (Efectividad / Costos)',
     alertas: 'Alertas Activas',
+    centro_acciones: 'Centro de Acciones',
+    proyecciones: 'Proyecciones',
     costos: 'Comparación Costo Real vs Estimado',
     pedidos_pendientes: 'Pedidos Pendientes',
     pedidos_criticos: 'Pedidos Críticos'
@@ -1082,11 +1184,52 @@ function loadDashboard() {
     document.getElementById('summaryRetrasados').textContent = stats.resumenEstados.retrasados;
     document.getElementById('summarySinAsignar').textContent = stats.resumenEstados.sinAsignar;
 
+    // Cargar KPIs Ejecutivos
+    var kpisEjec = calcularKPIsEjecutivos();
+    var onTimeEl = document.getElementById('kpiOnTimeRate');
+    if (onTimeEl) {
+        onTimeEl.textContent = kpisEjec.onTimeDeliveryRate + '%';
+        onTimeEl.className = 'kpi-value ' + (kpisEjec.onTimeDeliveryRate >= 90 ? 'text-success' :
+            kpisEjec.onTimeDeliveryRate >= 70 ? 'text-warning' : 'text-danger');
+    }
+    var onTimeTrend = document.getElementById('kpiOnTimeTrend');
+    if (onTimeTrend) {
+        onTimeTrend.textContent = kpisEjec.onTimeDeliveryRate >= 90 ? 'Saludable' :
+            kpisEjec.onTimeDeliveryRate >= 70 ? 'Atención' : 'Crítico';
+        onTimeTrend.className = 'kpi-trend ' + (kpisEjec.onTimeDeliveryRate >= 90 ? 'up' : 'down');
+    }
+    var margenEl = document.getElementById('kpiMargenBruto');
+    if (margenEl) {
+        margenEl.textContent = kpisEjec.margenBruto + '%';
+        margenEl.className = 'kpi-value ' + (kpisEjec.margenBruto >= 25 ? 'text-success' :
+            kpisEjec.margenBruto >= 10 ? 'text-warning' : 'text-danger');
+    }
+    var margenDetalle = document.getElementById('kpiMargenDetalle');
+    if (margenDetalle) {
+        margenDetalle.textContent = 'Venta $' + kpisEjec.totalVenta.toLocaleString() +
+            ' | Costo $' + kpisEjec.totalCostoReal.toLocaleString();
+    }
+    var utilEl = document.getElementById('kpiUtilizacion');
+    if (utilEl) utilEl.textContent = kpisEjec.utilizacionPlanta + '%';
+    var utilDetalle = document.getElementById('kpiUtilizacionDetalle');
+    if (utilDetalle) {
+        utilDetalle.textContent = kpisEjec.estacionesOcupadas + '/' +
+            kpisEjec.totalEstaciones + ' estaciones | ' +
+            kpisEjec.tiempoProductivoPercent + '% productivo';
+    }
+    var piezasEl = document.getElementById('kpiPiezasHoy');
+    if (piezasEl) piezasEl.textContent = kpisEjec.piezasHoy.toLocaleString();
+    var piezasSemEl = document.getElementById('kpiPiezasSemana');
+    if (piezasSemEl) piezasSemEl.textContent = 'Semana: ' + kpisEjec.piezasSemana.toLocaleString() + ' pzas';
+
     // Cargar mapa de planta
     loadPlantMap();
 
     // Cargar alertas
     loadAlertas();
+
+    // Cargar proyecciones
+    loadProjections();
 
     // Cargar pedidos pendientes por entregar
     loadPedidosPendientes();
@@ -2002,88 +2145,313 @@ function eliminarEstadoOperadorDeMapa(estacionId) {
 }
 
 // ========================================
-// ALERTAS
+// ALERTAS INTELIGENTES
 // ========================================
 function loadAlertas() {
-    const container = document.getElementById('alertsContainer');
+    var container = document.getElementById('alertsContainer');
     if (!container) return;
 
-    // Generar alertas dinámicas basadas en datos reales
-    const alertas = generarAlertasDinamicas();
+    var alertas = generarAlertasDinamicas();
 
     if (alertas.length === 0) {
         container.innerHTML = '<p class="text-muted text-center">No hay alertas activas</p>';
         return;
     }
 
-    container.innerHTML = alertas.slice(0, 3).map((alerta, index) => `
-        <div class="alert-card ${alerta.tipo}">
-            <div class="alert-icon">
-                <i class="fas ${alerta.tipo === 'warning' ? 'fa-exclamation-circle' : alerta.tipo === 'danger' ? 'fa-times-circle' : 'fa-info-circle'}"></i>
-            </div>
-            <div class="alert-content">
-                <span class="alert-title">${S(alerta.titulo)}</span>
-                <span class="alert-detail">${S(alerta.mensaje)}</span>
-            </div>
-            ${alerta.accion ? `<button class="btn-small" onclick="${alerta.accion}">Revisar</button>` : ''}
-        </div>
-    `).join('');
+    // Mostrar hasta 6 alertas, resto colapsable
+    var visibles = alertas.slice(0, 6);
+    var ocultas = alertas.slice(6);
+
+    container.innerHTML = visibles.map(function(alerta, index) {
+        return '<div class="alert-card ' + alerta.tipo + '" data-categoria="' + (alerta.categoria || '') + '">' +
+            '<div class="alert-icon"><i class="fas ' + getAlertIcon(alerta) + '"></i></div>' +
+            '<div class="alert-content">' +
+                '<span class="alert-title">' + S(alerta.titulo) + '</span>' +
+                '<span class="alert-detail">' + S(alerta.mensaje) + '</span>' +
+            '</div>' +
+            '<div class="alert-actions">' +
+                (alerta.accion ? '<button class="btn-small" onclick="' + alerta.accion + '">Revisar</button>' : '') +
+                (alerta.escalable ? '<button class="btn-small btn-escalar" onclick="escalarAlertaASupervisora(' + index + ')" title="Enviar a Supervisora"><i class="fas fa-arrow-up"></i> Escalar</button>' : '') +
+            '</div>' +
+        '</div>';
+    }).join('');
+
+    if (ocultas.length > 0) {
+        container.innerHTML += '<button class="btn btn-secondary btn-sm btn-ver-mas-alertas" onclick="toggleAlertasOcultas()">' +
+            '<i class="fas fa-chevron-down"></i> Ver ' + ocultas.length + ' alertas más</button>' +
+            '<div id="alertasOcultas" style="display:none">' +
+            ocultas.map(function(alerta, i) {
+                var idx = i + 6;
+                return '<div class="alert-card ' + alerta.tipo + '" data-categoria="' + (alerta.categoria || '') + '" style="margin-top:8px;">' +
+                    '<div class="alert-icon"><i class="fas ' + getAlertIcon(alerta) + '"></i></div>' +
+                    '<div class="alert-content">' +
+                        '<span class="alert-title">' + S(alerta.titulo) + '</span>' +
+                        '<span class="alert-detail">' + S(alerta.mensaje) + '</span>' +
+                    '</div>' +
+                    '<div class="alert-actions">' +
+                        (alerta.accion ? '<button class="btn-small" onclick="' + alerta.accion + '">Revisar</button>' : '') +
+                        (alerta.escalable ? '<button class="btn-small btn-escalar" onclick="escalarAlertaASupervisora(' + idx + ')"><i class="fas fa-arrow-up"></i> Escalar</button>' : '') +
+                    '</div></div>';
+            }).join('') + '</div>';
+    }
+
+    // Almacenar alertas para referencia de escalamiento
+    window._alertasActuales = alertas;
+}
+
+function getAlertIcon(alerta) {
+    var iconMap = {
+        'eficiencia': 'fa-tachometer-alt',
+        'tiempos_muertos': 'fa-pause-circle',
+        'capacidad': 'fa-warehouse',
+        'costos': 'fa-money-bill-wave'
+    };
+    if (alerta.categoria && iconMap[alerta.categoria]) return iconMap[alerta.categoria];
+    if (alerta.tipo === 'danger') return 'fa-times-circle';
+    if (alerta.tipo === 'warning') return 'fa-exclamation-circle';
+    return 'fa-info-circle';
+}
+
+function toggleAlertasOcultas() {
+    var el = document.getElementById('alertasOcultas');
+    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 // Genera alertas dinámicas basadas en el estado actual del sistema
 function generarAlertasDinamicas() {
-    const alertas = [];
-    const pedidos = db.getPedidos() || [];
-    const productos = db.getProductos() || [];
-    const hoy = new Date();
+    var alertas = [];
+    var pedidos = db.getPedidos() || [];
+    var productos = db.getProductos() || [];
+    var hoy = new Date();
 
     // Alerta: Pedidos atrasados
-    pedidos.forEach(pedido => {
+    pedidos.forEach(function(pedido) {
         if (!pedido.fechaEntrega) return;
-        const entrega = new Date(pedido.fechaEntrega);
-        const diasRestantes = Math.ceil((entrega - hoy) / (1000 * 60 * 60 * 24));
-        const estado = (pedido.estado || '').toLowerCase();
+        var entrega = new Date(pedido.fechaEntrega);
+        var diasRestantes = Math.ceil((entrega - hoy) / (1000 * 60 * 60 * 24));
+        var estado = (pedido.estado || '').toLowerCase();
 
-        // Solo alertar si no está entregado/cancelado
         if (['entregado', 'cancelado', 'anulado'].includes(estado)) return;
 
         if (diasRestantes < 0) {
             alertas.push({
                 tipo: 'danger',
+                prioridadNivel: 1,
                 titulo: 'Pedido atrasado',
-                mensaje: `Pedido #${pedido.id} tiene ${Math.abs(diasRestantes)} días de atraso`,
-                accion: `viewPedido(${pedido.id})`
+                mensaje: 'Pedido #' + pedido.id + ' tiene ' + Math.abs(diasRestantes) + ' días de atraso',
+                accion: 'viewPedido(' + pedido.id + ')',
+                escalable: true,
+                categoria: 'entregas',
+                pedidoId: pedido.id
             });
         } else if (diasRestantes <= 2) {
-            const avance = calcularAvancePedido(pedido, productos);
-
+            var avance = calcularAvancePedido(pedido, productos);
             if (avance < 80) {
                 alertas.push({
                     tipo: 'warning',
+                    prioridadNivel: 2,
                     titulo: 'Pedido en riesgo',
-                    mensaje: `Pedido #${pedido.id} entrega en ${diasRestantes} días con ${avance}% avance`,
-                    accion: `viewPedido(${pedido.id})`
+                    mensaje: 'Pedido #' + pedido.id + ' entrega en ' + diasRestantes + ' días con ' + avance + '% avance',
+                    accion: 'viewPedido(' + pedido.id + ')',
+                    escalable: true,
+                    categoria: 'entregas',
+                    pedidoId: pedido.id
                 });
             }
         }
     });
 
-    // Alerta: Pedidos sin asignar (pendientes sin procesos iniciados)
-    const pedidosSinAsignar = pedidos.filter(p => {
-        const estado = (p.estado || 'pendiente').toLowerCase();
+    // Alerta: Pedidos sin asignar
+    var pedidosSinAsignar = pedidos.filter(function(p) {
+        var estado = (p.estado || 'pendiente').toLowerCase();
         return estado === 'pendiente';
     });
-
     if (pedidosSinAsignar.length > 0) {
         alertas.push({
             tipo: 'info',
+            prioridadNivel: 3,
             titulo: 'Pedidos sin asignar',
-            mensaje: `Hay ${pedidosSinAsignar.length} pedido(s) pendiente(s) de asignación`,
-            accion: `navigateTo('pedidos')`
+            mensaje: 'Hay ' + pedidosSinAsignar.length + ' pedido(s) pendiente(s) de asignación',
+            accion: "navigateTo('pedidos')",
+            escalable: false,
+            categoria: 'asignacion'
         });
     }
 
+    // NUEVA: Baja eficiencia detectada
+    var estadoOps = db.getEstadoOperadores ? db.getEstadoOperadores() : (db.data.estadoOperadores || []);
+    var opsLowEff = estadoOps.filter(function(e) {
+        return e.estado !== 'inactivo' && e.efectividad > 0 && e.efectividad < 60;
+    });
+    if (opsLowEff.length > 0) {
+        alertas.push({
+            tipo: 'warning',
+            prioridadNivel: 2,
+            titulo: 'Baja eficiencia detectada',
+            mensaje: opsLowEff.length + ' operador(es) por debajo del 60% de efectividad',
+            accion: "showKPIDetalle('efectividad')",
+            escalable: true,
+            categoria: 'eficiencia'
+        });
+    }
+
+    // NUEVA: Tiempos muertos prolongados (>30 min)
+    var tiemposMuertos;
+    try { tiemposMuertos = JSON.parse(localStorage.getItem('tiempos_muertos') || '{"activos":{},"historial":[]}'); }
+    catch(e) { tiemposMuertos = {activos:{},historial:[]}; }
+    var tmActivos = Object.entries(tiemposMuertos.activos || {});
+    var tmLargos = tmActivos.filter(function(entry) {
+        var minutos = (new Date() - new Date(entry[1].inicio)) / 60000;
+        return minutos > 30;
+    });
+    if (tmLargos.length > 0) {
+        alertas.push({
+            tipo: 'danger',
+            prioridadNivel: 1,
+            titulo: 'Tiempos muertos prolongados',
+            mensaje: tmLargos.length + ' estación(es) con paro >30 min: ' + tmLargos.map(function(e) { return e[0]; }).join(', '),
+            accion: null,
+            escalable: true,
+            categoria: 'tiempos_muertos'
+        });
+    }
+
+    // NUEVA: Capacidad al límite
+    var estaciones = db.data.estaciones || [];
+    var totalEstaciones = estaciones.length;
+    var ocupadas = estaciones.filter(function(e) { return e.operadorId !== null && e.operadorId !== undefined; }).length;
+    var utilizacion = totalEstaciones > 0 ? (ocupadas / totalEstaciones) * 100 : 0;
+    if (utilizacion > 80 && pedidosSinAsignar.length > 2) {
+        alertas.push({
+            tipo: 'warning',
+            prioridadNivel: 2,
+            titulo: 'Capacidad al límite',
+            mensaje: 'Planta al ' + Math.round(utilizacion) + '% con ' + pedidosSinAsignar.length + ' pedidos pendientes de iniciar',
+            accion: null,
+            escalable: true,
+            categoria: 'capacidad'
+        });
+    }
+
+    // NUEVA: Sobrecosto por pedido (>15% sobre presupuesto)
+    var pedidosActivos = filtrarPedidosActivos(pedidos);
+    pedidosActivos.forEach(function(pedido) {
+        if (pedido.presupuestoEstimado > 0 && pedido.costoReal > 0) {
+            var variacion = ((pedido.costoReal - pedido.presupuestoEstimado) / pedido.presupuestoEstimado) * 100;
+            if (variacion > 15) {
+                alertas.push({
+                    tipo: 'danger',
+                    prioridadNivel: 1,
+                    titulo: 'Sobrecosto en pedido',
+                    mensaje: 'Pedido #' + pedido.id + ' excede presupuesto en ' + Math.round(variacion) + '%',
+                    accion: 'viewPedido(' + pedido.id + ')',
+                    escalable: true,
+                    categoria: 'costos',
+                    pedidoId: pedido.id
+                });
+            }
+        }
+    });
+
+    // Ordenar por prioridad (1=crítico primero)
+    alertas.sort(function(a, b) { return (a.prioridadNivel || 3) - (b.prioridadNivel || 3); });
+
     return alertas;
+}
+
+// ========================================
+// COMUNICACIÓN CON SUPERVISORA
+// ========================================
+
+function enviarNotificacionASupervisora(notif) {
+    var notificaciones;
+    try { notificaciones = JSON.parse(localStorage.getItem('notificaciones_admin_to_supervisora') || '[]'); }
+    catch(e) { notificaciones = []; }
+
+    var nueva = {
+        id: Date.now(),
+        tipo: notif.tipo || 'mensaje',
+        titulo: notif.titulo || 'Mensaje de Dirección',
+        mensaje: notif.mensaje || '',
+        prioridad: notif.prioridad || 'media',
+        pedidoId: notif.pedidoId || null,
+        alertaOrigen: notif.alertaOrigen || null,
+        remitente: 'Dirección',
+        fecha: new Date().toISOString(),
+        leida: false
+    };
+    notificaciones.unshift(nueva);
+    localStorage.setItem('notificaciones_admin_to_supervisora',
+        JSON.stringify(notificaciones.slice(0, 100)));
+
+    registrarAlertaHistorial({
+        tipo: 'escalamiento_enviado',
+        destino: 'supervisora',
+        notificacion: nueva
+    });
+
+    showToast('Notificación enviada a Supervisora', 'success');
+    return nueva;
+}
+
+function registrarAlertaHistorial(data) {
+    var historial;
+    try { historial = JSON.parse(localStorage.getItem('historial_alertas_admin') || '[]'); }
+    catch(e) { historial = []; }
+    historial.unshift({
+        id: Date.now(),
+        fecha: new Date().toISOString(),
+        tipo: data.tipo,
+        destino: data.destino,
+        notificacion: data.notificacion
+    });
+    localStorage.setItem('historial_alertas_admin', JSON.stringify(historial.slice(0, 500)));
+}
+
+function escalarAlertaASupervisora(alertIndex) {
+    var alerta = window._alertasActuales && window._alertasActuales[alertIndex];
+    if (!alerta) {
+        showToast('Alerta no encontrada', 'warning');
+        return;
+    }
+
+    var content = '<div class="escalamiento-form">' +
+        '<div class="alert-card ' + alerta.tipo + '" style="margin-bottom:16px;">' +
+            '<div class="alert-icon"><i class="fas ' + getAlertIcon(alerta) + '"></i></div>' +
+            '<div class="alert-content">' +
+                '<span class="alert-title">' + S(alerta.titulo) + '</span>' +
+                '<span class="alert-detail">' + S(alerta.mensaje) + '</span>' +
+            '</div>' +
+        '</div>' +
+        '<div class="form-group">' +
+            '<label>Mensaje para Supervisora (opcional)</label>' +
+            '<textarea id="escalarMensaje" rows="3" placeholder="Instrucciones o contexto adicional..."></textarea>' +
+        '</div>' +
+        '<div class="form-group">' +
+            '<label>Prioridad</label>' +
+            '<select id="escalarPrioridad">' +
+                '<option value="alta">Alta - Atender de inmediato</option>' +
+                '<option value="media" selected>Media - Atender pronto</option>' +
+                '<option value="baja">Baja - Informativo</option>' +
+            '</select>' +
+        '</div>' +
+    '</div>';
+
+    openModal('Escalar Alerta a Supervisora', content, function() {
+        var mensaje = document.getElementById('escalarMensaje').value;
+        var prioridad = document.getElementById('escalarPrioridad').value;
+
+        enviarNotificacionASupervisora({
+            tipo: 'escalamiento',
+            titulo: 'ESCALAMIENTO: ' + alerta.titulo,
+            mensaje: (mensaje ? mensaje + ' | ' : '') + 'Detalle: ' + alerta.mensaje,
+            prioridad: prioridad,
+            pedidoId: alerta.pedidoId || null,
+            alertaOrigen: { tipo: alerta.tipo, categoria: alerta.categoria, titulo: alerta.titulo }
+        });
+
+        closeModal();
+    });
 }
 
 // ========================================
@@ -2154,6 +2522,417 @@ function loadPedidosCriticos() {
             </tr>
         `;
     }).join('');
+}
+
+// ========================================
+// PROYECCIONES PREDICTIVAS
+// ========================================
+function loadProjections() {
+    var container = document.getElementById('projectionsContainer');
+    if (!container) return;
+
+    var pedidos = db.getPedidos() || [];
+    var productos = db.getProductos() || [];
+    var hoy = new Date();
+    var pedidosActivos = filtrarPedidosActivos(pedidos);
+
+    // --- Obtener tasa de producción diaria (últimos 7 días) ---
+    var historial;
+    try { historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]'); }
+    catch(e) { historial = []; }
+
+    var hace7dias = new Date(hoy);
+    hace7dias.setDate(hoy.getDate() - 7);
+    var produccionSemana = historial.filter(function(h) {
+        return h.fecha && new Date(h.fecha) >= hace7dias;
+    });
+    var piezasTotalesSemana = produccionSemana.reduce(function(sum, h) { return sum + (h.cantidad || 0); }, 0);
+    var diasConProduccion = new Set();
+    produccionSemana.forEach(function(h) {
+        if (h.fecha) diasConProduccion.add(h.fecha.split('T')[0]);
+    });
+    var diasActivos = Math.max(diasConProduccion.size, 1);
+    var tasaDiaria = Math.round(piezasTotalesSemana / diasActivos);
+
+    // --- 1. PROYECCIÓN DE ENTREGAS ---
+    var pedidosEnRiesgo = [];
+    var pedidosEnTiempo = 0;
+    pedidosActivos.forEach(function(pedido) {
+        if (!pedido.fechaEntrega) return;
+        var entrega = new Date(pedido.fechaEntrega);
+        var diasDisponibles = Math.ceil((entrega - hoy) / (1000 * 60 * 60 * 24));
+        if (diasDisponibles < 0) diasDisponibles = 0;
+
+        var totalPiezas = (pedido.productos || []).reduce(function(sum, p) { return sum + (p.cantidad || 0); }, 0);
+        var avance = calcularAvancePedido(pedido, productos);
+        var piezasRestantes = Math.round(totalPiezas * (1 - avance / 100));
+
+        var diasNecesarios = tasaDiaria > 0 ? Math.ceil(piezasRestantes / tasaDiaria) : 999;
+
+        if (diasNecesarios > diasDisponibles && avance < 95) {
+            var riesgo = diasNecesarios - diasDisponibles > 3 ? 'alto' : 'medio';
+            pedidosEnRiesgo.push({
+                id: pedido.id,
+                diasDisponibles: diasDisponibles,
+                diasNecesarios: diasNecesarios,
+                avance: avance,
+                piezasRestantes: piezasRestantes,
+                riesgo: riesgo
+            });
+        } else {
+            pedidosEnTiempo++;
+        }
+    });
+    pedidosEnRiesgo.sort(function(a, b) { return a.diasDisponibles - b.diasDisponibles; });
+
+    // --- 2. PROYECCIÓN DE COSTOS ---
+    var pedidosSobrecosto = [];
+    var pedidosDentroPpto = 0;
+    pedidosActivos.forEach(function(pedido) {
+        var presupuesto = pedido.presupuestoEstimado || 0;
+        var costoActual = pedido.costoReal || 0;
+        if (presupuesto <= 0 || costoActual <= 0) return;
+
+        var avance = calcularAvancePedido(pedido, productos);
+        if (avance < 5) return; // Muy poco avance para proyectar
+
+        var costoProyectado = Math.round((costoActual / (avance / 100)));
+        var variacion = Math.round(((costoProyectado - presupuesto) / presupuesto) * 100);
+
+        if (variacion > 10) {
+            pedidosSobrecosto.push({
+                id: pedido.id,
+                presupuesto: presupuesto,
+                costoActual: costoActual,
+                costoProyectado: costoProyectado,
+                variacion: variacion,
+                avance: avance
+            });
+        } else {
+            pedidosDentroPpto++;
+        }
+    });
+    pedidosSobrecosto.sort(function(a, b) { return b.variacion - a.variacion; });
+
+    // --- 3. CAPACIDAD ---
+    var estaciones = db.data.estaciones || [];
+    var totalEstaciones = estaciones.length;
+    var estacionesOcupadas = estaciones.filter(function(e) { return e.operadorId !== null && e.operadorId !== undefined; }).length;
+    var piezasPendientesTotal = 0;
+    pedidosActivos.forEach(function(pedido) {
+        var totalPiezas = (pedido.productos || []).reduce(function(sum, p) { return sum + (p.cantidad || 0); }, 0);
+        var avance = calcularAvancePedido(pedido, productos);
+        piezasPendientesTotal += Math.round(totalPiezas * (1 - avance / 100));
+    });
+    var diasBacklog = tasaDiaria > 0 ? Math.ceil(piezasPendientesTotal / tasaDiaria) : 0;
+    var pedidosSinIniciar = pedidosActivos.filter(function(p) {
+        return esPedidoPendiente(p);
+    }).length;
+
+    // --- RENDER ---
+    var html = '';
+
+    // Card 1: Entregas
+    var entregaColor = pedidosEnRiesgo.length === 0 ? 'success' : (pedidosEnRiesgo.filter(function(p) { return p.riesgo === 'alto'; }).length > 0 ? 'danger' : 'warning');
+    html += '<div class="projection-card">';
+    html += '<div class="projection-header ' + entregaColor + '">';
+    html += '<i class="fas fa-shipping-fast"></i>';
+    html += '<span>Entregas</span>';
+    html += '</div>';
+    html += '<div class="projection-summary">';
+    if (pedidosEnRiesgo.length === 0) {
+        html += '<div class="projection-number success">' + pedidosEnTiempo + '</div>';
+        html += '<div class="projection-label">pedidos en tiempo</div>';
+    } else {
+        html += '<div class="projection-number ' + entregaColor + '">' + pedidosEnRiesgo.length + '</div>';
+        html += '<div class="projection-label">pedidos en riesgo de atraso</div>';
+    }
+    html += '</div>';
+    html += '<div class="projection-detail">';
+    if (pedidosEnRiesgo.length > 0) {
+        pedidosEnRiesgo.slice(0, 4).forEach(function(p) {
+            html += '<div class="projection-row ' + p.riesgo + '">';
+            html += '<span class="projection-row-label">#' + p.id + '</span>';
+            html += '<span class="projection-row-value">Faltan ' + p.diasNecesarios + 'd / Quedan ' + p.diasDisponibles + 'd</span>';
+            html += '</div>';
+        });
+        if (pedidosEnRiesgo.length > 4) {
+            html += '<div class="projection-row-more">+' + (pedidosEnRiesgo.length - 4) + ' más</div>';
+        }
+    } else {
+        html += '<div class="projection-row success">';
+        html += '<span class="projection-row-label">Tasa diaria</span>';
+        html += '<span class="projection-row-value">' + tasaDiaria.toLocaleString() + ' pzas/día</span>';
+        html += '</div>';
+    }
+    html += '</div></div>';
+
+    // Card 2: Costos
+    var costoColor = pedidosSobrecosto.length === 0 ? 'success' : (pedidosSobrecosto.filter(function(p) { return p.variacion > 25; }).length > 0 ? 'danger' : 'warning');
+    html += '<div class="projection-card">';
+    html += '<div class="projection-header ' + costoColor + '">';
+    html += '<i class="fas fa-dollar-sign"></i>';
+    html += '<span>Costos</span>';
+    html += '</div>';
+    html += '<div class="projection-summary">';
+    if (pedidosSobrecosto.length === 0) {
+        html += '<div class="projection-number success">' + pedidosDentroPpto + '</div>';
+        html += '<div class="projection-label">pedidos dentro de presupuesto</div>';
+    } else {
+        html += '<div class="projection-number ' + costoColor + '">' + pedidosSobrecosto.length + '</div>';
+        html += '<div class="projection-label">pedidos proyectan sobrecosto</div>';
+    }
+    html += '</div>';
+    html += '<div class="projection-detail">';
+    if (pedidosSobrecosto.length > 0) {
+        pedidosSobrecosto.slice(0, 4).forEach(function(p) {
+            var riesgoClass = p.variacion > 25 ? 'alto' : 'medio';
+            html += '<div class="projection-row ' + riesgoClass + '">';
+            html += '<span class="projection-row-label">#' + p.id + '</span>';
+            html += '<span class="projection-row-value">+' + p.variacion + '% sobre ppto</span>';
+            html += '</div>';
+        });
+        if (pedidosSobrecosto.length > 4) {
+            html += '<div class="projection-row-more">+' + (pedidosSobrecosto.length - 4) + ' más</div>';
+        }
+    } else {
+        html += '<div class="projection-row success">';
+        html += '<span class="projection-row-label">Sin alertas</span>';
+        html += '<span class="projection-row-value">Costos controlados</span>';
+        html += '</div>';
+    }
+    html += '</div></div>';
+
+    // Card 3: Capacidad
+    var capPercent = totalEstaciones > 0 ? Math.round((estacionesOcupadas / totalEstaciones) * 100) : 0;
+    var capColor = capPercent > 85 ? 'danger' : (capPercent > 60 ? 'warning' : 'success');
+    html += '<div class="projection-card">';
+    html += '<div class="projection-header ' + capColor + '">';
+    html += '<i class="fas fa-industry"></i>';
+    html += '<span>Capacidad</span>';
+    html += '</div>';
+    html += '<div class="projection-summary">';
+    html += '<div class="projection-number ' + capColor + '">' + diasBacklog + '</div>';
+    html += '<div class="projection-label">días de backlog estimado</div>';
+    html += '</div>';
+    html += '<div class="projection-detail">';
+    html += '<div class="projection-row info">';
+    html += '<span class="projection-row-label">Estaciones</span>';
+    html += '<span class="projection-row-value">' + estacionesOcupadas + '/' + totalEstaciones + ' ocupadas (' + capPercent + '%)</span>';
+    html += '</div>';
+    html += '<div class="projection-row info">';
+    html += '<span class="projection-row-label">Piezas pendientes</span>';
+    html += '<span class="projection-row-value">' + piezasPendientesTotal.toLocaleString() + '</span>';
+    html += '</div>';
+    html += '<div class="projection-row info">';
+    html += '<span class="projection-row-label">Sin iniciar</span>';
+    html += '<span class="projection-row-value">' + pedidosSinIniciar + ' pedidos</span>';
+    html += '</div>';
+    html += '</div></div>';
+
+    container.innerHTML = html;
+}
+
+function refreshProjections() {
+    loadProjections();
+    showToast('Proyecciones actualizadas', 'info');
+}
+
+// ========================================
+// CENTRO DE ACCIONES EJECUTIVO
+// ========================================
+function abrirMensajeSupervisora() {
+    var pedidos = filtrarPedidosActivos(db.getPedidos() || []);
+    var opcionesPedidos = '<option value="">-- Ninguno --</option>';
+    pedidos.forEach(function(p) {
+        opcionesPedidos += '<option value="' + p.id + '">#' + p.id + ' - ' + (p.cliente || 'Sin cliente') + '</option>';
+    });
+
+    var modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'modalMensajeSupervisora';
+    modal.innerHTML = '<div class="modal-content" style="max-width:500px;">' +
+        '<div class="modal-header"><h3><i class="fas fa-comment-dots"></i> Mensaje a Supervisora</h3>' +
+        '<button class="modal-close" onclick="cerrarModal(\'modalMensajeSupervisora\')">&times;</button></div>' +
+        '<div class="modal-body">' +
+        '<div class="form-group"><label>Prioridad</label>' +
+        '<select id="msgPrioridad" class="form-control">' +
+        '<option value="baja">Baja - Informativo</option>' +
+        '<option value="media" selected>Media - Requiere atención</option>' +
+        '<option value="alta">Alta - Urgente</option>' +
+        '<option value="critica">Crítica - Acción inmediata</option>' +
+        '</select></div>' +
+        '<div class="form-group"><label>Pedido relacionado (opcional)</label>' +
+        '<select id="msgPedidoRelacionado" class="form-control">' + opcionesPedidos + '</select></div>' +
+        '<div class="form-group"><label>Mensaje</label>' +
+        '<textarea id="msgTexto" class="form-control" rows="4" placeholder="Escribe tu mensaje para la supervisora..."></textarea></div>' +
+        '</div>' +
+        '<div class="modal-footer">' +
+        '<button class="btn btn-secondary" onclick="cerrarModal(\'modalMensajeSupervisora\')">Cancelar</button>' +
+        '<button class="btn btn-primary" onclick="enviarMensajeSupervisora()"><i class="fas fa-paper-plane"></i> Enviar</button>' +
+        '</div></div>';
+    document.body.appendChild(modal);
+    setTimeout(function() { modal.classList.add('active'); }, 10);
+}
+
+function enviarMensajeSupervisora() {
+    var mensaje = document.getElementById('msgTexto').value.trim();
+    if (!mensaje) {
+        showToast('Escribe un mensaje', 'warning');
+        return;
+    }
+    var prioridad = document.getElementById('msgPrioridad').value;
+    var pedidoId = document.getElementById('msgPedidoRelacionado').value || null;
+
+    enviarNotificacionASupervisora({
+        tipo: 'mensaje_direccion',
+        titulo: 'Mensaje de Dirección',
+        mensaje: mensaje,
+        prioridad: prioridad,
+        pedidoId: pedidoId ? parseInt(pedidoId) : null
+    });
+
+    cerrarModal('modalMensajeSupervisora');
+}
+
+function abrirFlagPrioridad() {
+    var pedidos = filtrarPedidosActivos(db.getPedidos() || []);
+    var opcionesPedidos = '';
+    pedidos.forEach(function(p) {
+        opcionesPedidos += '<option value="' + p.id + '">#' + p.id + ' - ' + (p.cliente || 'Sin cliente') + '</option>';
+    });
+
+    var modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'modalFlagPrioridad';
+    modal.innerHTML = '<div class="modal-content" style="max-width:500px;">' +
+        '<div class="modal-header"><h3><i class="fas fa-flag"></i> Marcar Pedido Prioritario</h3>' +
+        '<button class="modal-close" onclick="cerrarModal(\'modalFlagPrioridad\')">&times;</button></div>' +
+        '<div class="modal-body">' +
+        '<div class="form-group"><label>Seleccionar Pedido</label>' +
+        '<select id="flagPedido" class="form-control">' + opcionesPedidos + '</select></div>' +
+        '<div class="form-group"><label>Nueva Prioridad</label>' +
+        '<select id="flagNuevaPrioridad" class="form-control">' +
+        '<option value="alta">Alta</option>' +
+        '<option value="urgente" selected>Urgente</option>' +
+        '<option value="critica">Crítica</option>' +
+        '</select></div>' +
+        '<div class="form-group"><label>Motivo</label>' +
+        '<textarea id="flagMotivo" class="form-control" rows="3" placeholder="Motivo del cambio de prioridad..."></textarea></div>' +
+        '</div>' +
+        '<div class="modal-footer">' +
+        '<button class="btn btn-secondary" onclick="cerrarModal(\'modalFlagPrioridad\')">Cancelar</button>' +
+        '<button class="btn btn-primary" onclick="ejecutarFlagPrioridad()"><i class="fas fa-flag"></i> Marcar</button>' +
+        '</div></div>';
+    document.body.appendChild(modal);
+    setTimeout(function() { modal.classList.add('active'); }, 10);
+}
+
+function ejecutarFlagPrioridad() {
+    var pedidoId = document.getElementById('flagPedido').value;
+    var nuevaPrioridad = document.getElementById('flagNuevaPrioridad').value;
+    var motivo = document.getElementById('flagMotivo').value.trim();
+
+    if (!pedidoId) {
+        showToast('Selecciona un pedido', 'warning');
+        return;
+    }
+
+    // Actualizar prioridad del pedido en DB
+    var pedido = db.getPedidos().find(function(p) { return p.id == pedidoId; });
+    if (pedido) {
+        pedido.prioridad = nuevaPrioridad;
+        db.savePedidos(db.getPedidos());
+    }
+
+    // Notificar a supervisora
+    enviarNotificacionASupervisora({
+        tipo: 'cambio_prioridad',
+        titulo: 'Cambio de Prioridad - Pedido #' + pedidoId,
+        mensaje: 'Dirección ha marcado el pedido #' + pedidoId + ' como ' + nuevaPrioridad.toUpperCase() + (motivo ? '. Motivo: ' + motivo : ''),
+        prioridad: 'alta',
+        pedidoId: parseInt(pedidoId)
+    });
+
+    registrarAlertaHistorial({
+        tipo: 'cambio_prioridad',
+        destino: 'supervisora',
+        notificacion: { pedidoId: pedidoId, nuevaPrioridad: nuevaPrioridad, motivo: motivo }
+    });
+
+    cerrarModal('modalFlagPrioridad');
+    showToast('Pedido #' + pedidoId + ' marcado como ' + nuevaPrioridad, 'success');
+}
+
+function solicitarStatusUpdate() {
+    enviarNotificacionASupervisora({
+        tipo: 'solicitud_reporte',
+        titulo: 'Solicitud de Reporte de Planta',
+        mensaje: 'Dirección solicita un reporte actualizado del estado de planta, producción activa y estaciones.',
+        prioridad: 'alta'
+    });
+
+    registrarAlertaHistorial({
+        tipo: 'solicitud_reporte',
+        destino: 'supervisora',
+        notificacion: { mensaje: 'Solicitud de reporte de planta enviada' }
+    });
+}
+
+function verHistorialAcciones() {
+    var historial;
+    try { historial = JSON.parse(localStorage.getItem('historial_alertas_admin') || '[]'); }
+    catch(e) { historial = []; }
+
+    var html = '';
+    if (historial.length === 0) {
+        html = '<div style="text-align:center;padding:30px;color:#94a3b8;"><i class="fas fa-history" style="font-size:2rem;margin-bottom:10px;display:block;"></i>No hay acciones registradas</div>';
+    } else {
+        html = '<div class="historial-acciones-list">';
+        historial.slice(0, 50).forEach(function(item) {
+            var iconClass = 'fa-info-circle';
+            var colorClass = 'info';
+            if (item.tipo === 'escalamiento_enviado') { iconClass = 'fa-exclamation-triangle'; colorClass = 'warning'; }
+            else if (item.tipo === 'cambio_prioridad') { iconClass = 'fa-flag'; colorClass = 'danger'; }
+            else if (item.tipo === 'solicitud_reporte') { iconClass = 'fa-clipboard-check'; colorClass = 'info'; }
+
+            var detalle = '';
+            if (item.notificacion) {
+                if (item.notificacion.titulo) detalle = item.notificacion.titulo;
+                else if (item.notificacion.mensaje) detalle = item.notificacion.mensaje;
+            }
+
+            html += '<div class="historial-accion-item">';
+            html += '<div class="historial-accion-icon ' + colorClass + '"><i class="fas ' + iconClass + '"></i></div>';
+            html += '<div class="historial-accion-body">';
+            html += '<div class="historial-accion-tipo">' + (item.tipo || '').replace(/_/g, ' ') + '</div>';
+            html += '<div class="historial-accion-detalle">' + (typeof S === 'function' ? S(detalle) : detalle) + '</div>';
+            html += '<div class="historial-accion-fecha">' + formatDateTime(item.fecha) + '</div>';
+            html += '</div></div>';
+        });
+        html += '</div>';
+    }
+
+    var modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'modalHistorialAcciones';
+    modal.innerHTML = '<div class="modal-content" style="max-width:600px;">' +
+        '<div class="modal-header"><h3><i class="fas fa-history"></i> Historial de Acciones</h3>' +
+        '<button class="modal-close" onclick="cerrarModal(\'modalHistorialAcciones\')">&times;</button></div>' +
+        '<div class="modal-body" style="max-height:500px;overflow-y:auto;">' + html + '</div>' +
+        '<div class="modal-footer">' +
+        '<button class="btn btn-secondary" onclick="cerrarModal(\'modalHistorialAcciones\')">Cerrar</button>' +
+        '</div></div>';
+    document.body.appendChild(modal);
+    setTimeout(function() { modal.classList.add('active'); }, 10);
+}
+
+function cerrarModal(id) {
+    var modal = document.getElementById(id);
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(function() { modal.remove(); }, 300);
+    }
 }
 
 // ========================================

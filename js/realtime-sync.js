@@ -16,7 +16,9 @@
         'notificaciones_coco',
         'mensajes_operadoras',
         'historial_produccion',
-        'tiempos_muertos'
+        'tiempos_muertos',
+        'notificaciones_admin_to_supervisora',
+        'historial_alertas_admin'
     ];
 
     // ID único por tab/dispositivo para evitar loops
