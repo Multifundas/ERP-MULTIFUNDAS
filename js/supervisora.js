@@ -3,6 +3,7 @@
 // ========================================
 
 // Estado global
+var DEBUG_MODE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const supervisoraState = {
     layout: null,
     maquinas: {},
@@ -499,7 +500,7 @@ function updateZoneStats() {
 function loadDataFromERP() {
     // Verificar si existe el objeto db
     if (typeof db === 'undefined') {
-        console.warn('Base de datos no disponible');
+        DEBUG_MODE && console.warn('Base de datos no disponible');
         loadMockData();
         return;
     }
@@ -507,8 +508,8 @@ function loadDataFromERP() {
     try {
         // Cargar pedidos del dia
         const pedidos = db.getPedidos();
-        console.log('[SUPERVISORA] Total pedidos en db:', pedidos.length);
-        console.log('[SUPERVISORA] Estados de pedidos:', pedidos.map(p => ({ id: p.id, estado: p.estado })));
+        DEBUG_MODE && console.log('[SUPERVISORA] Total pedidos en db:', pedidos.length);
+        DEBUG_MODE && console.log('[SUPERVISORA] Estados de pedidos:', pedidos.map(p => ({ id: p.id, estado: p.estado })));
 
         // Filtrar por estados activos (incluir variantes con guion y guion bajo)
         const estadosActivos = ['produccion', 'en-proceso', 'en_proceso', 'pendiente', 'activo', 'en proceso'];
@@ -517,7 +518,7 @@ function loadDataFromERP() {
             .filter(p => {
                 const estadoNormalizado = (p.estado || '').toLowerCase().trim();
                 const esActivo = estadosActivos.includes(estadoNormalizado);
-                console.log('[SUPERVISORA] Pedido', p.id, '- estado:', p.estado, '- incluido:', esActivo);
+                DEBUG_MODE && console.log('[SUPERVISORA] Pedido', p.id, '- estado:', p.estado, '- incluido:', esActivo);
                 return esActivo;
             })
             .map(pedido => {
@@ -545,11 +546,11 @@ function loadDataFromERP() {
 
                 // Fuente 3: NUEVA - Cargar procesos de rutaProcesos de los productos
                 if (procesos.length === 0 && pedido.productos && pedido.productos.length > 0) {
-                    console.log('[SUPERVISORA] Buscando rutaProcesos en productos del pedido', pedido.id);
+                    DEBUG_MODE && console.log('[SUPERVISORA] Buscando rutaProcesos en productos del pedido', pedido.id);
                     pedido.productos.forEach((prod, prodIdx) => {
                         const productoCompleto = db.getProducto(parseInt(prod.productoId));
                         if (productoCompleto && productoCompleto.rutaProcesos && productoCompleto.rutaProcesos.length > 0) {
-                            console.log('[SUPERVISORA] Producto', productoCompleto.nombre, 'tiene rutaProcesos:', productoCompleto.rutaProcesos.length);
+                            DEBUG_MODE && console.log('[SUPERVISORA] Producto', productoCompleto.nombre, 'tiene rutaProcesos:', productoCompleto.rutaProcesos.length);
                             productoCompleto.rutaProcesos.forEach((proc, procIdx) => {
                                 if (proc.habilitado !== false && proc.nombre) {
                                     procesos.push({
@@ -574,10 +575,10 @@ function loadDataFromERP() {
                 // Fuente 4: Generar procesos por defecto basados en el producto/área (último recurso)
                 if (procesos.length === 0) {
                     procesos = generarProcesosDefault(pedido);
-                    console.log('[SUPERVISORA] Procesos genéricos generados para pedido', pedido.id, ':', procesos.length);
+                    DEBUG_MODE && console.log('[SUPERVISORA] Procesos genéricos generados para pedido', pedido.id, ':', procesos.length);
                 }
 
-                console.log('[SUPERVISORA] Pedido', pedido.id, 'tiene', procesos.length, 'procesos:', procesos.map(p => p.nombre));
+                DEBUG_MODE && console.log('[SUPERVISORA] Pedido', pedido.id, 'tiene', procesos.length, 'procesos:', procesos.map(p => p.nombre));
 
                 return {
                     ...pedido,
@@ -729,8 +730,8 @@ function loadEstacionesFromERP() {
         const estaciones = db.getEstaciones() || [];
         const estadoOperadores = db.getEstadoOperadores() || [];
 
-        console.log('[SUPERVISORA] Cargando estaciones ERP:', estaciones.length);
-        console.log('[SUPERVISORA] Estaciones con operador:', estaciones.filter(e => e.operadorId).map(e => `${e.id}:op${e.operadorId}`));
+        DEBUG_MODE && console.log('[SUPERVISORA] Cargando estaciones ERP:', estaciones.length);
+        DEBUG_MODE && console.log('[SUPERVISORA] Estaciones con operador:', estaciones.filter(e => e.operadorId).map(e => `${e.id}:op${e.operadorId}`));
 
         // Funcion auxiliar para buscar estacion ERP por ID o nombre similar
         function findEstacionERP(elementId, elementName) {
@@ -819,22 +820,22 @@ function loadEstacionesFromERP() {
                     // Sincronizar operador desde estaciones del ERP
                     if (estacionERP && estacionERP.operadorId) {
                         const operador = supervisoraState.operadores.find(o => o.id === estacionERP.operadorId);
-                        console.log(`[SUPERVISORA] Estación ${element.id} -> ERP ${estacionERP.id}, operadorId: ${estacionERP.operadorId}, encontrado: ${operador ? operador.nombre : 'NO'}`);
+                        DEBUG_MODE && console.log(`[SUPERVISORA] Estación ${element.id} -> ERP ${estacionERP.id}, operadorId: ${estacionERP.operadorId}, encontrado: ${operador ? operador.nombre : 'NO'}`);
                         if (operador && !maquina.operadores.some(op => op.id === operador.id)) {
                             maquina.operadores.push({
                                 id: estacionERP.operadorId,
                                 nombre: operador.nombre
                             });
-                            console.log(`[SUPERVISORA] Operador ${operador.nombre} agregado a estación ${element.id}`);
+                            DEBUG_MODE && console.log(`[SUPERVISORA] Operador ${operador.nombre} agregado a estación ${element.id}`);
                             // Si tiene operador asignado, marcar como activo por defecto
                             if (maquina.estado === 'inactivo') {
                                 maquina.estado = 'activo';
                             }
                         }
                     } else if (estacionERP) {
-                        console.log(`[SUPERVISORA] Estación ${element.id} -> ERP ${estacionERP.id}, sin operador asignado`);
+                        DEBUG_MODE && console.log(`[SUPERVISORA] Estación ${element.id} -> ERP ${estacionERP.id}, sin operador asignado`);
                     } else {
-                        console.log(`[SUPERVISORA] Estación ${element.id} no encontrada en ERP`);
+                        DEBUG_MODE && console.log(`[SUPERVISORA] Estación ${element.id} no encontrada en ERP`);
                     }
 
                     // Sincronizar estado desde estadoOperadores del ERP
@@ -908,8 +909,8 @@ function loadEstacionesFromERP() {
             });
         }
 
-        console.log('Estaciones sincronizadas:', Object.keys(supervisoraState.maquinas).length);
-        console.log('Estaciones ERP:', estaciones.length, 'Estados:', estadoOperadores.length);
+        DEBUG_MODE && console.log('Estaciones sincronizadas:', Object.keys(supervisoraState.maquinas).length);
+        DEBUG_MODE && console.log('Estaciones ERP:', estaciones.length, 'Estados:', estadoOperadores.length);
     } catch (e) {
         console.error('Error sincronizando estaciones:', e);
     }
@@ -1350,14 +1351,14 @@ function verificarDependenciasProceso(proceso, pedido) {
         const procesoNombre = proceso.nombre || proceso.procesoNombre || '';
         const inventarioPieza = db.getInventarioPiezaByProductoProceso(productoId, procesoNombre);
 
-        console.log('[SUPERVISORA-INV] Verificando inventario - productoId:', productoId,
+        DEBUG_MODE && console.log('[SUPERVISORA-INV] Verificando inventario - productoId:', productoId,
                     'proceso:', procesoNombre,
                     'inventario:', inventarioPieza?.cantidadDisponible || 0,
                     'necesario:', cantidadTotal);
 
         if (inventarioPieza && inventarioPieza.cantidadDisponible >= cantidadTotal) {
             // Hay suficiente inventario, marcar como completado
-            console.log('[SUPERVISORA-INV] ✓ Proceso tiene inventario suficiente:', procesoNombre);
+            DEBUG_MODE && console.log('[SUPERVISORA-INV] ✓ Proceso tiene inventario suficiente:', procesoNombre);
             return {
                 disponible: true,
                 mensaje: '',
@@ -1539,7 +1540,7 @@ function verificarDependenciasProceso(proceso, pedido) {
  * Descuenta del inventario y marca el proceso como completado
  */
 function usarInventarioProceso(procesoId, pedidoId, cantidadNecesaria) {
-    console.log('[SUPERVISORA] Usando inventario para proceso:', procesoId, 'pedido:', pedidoId, 'cantidad:', cantidadNecesaria);
+    DEBUG_MODE && console.log('[SUPERVISORA] Usando inventario para proceso:', procesoId, 'pedido:', pedidoId, 'cantidad:', cantidadNecesaria);
 
     // Buscar el pedido y proceso
     const pedido = supervisoraState.pedidosHoy.find(p => p.id === pedidoId);
@@ -1661,7 +1662,7 @@ function guardarRegistroUsoInventario(registro) {
     const registros = JSON.parse(localStorage.getItem('supervisora_uso_inventario') || '[]');
     registros.unshift(registro);
     localStorage.setItem('supervisora_uso_inventario', JSON.stringify(registros.slice(0, 500)));
-    console.log('[SUPERVISORA] Registro de uso de inventario guardado:', registro);
+    DEBUG_MODE && console.log('[SUPERVISORA] Registro de uso de inventario guardado:', registro);
 }
 
 // Función para desbloquear un proceso manualmente
@@ -2461,7 +2462,7 @@ function dropOnEstacion(event, estacionId) {
         // NO usar parseInt porque el ID puede ser un string compuesto como "1-2-0"
         const procesoId = event.dataTransfer.getData('procesoId');
         const pedidoId = parseInt(event.dataTransfer.getData('pedidoId'));
-        console.log('[SUPERVISORA] Drop proceso:', procesoId, 'pedido:', pedidoId, 'estacion:', estacionId);
+        DEBUG_MODE && console.log('[SUPERVISORA] Drop proceso:', procesoId, 'pedido:', pedidoId, 'estacion:', estacionId);
         assignProcesoToEstacion(procesoId, pedidoId, estacionId);
     }
 }
@@ -2562,14 +2563,14 @@ function assignProcesoToEstacion(procesoId, pedidoId, estacionId) {
     const maquina = supervisoraState.maquinas[estacionId];
     if (!maquina) return;
 
-    console.log('[SUPERVISORA] Asignando proceso:', procesoId, 'pedido:', pedidoId, 'estacion:', estacionId);
+    DEBUG_MODE && console.log('[SUPERVISORA] Asignando proceso:', procesoId, 'pedido:', pedidoId, 'estacion:', estacionId);
 
     // Buscar el proceso en los pedidos - comparar como string para IDs compuestos
     let proceso = null;
     const pedido = supervisoraState.pedidosHoy.find(p => p.id == pedidoId);
 
     if (pedido && pedido.procesos) {
-        console.log('[SUPERVISORA] Procesos del pedido:', pedido.procesos.map(p => ({id: p.id, nombre: p.nombre})));
+        DEBUG_MODE && console.log('[SUPERVISORA] Procesos del pedido:', pedido.procesos.map(p => ({id: p.id, nombre: p.nombre})));
 
         // Buscar por múltiples criterios
         proceso = pedido.procesos.find(p =>
@@ -2582,7 +2583,7 @@ function assignProcesoToEstacion(procesoId, pedidoId, estacionId) {
 
     // Si no se encuentra, buscar directamente en rutaProcesos del producto
     if (!proceso && pedido && pedido.productos) {
-        console.log('[SUPERVISORA] Buscando en rutaProcesos de productos...');
+        DEBUG_MODE && console.log('[SUPERVISORA] Buscando en rutaProcesos de productos...');
         pedido.productos.forEach(prod => {
             if (!proceso) {
                 const productoCompleto = db.getProducto(parseInt(prod.productoId));
@@ -2607,7 +2608,7 @@ function assignProcesoToEstacion(procesoId, pedidoId, estacionId) {
                                     simultaneo: proc.simultaneo !== undefined ? proc.simultaneo : detectarProcesoSimultaneo(proc.nombre, proc.areaPlantaId),
                                     orden: proc.orden || i + 1
                                 };
-                                console.log('[SUPERVISORA] Proceso encontrado en rutaProcesos:', proceso);
+                                DEBUG_MODE && console.log('[SUPERVISORA] Proceso encontrado en rutaProcesos:', proceso);
                             }
                         }
                     });
@@ -2631,7 +2632,7 @@ function assignProcesoToEstacion(procesoId, pedidoId, estacionId) {
 
         // Si aún no se encuentra, crear uno básico con el ID como nombre
         if (!proceso) {
-            console.log('[SUPERVISORA] Creando proceso fallback con ID:', procesoId);
+            DEBUG_MODE && console.log('[SUPERVISORA] Creando proceso fallback con ID:', procesoId);
             proceso = {
                 id: procesoId,
                 nombre: procesoIdStr.split('-').pop() || procesoIdStr,
@@ -2647,7 +2648,7 @@ function assignProcesoToEstacion(procesoId, pedidoId, estacionId) {
         return;
     }
 
-    console.log('[SUPERVISORA] Proceso final a asignar:', proceso);
+    DEBUG_MODE && console.log('[SUPERVISORA] Proceso final a asignar:', proceso);
 
     // Obtener datos del producto completo para imagen y nombre
     let productoCompleto = null;
@@ -2721,7 +2722,7 @@ function assignProcesoToEstacion(procesoId, pedidoId, estacionId) {
     } else {
         // Agregar a la cola de procesos pendientes
         maquina.colaProcesos.push(procesoData);
-        console.log('[SUPERVISORA] Proceso agregado a cola. Cola actual:', maquina.colaProcesos.length);
+        DEBUG_MODE && console.log('[SUPERVISORA] Proceso agregado a cola. Cola actual:', maquina.colaProcesos.length);
     }
 
     // Actualizar estado del proceso original a en-proceso
@@ -2751,7 +2752,7 @@ function assignProcesoToEstacion(procesoId, pedidoId, estacionId) {
     // Sincronizar datos del pedido para que operadora los vea
     sincronizarPedidoParaOperadoras(pedidoId);
 
-    console.log('[SUPERVISORA] Asignación creada. Proceso activo:', maquina.procesoId, 'Cola:', maquina.colaProcesos.length);
+    DEBUG_MODE && console.log('[SUPERVISORA] Asignación creada. Proceso activo:', maquina.procesoId, 'Cola:', maquina.colaProcesos.length);
 
     saveEstadoMaquinas();
     renderLayoutInSupervisora(supervisoraState.layout);
@@ -2847,7 +2848,7 @@ function cargarAsignacionesExistentes() {
                 if (maquina.operadores && maquina.operadores.length > 0) {
                     maquina.estado = 'activo';
                 }
-                console.log('[SUPERVISORA] Asignación restaurada para estación:', estacionId, 'Cola:', maquina.colaProcesos?.length || 0);
+                DEBUG_MODE && console.log('[SUPERVISORA] Asignación restaurada para estación:', estacionId, 'Cola:', maquina.colaProcesos?.length || 0);
             }
         }
     } catch (e) {
@@ -3176,7 +3177,7 @@ function guardarRegistroLiberacion(registro) {
 
     // Guardar
     localStorage.setItem('supervisora_liberaciones', JSON.stringify(registros));
-    console.log('Registro de liberación guardado:', registro);
+    DEBUG_MODE && console.log('Registro de liberación guardado:', registro);
 }
 
 // ========================================
@@ -3200,7 +3201,7 @@ function abrirDetalleProceso(procesoId, pedidoId) {
     if (typeof db !== 'undefined' && db.getInventarioPiezaByProductoProceso && productoId) {
         const procesoNombre = proceso.nombre || proceso.procesoNombre || '';
         const inventarioPieza = db.getInventarioPiezaByProductoProceso(productoId, procesoNombre);
-        console.log('[SUPERVISORA-DETALLE] Verificando inventario - productoId:', productoId,
+        DEBUG_MODE && console.log('[SUPERVISORA-DETALLE] Verificando inventario - productoId:', productoId,
                     'proceso:', procesoNombre,
                     'inventario:', inventarioPieza?.cantidadDisponible || 0);
         if (inventarioPieza && inventarioPieza.cantidadDisponible >= cantidadTotal) {
@@ -3515,7 +3516,7 @@ function marcarProcesoCompletado(procesoId, pedidoId) {
         const siguienteProceso = pedido.procesos.find(p => p.orden === siguienteOrden && p.estado !== 'completado');
 
         if (siguienteProceso) {
-            console.log('[SUPERVISORA] Auto-asignando siguiente proceso:', siguienteProceso.nombre);
+            DEBUG_MODE && console.log('[SUPERVISORA] Auto-asignando siguiente proceso:', siguienteProceso.nombre);
 
             // Auto-asignar a las colas de las estaciones que tenían el proceso completado
             estacionesConProceso.forEach(({ estacionId, operadores }) => {
@@ -3901,7 +3902,7 @@ function completarProcesoEstacion(estacionId) {
                     autoAsignado: true
                 };
                 maquina.colaProcesos.push(procesoData);
-                console.log('[SUPERVISORA] Siguiente proceso auto-agregado a cola:', siguienteProcesoEnSecuencia.nombre);
+                DEBUG_MODE && console.log('[SUPERVISORA] Siguiente proceso auto-agregado a cola:', siguienteProcesoEnSecuencia.nombre);
             }
         }
     }
@@ -4332,29 +4333,29 @@ function cargarProcesosPedido(pedidoId) {
     let procesosDisponibles = [];
 
     if (pedido) {
-        console.log('[SUPERVISORA] Cargando procesos para pedido:', pedidoId, pedido);
+        DEBUG_MODE && console.log('[SUPERVISORA] Cargando procesos para pedido:', pedidoId, pedido);
 
         // PRIORIDAD 1: Buscar procesos en rutaProcesos de los productos del pedido
         if (pedido.productos && pedido.productos.length > 0) {
             pedido.productos.forEach(prod => {
-                console.log('[SUPERVISORA] Producto en pedido:', prod);
+                DEBUG_MODE && console.log('[SUPERVISORA] Producto en pedido:', prod);
                 // Obtener el producto completo de la BD para acceder a rutaProcesos
                 // Convertir a número para asegurar coincidencia
                 const productoId = parseInt(prod.productoId);
                 const productoCompleto = db.getProducto(productoId);
-                console.log('[SUPERVISORA] Buscando producto ID:', productoId, 'Encontrado:', productoCompleto);
+                DEBUG_MODE && console.log('[SUPERVISORA] Buscando producto ID:', productoId, 'Encontrado:', productoCompleto);
 
                 if (productoCompleto) {
-                    console.log('[SUPERVISORA] Producto encontrado:', productoCompleto.nombre);
-                    console.log('[SUPERVISORA] rutaProcesos:', productoCompleto.rutaProcesos);
-                    console.log('[SUPERVISORA] Tiene rutaProcesos?:', !!productoCompleto.rutaProcesos);
-                    console.log('[SUPERVISORA] Longitud rutaProcesos:', productoCompleto.rutaProcesos?.length || 0);
+                    DEBUG_MODE && console.log('[SUPERVISORA] Producto encontrado:', productoCompleto.nombre);
+                    DEBUG_MODE && console.log('[SUPERVISORA] rutaProcesos:', productoCompleto.rutaProcesos);
+                    DEBUG_MODE && console.log('[SUPERVISORA] Tiene rutaProcesos?:', !!productoCompleto.rutaProcesos);
+                    DEBUG_MODE && console.log('[SUPERVISORA] Longitud rutaProcesos:', productoCompleto.rutaProcesos?.length || 0);
 
                     if (productoCompleto.rutaProcesos && Array.isArray(productoCompleto.rutaProcesos) && productoCompleto.rutaProcesos.length > 0) {
                         productoCompleto.rutaProcesos.forEach((proc, idx) => {
                             // Incluir si habilitado es true o undefined (no explícitamente false)
                             const estaHabilitado = proc.habilitado === true || proc.habilitado === undefined || proc.habilitado === null;
-                            console.log('[SUPERVISORA] Proceso:', proc.nombre, 'habilitado:', proc.habilitado, 'incluir:', estaHabilitado);
+                            DEBUG_MODE && console.log('[SUPERVISORA] Proceso:', proc.nombre, 'habilitado:', proc.habilitado, 'incluir:', estaHabilitado);
 
                             if (estaHabilitado && proc.nombre) {
                                 procesosDisponibles.push({
@@ -4374,7 +4375,7 @@ function cargarProcesosPedido(pedidoId) {
                         });
                     }
                 } else {
-                    console.log('[SUPERVISORA] Producto NO encontrado con ID:', productoId);
+                    DEBUG_MODE && console.log('[SUPERVISORA] Producto NO encontrado con ID:', productoId);
                 }
             });
         }
@@ -4405,7 +4406,7 @@ function cargarProcesosPedido(pedidoId) {
 
     // FALLBACK: Si no hay procesos, usar procesos genéricos
     if (procesosDisponibles.length === 0) {
-        console.log('[SUPERVISORA] Usando procesos genéricos como fallback');
+        DEBUG_MODE && console.log('[SUPERVISORA] Usando procesos genéricos como fallback');
         fuenteProcesos = 'generico';
         procesosDisponibles = [
             { id: 1, nombre: 'Corte', tiempoEstandar: 30 },
@@ -4419,8 +4420,8 @@ function cargarProcesosPedido(pedidoId) {
     // Ordenar por orden si existe
     procesosDisponibles.sort((a, b) => (a.orden || 999) - (b.orden || 999));
 
-    console.log('[SUPERVISORA] Procesos disponibles:', procesosDisponibles);
-    console.log('[SUPERVISORA] Fuente de procesos:', fuenteProcesos);
+    DEBUG_MODE && console.log('[SUPERVISORA] Procesos disponibles:', procesosDisponibles);
+    DEBUG_MODE && console.log('[SUPERVISORA] Fuente de procesos:', fuenteProcesos);
 
     // Mostrar indicador de fuente
     const procesoInfo = document.getElementById('procesoInfo');
@@ -5514,7 +5515,7 @@ function asignarPedidoAEstacion(estacionId, pedidoId, procesoId = null, meta = 1
     // para que el panel operadora pueda ver los detalles
     sincronizarPedidoParaOperadoras(pedidoId);
 
-    console.log('[SUPERVISORA] Pedido', pedidoId, 'asignado a estación', estacionId);
+    DEBUG_MODE && console.log('[SUPERVISORA] Pedido', pedidoId, 'asignado a estación', estacionId);
     showToast(`Pedido asignado a ${estacionId}`, 'success');
 
     return asignaciones[estacionId];
@@ -5612,10 +5613,10 @@ function sincronizarPedidoParaOperadoras(pedidoId) {
         }
 
         localStorage.setItem('pedidos_activos', JSON.stringify(pedidosActivos));
-        console.log('[SUPERVISORA] Pedido sincronizado a pedidos_activos:', pedidoId, pedidoFormateado);
+        DEBUG_MODE && console.log('[SUPERVISORA] Pedido sincronizado a pedidos_activos:', pedidoId, pedidoFormateado);
     } else {
-        console.warn('[SUPERVISORA] No se encontró el pedido para sincronizar:', pedidoId);
-        console.log('[SUPERVISORA] Intentando crear entrada básica...');
+        DEBUG_MODE && console.warn('[SUPERVISORA] No se encontró el pedido para sincronizar:', pedidoId);
+        DEBUG_MODE && console.log('[SUPERVISORA] Intentando crear entrada básica...');
 
         // Crear entrada básica con la información disponible
         if (existeIndex < 0) {
@@ -5631,7 +5632,7 @@ function sincronizarPedidoParaOperadoras(pedidoId) {
             };
             pedidosActivos.push(pedidoBasico);
             localStorage.setItem('pedidos_activos', JSON.stringify(pedidosActivos));
-            console.log('[SUPERVISORA] Pedido básico creado:', pedidoId);
+            DEBUG_MODE && console.log('[SUPERVISORA] Pedido básico creado:', pedidoId);
         }
     }
 }
@@ -5660,7 +5661,7 @@ function liberarEstacionDePedido(estacionId) {
         maquina.estado = 'disponible';
     }
 
-    console.log('[SUPERVISORA] Estación', estacionId, 'liberada');
+    DEBUG_MODE && console.log('[SUPERVISORA] Estación', estacionId, 'liberada');
     showToast(`Estación ${estacionId} liberada`, 'info');
 }
 
@@ -6857,7 +6858,7 @@ function actualizarDatosDeOperadoras() {
                 supervisoraState.maquinas[estacionId].piezasHoy = 0;
 
                 if (teniaProcesoAntes) {
-                    console.log('[SUPERVISORA] Estación', estacionId, 'limpiada - operador terminó proceso');
+                    DEBUG_MODE && console.log('[SUPERVISORA] Estación', estacionId, 'limpiada - operador terminó proceso');
                 }
             } else {
                 // Comportamiento normal para estaciones activas
@@ -6947,7 +6948,7 @@ function verificarProcesosCompletados() {
                     proceso.estado = 'completado';
                     proceso.piezas = asignacion.piezasProducidas || proceso.piezas || 0;
                     proceso.fechaCompletado = asignacion.fechaFin;
-                    console.log('[SUPERVISORA] Proceso marcado como completado:', proceso.nombre);
+                    DEBUG_MODE && console.log('[SUPERVISORA] Proceso marcado como completado:', proceso.nombre);
                     huboCompletados = true;
                 }
             }
@@ -6960,7 +6961,7 @@ function verificarProcesosCompletados() {
                 supervisoraState.maquinas[estacionId].estado = 'inactivo';
                 supervisoraState.maquinas[estacionId].operadores = [];
                 supervisoraState.maquinas[estacionId].piezasHoy = 0;
-                console.log('[SUPERVISORA] Estación', estacionId, 'limpiada tras proceso completado');
+                DEBUG_MODE && console.log('[SUPERVISORA] Estación', estacionId, 'limpiada tras proceso completado');
             }
 
             // Marcar para eliminar la asignación
@@ -6976,7 +6977,7 @@ function verificarProcesosCompletados() {
 
     if (asignacionesModificadas) {
         localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
-        console.log('[SUPERVISORA] Asignaciones eliminadas:', asignacionesAEliminar);
+        DEBUG_MODE && console.log('[SUPERVISORA] Asignaciones eliminadas:', asignacionesAEliminar);
     }
 
     // 2. Verificar historial de asignaciones completadas (nuevas)
@@ -6997,7 +6998,7 @@ function verificarProcesosCompletados() {
                     proceso.operadoraId = asignacion.operadoraId;
                     proceso.operadoraNombre = asignacion.operadoraNombre;
                     proceso.estacionId = asignacion.estacionId;
-                    console.log('[SUPERVISORA] Proceso completado desde historial:', proceso.nombre, 'piezas:', proceso.piezas);
+                    DEBUG_MODE && console.log('[SUPERVISORA] Proceso completado desde historial:', proceso.nombre, 'piezas:', proceso.piezas);
                     huboCompletados = true;
                 }
             }
@@ -7014,7 +7015,7 @@ function verificarProcesosCompletados() {
                     supervisoraState.maquinas[estacionId].estado = 'inactivo';
                     supervisoraState.maquinas[estacionId].operadores = [];
                     supervisoraState.maquinas[estacionId].piezasHoy = 0;
-                    console.log('[SUPERVISORA] Estación', estacionId, 'limpiada desde historial completado');
+                    DEBUG_MODE && console.log('[SUPERVISORA] Estación', estacionId, 'limpiada desde historial completado');
                 }
             }
 
@@ -7072,7 +7073,7 @@ function verificarProcesosCompletados() {
                         proceso.operadoraId = procesoERP.operadoraId;
                         proceso.operadoraNombre = procesoERP.operadoraNombre;
                         proceso.estacionId = procesoERP.estacionId;
-                        console.log('[SUPERVISORA] Proceso completado desde pedidos_erp:', proceso.nombre);
+                        DEBUG_MODE && console.log('[SUPERVISORA] Proceso completado desde pedidos_erp:', proceso.nombre);
                         huboCompletados = true;
 
                         // Limpiar la estación asociada
@@ -7084,7 +7085,7 @@ function verificarProcesosCompletados() {
                             supervisoraState.maquinas[estacionId].estado = 'inactivo';
                             supervisoraState.maquinas[estacionId].operadores = [];
                             supervisoraState.maquinas[estacionId].piezasHoy = 0;
-                            console.log('[SUPERVISORA] Estación', estacionId, 'limpiada desde pedidos_erp');
+                            DEBUG_MODE && console.log('[SUPERVISORA] Estación', estacionId, 'limpiada desde pedidos_erp');
 
                             // También eliminar de asignaciones_estaciones
                             const asignacionesActuales = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
@@ -7101,14 +7102,14 @@ function verificarProcesosCompletados() {
                         huboCompletados = true;
                     } else if (piezasERP > piezasAntes) {
                         // Actualizar piezas si hay más en ERP
-                        console.log('[SUPERVISORA] Sincronizando piezas desde pedidos_erp:',
+                        DEBUG_MODE && console.log('[SUPERVISORA] Sincronizando piezas desde pedidos_erp:',
                             proceso.nombre, 'de', piezasAntes, 'a', piezasERP);
                         proceso.piezas = piezasERP;
                         proceso.ultimaActualizacion = procesoERP.ultimaActualizacion;
                         huboCompletados = true;
                     }
                 } else {
-                    console.log('[SUPERVISORA] Proceso de pedidos_erp no encontrado en pedidosHoy:',
+                    DEBUG_MODE && console.log('[SUPERVISORA] Proceso de pedidos_erp no encontrado en pedidosHoy:',
                         procesoERP.id, procesoERP.nombre, 'pedido:', pedidoERP.id);
                 }
             });
@@ -7138,7 +7139,7 @@ function verificarProcesosCompletados() {
                     const piezasHistorial = piezasPorProceso[key] || 0;
 
                     if (piezasHistorial > (proceso.piezas || 0)) {
-                        console.log('[SUPERVISORA] Actualizando piezas desde historial_produccion:',
+                        DEBUG_MODE && console.log('[SUPERVISORA] Actualizando piezas desde historial_produccion:',
                             proceso.nombre, 'pedido:', pedido.id, 'de', proceso.piezas, 'a', piezasHistorial);
                         proceso.piezas = piezasHistorial;
                         huboCompletados = true;
@@ -7151,7 +7152,7 @@ function verificarProcesosCompletados() {
     // 4. Actualizar dependencias - habilitar procesos que dependían del completado
     if (huboCompletados) {
         actualizarDependenciasProcesos();
-        console.log('[SUPERVISORA] Hubo cambios en procesos, actualizando UI...');
+        DEBUG_MODE && console.log('[SUPERVISORA] Hubo cambios en procesos, actualizando UI...');
     }
 
     // SIEMPRE re-renderizar para mostrar piezas actualizadas
@@ -7177,7 +7178,7 @@ function verificarProcesosCompletados() {
  * Actualiza el estado de procesos dependientes cuando un proceso se completa
  */
 function actualizarDependenciasProcesos() {
-    console.log('[SUPERVISORA] Actualizando dependencias de procesos...');
+    DEBUG_MODE && console.log('[SUPERVISORA] Actualizando dependencias de procesos...');
 
     supervisoraState.pedidosHoy.forEach(pedido => {
         if (!pedido.procesos || pedido.procesos.length === 0) return;
@@ -7189,7 +7190,7 @@ function actualizarDependenciasProcesos() {
 
         if (procesosCompletados.length === 0) return;
 
-        console.log('[SUPERVISORA] Pedido', pedido.id, '- Procesos completados:',
+        DEBUG_MODE && console.log('[SUPERVISORA] Pedido', pedido.id, '- Procesos completados:',
             procesosCompletados.map(p => p.nombre));
 
         // Verificar cada proceso pendiente si sus dependencias están satisfechas
@@ -7205,7 +7206,7 @@ function actualizarDependenciasProcesos() {
                 const estabaBlockeado = proceso.estado === 'bloqueado';
                 if (estabaBlockeado) {
                     proceso.estado = 'pendiente';
-                    console.log('[SUPERVISORA] Proceso desbloqueado:', proceso.nombre);
+                    DEBUG_MODE && console.log('[SUPERVISORA] Proceso desbloqueado:', proceso.nombre);
                 }
             }
         });
@@ -7278,7 +7279,7 @@ function verificarAsignacionAutomaticaCalidadEmpaque() {
         return; // No hay estaciones de calidad/empaque
     }
 
-    console.log('[SUPERVISORA] Estaciones Calidad/Empaque encontradas:', estacionesCalidadEmpaque);
+    DEBUG_MODE && console.log('[SUPERVISORA] Estaciones Calidad/Empaque encontradas:', estacionesCalidadEmpaque);
 
     // Buscar pedidos que tienen el último proceso de costura en ejecución
     const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
@@ -7302,7 +7303,7 @@ function verificarAsignacionAutomaticaCalidadEmpaque() {
 
         if (!estaEnProceso) return;
 
-        console.log('[SUPERVISORA] Pedido', pedido.id, '- Último proceso costura EN PROCESO:', ultimoCostura.nombre);
+        DEBUG_MODE && console.log('[SUPERVISORA] Pedido', pedido.id, '- Último proceso costura EN PROCESO:', ultimoCostura.nombre);
 
         // Verificar si ya está asignado a calidad/empaque
         let yaAsignado = false;
@@ -7326,7 +7327,7 @@ function verificarAsignacionAutomaticaCalidadEmpaque() {
         });
 
         if (yaAsignado) {
-            console.log('[SUPERVISORA] Pedido', pedido.id, 'ya asignado a calidad/empaque');
+            DEBUG_MODE && console.log('[SUPERVISORA] Pedido', pedido.id, 'ya asignado a calidad/empaque');
             return;
         }
 
@@ -7366,7 +7367,7 @@ function verificarAsignacionAutomaticaCalidadEmpaque() {
 
             asignacionesMulti[estacionId].push(nuevaAsignacion);
 
-            console.log('[SUPERVISORA] Asignación automática creada para', estacionId, '- Pedido:', pedido.codigo);
+            DEBUG_MODE && console.log('[SUPERVISORA] Asignación automática creada para', estacionId, '- Pedido:', pedido.codigo);
         });
     });
 
@@ -7423,7 +7424,7 @@ function sincronizarOperadoresDesdeAdmin() {
                         nombre: estacion.operadorNombre,
                         iniciales: estacion.operadorIniciales || estacion.operadorNombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
                     });
-                    console.log(`[SYNC] Operador "${estacion.operadorNombre}" sincronizado en estación ${estacionId}`);
+                    DEBUG_MODE && console.log(`[SYNC] Operador "${estacion.operadorNombre}" sincronizado en estación ${estacionId}`);
                 }
             }
         } else {
@@ -7559,7 +7560,7 @@ function confirmarEnvioMensaje() {
     showToast('Mensaje enviado a operadoras', 'success');
 }
 
-console.log('[SUPERVISORA] Funciones de integración con Operadora cargadas');
+DEBUG_MODE && console.log('[SUPERVISORA] Funciones de integración con Operadora cargadas');
 
 // ========================================
 // INVENTARIO GENERAL DE PIEZAS - SUPERVISORA
@@ -8505,7 +8506,7 @@ function confirmarAsignarCorte(piezaId, productoId) {
         renderMapaPlanta();
     }
 
-    console.log('[SUPERVISORA] Corte de inventario asignado:', {
+    DEBUG_MODE && console.log('[SUPERVISORA] Corte de inventario asignado:', {
         pieza: pieza.procesoNombre,
         producto: producto.nombre,
         estacion: estacionId,
@@ -8730,9 +8731,9 @@ async function guardarAsistencia() {
                     p_registrado_por: reg.registrado_por
                 });
             }
-            console.log('[ASISTENCIA] Guardado en Supabase exitosamente');
+            DEBUG_MODE && console.log('[ASISTENCIA] Guardado en Supabase exitosamente');
         } catch (e) {
-            console.warn('[ASISTENCIA] Error guardando en Supabase, usando localStorage:', e.message);
+            DEBUG_MODE && console.warn('[ASISTENCIA] Error guardando en Supabase, usando localStorage:', e.message);
         }
     }
 

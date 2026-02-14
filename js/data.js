@@ -1466,7 +1466,9 @@ function sincronizarOperadorasDB() {
             area: getAreaPlantaFromAreaId(p.areaId),
             foto: p.foto || null,
             bloqueado: p.bloqueado || false,
-            permisos: p.permisos || {}
+            permisos: p.permisos || {},
+            premioProduccion: p.premioProduccion || 0,
+            premioPuntualidad: p.premioPuntualidad || 0
         }));
 
     localStorage.setItem('operadoras_db', JSON.stringify(operadoras));
@@ -1548,7 +1550,9 @@ function sincronizarOperadorasParaLogin() {
             horaEntrada: p.horaEntrada || '08:00',
             horaSalida: p.horaSalida || '17:00',
             bloqueado: p.bloqueado || false,
-            rol: p.rol || 'operador'
+            rol: p.rol || 'operador',
+            premioProduccion: p.premioProduccion || 0,
+            premioPuntualidad: p.premioPuntualidad || 0
         }));
 
     localStorage.setItem('operadoras_db', JSON.stringify(operadoras));

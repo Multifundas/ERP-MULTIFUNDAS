@@ -3,6 +3,31 @@
    Optimizado para tablets y touch
    ======================================== */
 
+/* Accesibilidad - Skip Navigation */
+.skip-nav {
+    position: absolute;
+    top: -100%;
+    left: 16px;
+    z-index: 10000;
+    padding: 8px 16px;
+    background: var(--primary);
+    color: white;
+    border-radius: 0 0 8px 8px;
+    font-size: 0.9rem;
+    text-decoration: none;
+    transition: top 0.2s;
+}
+
+.skip-nav:focus {
+    top: 0;
+}
+
+/* Focus visible para accesibilidad */
+*:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
 :root {
     /* Colores principales */
     --primary: #667eea;
@@ -2959,6 +2984,17 @@ body {
     background: var(--gray-200);
     border-radius: 10px;
     color: var(--gray-600);
+}
+
+.ranking-premio {
+    font-size: 0.85rem;
+    font-weight: 600;
+    min-width: 60px;
+    text-align: right;
+}
+
+.ranking-premio i {
+    margin-right: 2px;
 }
 
 .sin-datos {
@@ -8479,4 +8515,204 @@ body {
         width: 64px;
         height: 64px;
     }
+}
+
+/* ========================================
+   WIDGET MI PREMIO
+   ======================================== */
+.premio-widget {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.08), rgba(118, 75, 162, 0.08));
+    border: 1px solid rgba(102, 126, 234, 0.2);
+    border-radius: 16px;
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.premio-widget h4 {
+    margin: 0 0 12px 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary, #94a3b8);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.premio-widget h4 i { color: #FFD700; }
+
+.premio-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.premio-monto {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #22c55e;
+    line-height: 1;
+}
+
+.premio-tier-badge {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.1);
+    color: #999;
+}
+
+.premio-barra-container {
+    margin-bottom: 10px;
+}
+
+.premio-barra {
+    height: 8px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.premio-barra-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease, background 0.3s;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+}
+
+.premio-siguiente {
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
+    margin-top: 4px;
+    text-align: right;
+}
+
+.premio-proyeccion {
+    padding: 8px 12px;
+    background: rgba(34, 197, 94, 0.08);
+    border-radius: 10px;
+    font-size: 0.8rem;
+    color: var(--text-secondary, #94a3b8);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.premio-proyeccion i { color: #22c55e; }
+
+/* Nivel badge en header */
+.nivel-badge-header {
+    padding: 4px 12px;
+    border-radius: 14px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-right: 4px;
+}
+
+/* Botón ganancias */
+.btn-ganancias { color: #FFD700 !important; }
+.btn-ganancias:hover { background: rgba(255, 215, 0, 0.15) !important; }
+
+/* Modal Ganancias */
+.ganancias-resumen {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.ganancia-stat {
+    text-align: center;
+    padding: 16px 12px;
+    background: rgba(102, 126, 234, 0.06);
+    border-radius: 12px;
+}
+
+.ganancia-stat .valor {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #22c55e;
+    display: block;
+}
+
+.ganancia-stat .label {
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
+    margin-top: 4px;
+    display: block;
+}
+
+.ganancias-grafica {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    height: 120px;
+    padding: 0 8px;
+    margin: 16px 0;
+}
+
+.ganancia-barra {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.ganancia-barra-fill {
+    width: 100%;
+    min-height: 4px;
+    border-radius: 4px 4px 0 0;
+    transition: height 0.3s;
+}
+
+.ganancia-barra-valor {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-primary, #e2e8f0);
+}
+
+.ganancia-barra-dia {
+    font-size: 0.65rem;
+    color: var(--text-muted, #64748b);
+}
+
+.ganancias-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+}
+
+.ganancias-tabla th {
+    text-align: left;
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
+    padding: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.ganancias-tabla td {
+    padding: 8px;
+    font-size: 0.85rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.ganancias-tabla .tier-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tier-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
 }

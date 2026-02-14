@@ -3,6 +3,7 @@
 // ========================================
 
 // Estado global del panel
+var DEBUG_MODE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const operadoraState = {
     pedidoActual: null,
     procesoActual: null,
@@ -232,7 +233,7 @@ const feedbackState = {
 // ========================================
 
 function initPanelOperadora() {
-    console.log('Inicializando panel de operadora...');
+    DEBUG_MODE && console.log('Inicializando panel de operadora...');
 
     // Intentar sincronizar datos desde data.js si está disponible
     // Esto es necesario si el panel operadora se abre de forma independiente
@@ -243,7 +244,7 @@ function initPanelOperadora() {
 
     // *** DETECTAR SI ES ESTACIÓN DE CALIDAD/EMPAQUE ***
     if (esEstacionCalidadEmpaque()) {
-        console.log('[OPERADORA] Modo Multi-Pedido activado (Calidad/Empaque)');
+        DEBUG_MODE && console.log('[OPERADORA] Modo Multi-Pedido activado (Calidad/Empaque)');
         // Inicializar modo multi-pedido para calidad/empaque
         initModoMultiPedido();
     } else {
@@ -315,7 +316,7 @@ function initPanelOperadora() {
     // Verificar si es primer uso (mostrar tutorial)
     verificarPrimerUso();
 
-    console.log('Panel inicializado correctamente');
+    DEBUG_MODE && console.log('Panel inicializado correctamente');
 }
 
 /**
@@ -349,7 +350,7 @@ function verificarNuevaAsignacion() {
     }
 
     if (miAsignacion && miAsignacion.pedidoId) {
-        console.log('[OPERADORA] Nueva asignación detectada automáticamente');
+        DEBUG_MODE && console.log('[OPERADORA] Nueva asignación detectada automáticamente');
         mostrarToast('¡Nuevo pedido asignado!', 'success');
         cargarPedidoAsignado();
     }
@@ -397,15 +398,15 @@ function actualizarTiempoTurno() {
 // ========================================
 
 function sincronizarDatosAlInicio() {
-    console.log('[OPERADORA] Sincronizando datos al inicio...');
+    DEBUG_MODE && console.log('[OPERADORA] Sincronizando datos al inicio...');
 
     // Si tenemos acceso a las funciones de sincronización de data.js
     if (typeof sincronizarPedidosParaOperadoras === 'function') {
         try {
             sincronizarPedidosParaOperadoras();
-            console.log('[OPERADORA] Pedidos sincronizados desde data.js');
+            DEBUG_MODE && console.log('[OPERADORA] Pedidos sincronizados desde data.js');
         } catch (e) {
-            console.log('[OPERADORA] No se pudo sincronizar pedidos:', e.message);
+            DEBUG_MODE && console.log('[OPERADORA] No se pudo sincronizar pedidos:', e.message);
         }
     }
 
@@ -429,15 +430,15 @@ function sincronizarDatosAlInicio() {
             }));
 
             localStorage.setItem('pedidos_activos', JSON.stringify(activos));
-            console.log('[OPERADORA] Pedidos sincronizados manualmente:', activos.length);
+            DEBUG_MODE && console.log('[OPERADORA] Pedidos sincronizados manualmente:', activos.length);
         } catch (e) {
-            console.log('[OPERADORA] Error sincronizando manualmente:', e.message);
+            DEBUG_MODE && console.log('[OPERADORA] Error sincronizando manualmente:', e.message);
         }
     }
 
     // Mostrar estado actual de asignaciones
     const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
-    console.log('[OPERADORA] Estado de asignaciones:', Object.keys(asignaciones).length, 'estaciones asignadas');
+    DEBUG_MODE && console.log('[OPERADORA] Estado de asignaciones:', Object.keys(asignaciones).length, 'estaciones asignadas');
 }
 
 // ========================================
@@ -470,11 +471,11 @@ function cargarDatosGuardados() {
                 }
                 return false;
             });
-            console.log('[OPERADORA] Capturas filtradas para proceso actual:', operadoraState.capturasDia.length, 'de', todasCapturas.length);
+            DEBUG_MODE && console.log('[OPERADORA] Capturas filtradas para proceso actual:', operadoraState.capturasDia.length, 'de', todasCapturas.length);
         } else {
             // No hay proceso actual, no cargar capturas anteriores
             operadoraState.capturasDia = [];
-            console.log('[OPERADORA] Sin proceso actual, capturas reseteadas');
+            DEBUG_MODE && console.log('[OPERADORA] Sin proceso actual, capturas reseteadas');
         }
 
         operadoraState.piezasCapturadas = operadoraState.capturasDia.reduce((sum, c) => sum + c.cantidad, 0);
@@ -505,10 +506,10 @@ function cargarPedidoAsignado() {
     // 1. Buscar asignación para esta estación
     const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
 
-    console.log('[OPERADORA] === DIAGNÓSTICO DE ASIGNACIÓN ===');
-    console.log('[OPERADORA] CONFIG_ESTACION.id:', CONFIG_ESTACION.id);
-    console.log('[OPERADORA] Asignaciones disponibles:', Object.keys(asignaciones));
-    console.log('[OPERADORA] Detalle asignaciones:', JSON.stringify(asignaciones, null, 2));
+    DEBUG_MODE && console.log('[OPERADORA] === DIAGNÓSTICO DE ASIGNACIÓN ===');
+    DEBUG_MODE && console.log('[OPERADORA] CONFIG_ESTACION.id:', CONFIG_ESTACION.id);
+    DEBUG_MODE && console.log('[OPERADORA] Asignaciones disponibles:', Object.keys(asignaciones));
+    DEBUG_MODE && console.log('[OPERADORA] Detalle asignaciones:', JSON.stringify(asignaciones, null, 2));
 
     // Buscar asignación de forma flexible
     let miAsignacion = asignaciones[CONFIG_ESTACION.id];
@@ -526,20 +527,20 @@ function cargarPedidoAsignado() {
                 miIdNormalizado.includes(estIdNormalizado)) {
                 miAsignacion = asignacion;
                 estacionIdUsada = estId;
-                console.log('[OPERADORA] Asignación encontrada con ID alternativo:', estId);
+                DEBUG_MODE && console.log('[OPERADORA] Asignación encontrada con ID alternativo:', estId);
                 break;
             }
         }
     }
 
     if (!miAsignacion || !miAsignacion.pedidoId) {
-        console.log('[OPERADORA] Sin asignación para estación:', CONFIG_ESTACION.id);
-        console.log('[OPERADORA] Tip: Verifica que el ID de estación coincida con el del layout de supervisora');
+        DEBUG_MODE && console.log('[OPERADORA] Sin asignación para estación:', CONFIG_ESTACION.id);
+        DEBUG_MODE && console.log('[OPERADORA] Tip: Verifica que el ID de estación coincida con el del layout de supervisora');
         mostrarSinPedido();
         return;
     }
 
-    console.log('[OPERADORA] Asignación encontrada:', miAsignacion);
+    DEBUG_MODE && console.log('[OPERADORA] Asignación encontrada:', miAsignacion);
 
     // 2. Buscar datos del pedido en múltiples fuentes
     // IMPORTANTE: Usar comparación flexible para manejar string/number
@@ -548,9 +549,9 @@ function cargarPedidoAsignado() {
 
     // Fuente 1: pedidos_activos (sincronizado desde admin)
     const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
-    console.log('[OPERADORA] pedidos_activos disponibles:', pedidosActivos.length, 'pedidos');
-    console.log('[OPERADORA] IDs en pedidos_activos:', pedidosActivos.map(p => `${p.id} (${typeof p.id})`));
-    console.log('[OPERADORA] Buscando pedidoId:', pedidoIdBuscado, '(tipo:', typeof pedidoIdBuscado + ')');
+    DEBUG_MODE && console.log('[OPERADORA] pedidos_activos disponibles:', pedidosActivos.length, 'pedidos');
+    DEBUG_MODE && console.log('[OPERADORA] IDs en pedidos_activos:', pedidosActivos.map(p => `${p.id} (${typeof p.id})`));
+    DEBUG_MODE && console.log('[OPERADORA] Buscando pedidoId:', pedidoIdBuscado, '(tipo:', typeof pedidoIdBuscado + ')');
 
     // Comparación flexible: == en vez de === para manejar "1" == 1
     pedido = pedidosActivos.find(p => p.id == pedidoIdBuscado);
@@ -558,13 +559,13 @@ function cargarPedidoAsignado() {
     // Fuente 2: pedidos_dia (legacy)
     if (!pedido) {
         const pedidosDia = JSON.parse(localStorage.getItem('pedidos_dia') || '[]');
-        console.log('[OPERADORA] pedidos_dia disponibles:', pedidosDia.length, 'pedidos');
+        DEBUG_MODE && console.log('[OPERADORA] pedidos_dia disponibles:', pedidosDia.length, 'pedidos');
         pedido = pedidosDia.find(p => p.id == pedidoIdBuscado);
     }
 
     // Fuente 3: Si no está, intentar desde data.js si está disponible
     if (!pedido && typeof db !== 'undefined' && typeof db.getPedido === 'function') {
-        console.log('[OPERADORA] Buscando en db.getPedido...');
+        DEBUG_MODE && console.log('[OPERADORA] Buscando en db.getPedido...');
         pedido = db.getPedido(pedidoIdBuscado);
         // Intentar también con conversión de tipo
         if (!pedido) {
@@ -577,24 +578,24 @@ function cargarPedidoAsignado() {
 
     // Fuente 4: Obtener todos los pedidos de db y buscar
     if (!pedido && typeof db !== 'undefined' && typeof db.getPedidos === 'function') {
-        console.log('[OPERADORA] Buscando en db.getPedidos()...');
+        DEBUG_MODE && console.log('[OPERADORA] Buscando en db.getPedidos()...');
         const todosPedidos = db.getPedidos();
-        console.log('[OPERADORA] Total pedidos en db:', todosPedidos.length);
+        DEBUG_MODE && console.log('[OPERADORA] Total pedidos en db:', todosPedidos.length);
         pedido = todosPedidos.find(p => p.id == pedidoIdBuscado);
 
         if (pedido) {
-            console.log('[OPERADORA] Pedido encontrado en db.getPedidos()');
+            DEBUG_MODE && console.log('[OPERADORA] Pedido encontrado en db.getPedidos()');
         }
     }
 
     if (!pedido) {
-        console.warn('[OPERADORA] ⚠️ PEDIDO NO ENCONTRADO:', pedidoIdBuscado);
-        console.warn('[OPERADORA] Revisa que el pedido exista y esté sincronizado');
+        DEBUG_MODE && console.warn('[OPERADORA] ⚠️ PEDIDO NO ENCONTRADO:', pedidoIdBuscado);
+        DEBUG_MODE && console.warn('[OPERADORA] Revisa que el pedido exista y esté sincronizado');
         mostrarSinPedido();
         return;
     }
 
-    console.log('[OPERADORA] ✅ Pedido encontrado:', pedido.id, '-', pedido.producto || pedido.descripcion);
+    DEBUG_MODE && console.log('[OPERADORA] ✅ Pedido encontrado:', pedido.id, '-', pedido.producto || pedido.descripcion);
 
     // 3. Configurar estado y mostrar pedido
     operadoraState.pedidoActual = pedido;
@@ -686,7 +687,7 @@ function mostrarPedido(pedido, asignacion) {
     }
 
     // Mostrar cola de procesos con opción de selección múltiple
-    console.log('[OPERADORA] Llamando renderizarColaProcesosOperadora con asignación:', {
+    DEBUG_MODE && console.log('[OPERADORA] Llamando renderizarColaProcesosOperadora con asignación:', {
         procesoNombre: asignacion?.procesoNombre,
         procesoId: asignacion?.procesoId,
         colaProcesos: asignacion?.colaProcesos,
@@ -705,7 +706,7 @@ function mostrarPedido(pedido, asignacion) {
 }
 
 function mostrarSinPedido() {
-    console.log('[OPERADORA] Mostrando pantalla sin pedido');
+    DEBUG_MODE && console.log('[OPERADORA] Mostrando pantalla sin pedido');
 
     // Ocultar tarjeta de pedido
     const pedidoCard = document.getElementById('pedidoCard');
@@ -778,8 +779,8 @@ function mostrarSinPedido() {
 
     // Log para debug
     const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
-    console.log('[OPERADORA] Sin pedido - asignaciones actuales:', Object.keys(asignaciones));
-    console.log('[OPERADORA] Esta estación (', CONFIG_ESTACION.id, ') tiene asignación:',
+    DEBUG_MODE && console.log('[OPERADORA] Sin pedido - asignaciones actuales:', Object.keys(asignaciones));
+    DEBUG_MODE && console.log('[OPERADORA] Esta estación (', CONFIG_ESTACION.id, ') tiene asignación:',
         asignaciones[CONFIG_ESTACION.id] ? 'SÍ' : 'NO');
 }
 
@@ -802,11 +803,11 @@ function refrescarAsignacion() {
             mostrarToast('¡Pedido encontrado!', 'success');
         } else {
             // Mostrar diagnóstico en consola
-            console.log('[OPERADORA] === INFO PARA DIAGNÓSTICO ===');
-            console.log('Estación configurada:', CONFIG_ESTACION.id);
+            DEBUG_MODE && console.log('[OPERADORA] === INFO PARA DIAGNÓSTICO ===');
+            DEBUG_MODE && console.log('Estación configurada:', CONFIG_ESTACION.id);
 
             const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
-            console.log('Asignaciones existentes:', Object.keys(asignaciones));
+            DEBUG_MODE && console.log('Asignaciones existentes:', Object.keys(asignaciones));
 
             if (Object.keys(asignaciones).length > 0) {
                 mostrarToast('Hay asignaciones pero no para esta estación. Revisa configuración.', 'warning');
@@ -866,11 +867,11 @@ function detectarProcesoSimultaneoLocal(nombre) {
  * que aún no se ha completado
  */
 function verificarProcesoBloqueado(proceso, procesoActual, colaProcesos) {
-    console.log('[BLOQUEO] Verificando proceso:', proceso.procesoNombre, 'actual:', procesoActual?.procesoNombre);
+    DEBUG_MODE && console.log('[BLOQUEO] Verificando proceso:', proceso.procesoNombre, 'actual:', procesoActual?.procesoNombre);
 
     // Si es el proceso actual, no está bloqueado
     if (proceso.procesoId === procesoActual?.procesoId) {
-        console.log('[BLOQUEO] Es el proceso actual, no bloqueado');
+        DEBUG_MODE && console.log('[BLOQUEO] Es el proceso actual, no bloqueado');
         return { bloqueado: false, motivo: null };
     }
 
@@ -880,12 +881,12 @@ function verificarProcesoBloqueado(proceso, procesoActual, colaProcesos) {
     const ordenProceso = proceso.orden || proceso.procesoOrden || 0;
     const ordenActual = procesoActual?.orden || procesoActual?.procesoOrden || 0;
 
-    console.log('[BLOQUEO] Orden proceso:', ordenProceso, 'Orden actual:', ordenActual);
+    DEBUG_MODE && console.log('[BLOQUEO] Orden proceso:', ordenProceso, 'Orden actual:', ordenActual);
 
     // Si el proceso en cola tiene orden menor o igual al actual, NO está bloqueado
     // (puede trabajarse en paralelo o ya debería haberse hecho antes)
     if (ordenProceso > 0 && ordenActual > 0 && ordenProceso <= ordenActual) {
-        console.log('[BLOQUEO] Orden menor o igual al actual, no bloqueado');
+        DEBUG_MODE && console.log('[BLOQUEO] Orden menor o igual al actual, no bloqueado');
         return { bloqueado: false, motivo: null };
     }
 
@@ -894,7 +895,7 @@ function verificarProcesoBloqueado(proceso, procesoActual, colaProcesos) {
     const productoId = proceso.productoId || procesoActual?.productoId;
 
     if (!pedidoId) {
-        console.log('[BLOQUEO] No hay pedidoId, no se verifica');
+        DEBUG_MODE && console.log('[BLOQUEO] No hay pedidoId, no se verifica');
         return { bloqueado: false, motivo: null };
     }
 
@@ -915,10 +916,10 @@ function verificarProcesoBloqueado(proceso, procesoActual, colaProcesos) {
 
         if (producto && producto.rutaProcesos) {
             rutaProcesos = producto.rutaProcesos;
-            console.log('[BLOQUEO] RutaProcesos del producto encontrada:', rutaProcesos.length, 'procesos');
+            DEBUG_MODE && console.log('[BLOQUEO] RutaProcesos del producto encontrada:', rutaProcesos.length, 'procesos');
         }
     } catch (e) {
-        console.log('[BLOQUEO] Error obteniendo rutaProcesos:', e);
+        DEBUG_MODE && console.log('[BLOQUEO] Error obteniendo rutaProcesos:', e);
     }
 
     // Buscar el orden del proceso actual y del proceso a evaluar en la rutaProcesos
@@ -944,7 +945,7 @@ function verificarProcesoBloqueado(proceso, procesoActual, colaProcesos) {
         ordenEnRuta = procesoEnRuta?.orden || ordenProceso;
         ordenActualEnRuta = actualEnRuta?.orden || ordenActual;
 
-        console.log('[BLOQUEO] Orden en rutaProcesos - proceso:', ordenEnRuta, 'actual:', ordenActualEnRuta);
+        DEBUG_MODE && console.log('[BLOQUEO] Orden en rutaProcesos - proceso:', ordenEnRuta, 'actual:', ordenActualEnRuta);
     } else {
         // Si no hay rutaProcesos, usar el orden del proceso directamente
         ordenEnRuta = ordenProceso;
@@ -969,7 +970,7 @@ function verificarProcesoBloqueado(proceso, procesoActual, colaProcesos) {
             });
         }
 
-        console.log('[BLOQUEO] Procesos completados:', procesosCompletados.map(p => p.nombre || p.procesoNombre));
+        DEBUG_MODE && console.log('[BLOQUEO] Procesos completados:', procesosCompletados.map(p => p.nombre || p.procesoNombre));
 
         // Verificar si hay procesos anteriores (en la rutaProcesos) que no están completados
         // y que están en la cola o son el proceso actual
@@ -1001,12 +1002,12 @@ function verificarProcesoBloqueado(proceso, procesoActual, colaProcesos) {
                                    nombreActual.includes(nombreAnterior) ||
                                    nombreAnterior.includes(nombreActual);
 
-                console.log('[BLOQUEO] Proceso anterior orden', i, ':', procesoAnteriorEnRuta.nombre,
+                DEBUG_MODE && console.log('[BLOQUEO] Proceso anterior orden', i, ':', procesoAnteriorEnRuta.nombre,
                     'completado:', estaCompletado, 'enCola:', estaEnCola, 'esActual:', esElActual);
 
                 // Si el proceso anterior no está completado Y está en cola o es el actual, bloquear
                 if (!estaCompletado && (estaEnCola || esElActual)) {
-                    console.log('[BLOQUEO] >>> BLOQUEANDO porque falta completar:', procesoAnteriorEnRuta.nombre);
+                    DEBUG_MODE && console.log('[BLOQUEO] >>> BLOQUEANDO porque falta completar:', procesoAnteriorEnRuta.nombre);
                     return {
                         bloqueado: true,
                         motivo: `Requiere completar "${procesoAnteriorEnRuta.nombre}" primero`
@@ -1021,11 +1022,11 @@ function verificarProcesoBloqueado(proceso, procesoActual, colaProcesos) {
     const tipoActual = obtenerTipoProceso(nombreActual);
 
     if (tipoProceso === tipoActual && tipoProceso !== 'final') {
-        console.log('[BLOQUEO] Mismo tipo de proceso, pueden ser simultáneos');
+        DEBUG_MODE && console.log('[BLOQUEO] Mismo tipo de proceso, pueden ser simultáneos');
         return { bloqueado: false, motivo: null };
     }
 
-    console.log('[BLOQUEO] Proceso NO bloqueado:', proceso.procesoNombre);
+    DEBUG_MODE && console.log('[BLOQUEO] Proceso NO bloqueado:', proceso.procesoNombre);
     return { bloqueado: false, motivo: null };
 }
 
@@ -1090,9 +1091,9 @@ function renderizarColaProcesosOperadora(asignacion) {
     const hayProcesosSimultaneos = totalProcesos >= 1;
 
     // DEBUG: Log para verificar
-    console.log('[OPERADORA-COLA] Total procesos:', totalProcesos, 'Cola:', colaProcesos.length, 'Mostrar botón simultáneo:', hayProcesosSimultaneos);
-    console.log('[OPERADORA-COLA] Proceso actual:', procesoActual?.procesoNombre, 'orden:', procesoActual?.orden);
-    console.log('[OPERADORA-COLA] Cola con orden:', colaProcesosConSimultaneo.map(p => ({ nombre: p.procesoNombre, orden: p.orden })));
+    DEBUG_MODE && console.log('[OPERADORA-COLA] Total procesos:', totalProcesos, 'Cola:', colaProcesos.length, 'Mostrar botón simultáneo:', hayProcesosSimultaneos);
+    DEBUG_MODE && console.log('[OPERADORA-COLA] Proceso actual:', procesoActual?.procesoNombre, 'orden:', procesoActual?.orden);
+    DEBUG_MODE && console.log('[OPERADORA-COLA] Cola con orden:', colaProcesosConSimultaneo.map(p => ({ nombre: p.procesoNombre, orden: p.orden })));
 
     let html = `
         <div class="cola-procesos-operadora">
@@ -1285,7 +1286,7 @@ function toggleProcesoSimultaneo(procesoId, procesoNombre, pedidoId, productoId)
     if (index >= 0) {
         // Quitar de la selección
         operadoraState.procesosSimultaneos.splice(index, 1);
-        console.log('[OPERADORA] Proceso removido de simultáneos:', procesoNombre);
+        DEBUG_MODE && console.log('[OPERADORA] Proceso removido de simultáneos:', procesoNombre);
     } else {
         // Antes de agregar, verificar si el proceso está bloqueado
         const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
@@ -1320,7 +1321,7 @@ function toggleProcesoSimultaneo(procesoId, procesoNombre, pedidoId, productoId)
 
         if (verificacion.bloqueado) {
             mostrarToast(`No se puede seleccionar: ${verificacion.motivo}`, 'warning');
-            console.log('[OPERADORA] Proceso bloqueado, no se puede agregar a simultáneos:', procesoNombre, verificacion.motivo);
+            DEBUG_MODE && console.log('[OPERADORA] Proceso bloqueado, no se puede agregar a simultáneos:', procesoNombre, verificacion.motivo);
             return;
         }
 
@@ -1331,7 +1332,7 @@ function toggleProcesoSimultaneo(procesoId, procesoNombre, pedidoId, productoId)
             pedidoId: pedidoIdFinal,
             productoId: productoIdFinal
         });
-        console.log('[OPERADORA] Proceso agregado a simultáneos:', procesoNombre, 'pedidoId:', pedidoIdFinal);
+        DEBUG_MODE && console.log('[OPERADORA] Proceso agregado a simultáneos:', procesoNombre, 'pedidoId:', pedidoIdFinal);
     }
 
     // Sincronizar con localStorage para que supervisora vea los procesos activos
@@ -1411,7 +1412,7 @@ function registrarProcesosSimultaneosEnERP() {
                 inicioTrabajo: new Date().toISOString()
             });
             huboCambios = true;
-            console.log('[OPERADORA] Proceso creado en pedidos_erp:', proc.procesoNombre);
+            DEBUG_MODE && console.log('[OPERADORA] Proceso creado en pedidos_erp:', proc.procesoNombre);
         } else {
             // Actualizar estado a en-proceso
             if (pedido.procesos[procesoIndex].estado === 'pendiente') {
@@ -1427,7 +1428,7 @@ function registrarProcesosSimultaneosEnERP() {
 
     if (huboCambios) {
         localStorage.setItem('pedidos_erp', JSON.stringify(pedidosERP));
-        console.log('[OPERADORA] pedidos_erp actualizado con procesos simultáneos');
+        DEBUG_MODE && console.log('[OPERADORA] pedidos_erp actualizado con procesos simultáneos');
     }
 }
 
@@ -1479,7 +1480,7 @@ function guardarProcesosSimultaneos() {
         }, 2000);
     }
 
-    console.log('[OPERADORA] Configuración de procesos simultáneos guardada:', configSimultaneos);
+    DEBUG_MODE && console.log('[OPERADORA] Configuración de procesos simultáneos guardada:', configSimultaneos);
 }
 
 /**
@@ -1498,7 +1499,7 @@ function cargarConfiguracionSimultaneos() {
                 operadoraState.modoSimultaneo = config.modoSimultaneo || false;
                 operadoraState.procesosSimultaneos = config.procesosSimultaneos || [];
 
-                console.log('[OPERADORA] Configuración de simultáneos cargada:', config);
+                DEBUG_MODE && console.log('[OPERADORA] Configuración de simultáneos cargada:', config);
 
                 // Re-renderizar si hay procesos
                 if (operadoraState.procesosSimultaneos.length > 0) {
@@ -1569,7 +1570,7 @@ function sincronizarProcesosSimultaneos() {
         localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
     }
 
-    console.log('[OPERADORA] Procesos simultáneos sincronizados:', operadoraState.procesosSimultaneos);
+    DEBUG_MODE && console.log('[OPERADORA] Procesos simultáneos sincronizados:', operadoraState.procesosSimultaneos);
 }
 
 // ========================================
@@ -1637,7 +1638,12 @@ function capturarPiezas() {
         };
 
         operadoraState.capturasDia.push(captura);
-        sincronizarConSupervisora(captura);
+        if (verificarConexion()) {
+            sincronizarConSupervisora(captura);
+        } else {
+            agregarAColaOffline('capturas', captura);
+            actualizarIndicadorConexion();
+        }
     });
 
     // Actualizar contador (solo una vez, no por cada proceso)
@@ -1681,12 +1687,12 @@ function capturarPiezas() {
     const granTotal = operadoraState.piezasCapturadas + totalOtras;
 
     if (operadoraState.piezasMeta > 0 && granTotal >= operadoraState.piezasMeta) {
-        console.log('[OPERADORA] Meta del EQUIPO alcanzada. Gran total:', granTotal, '/', operadoraState.piezasMeta);
+        DEBUG_MODE && console.log('[OPERADORA] Meta del EQUIPO alcanzada. Gran total:', granTotal, '/', operadoraState.piezasMeta);
 
         // Si el gran total cumple la meta, auto-finalizar
         // Pero solo si mis piezas contribuyen (para evitar finalizar sin haber trabajado)
         if (operadoraState.piezasCapturadas > 0) {
-            console.log('[OPERADORA] Iniciando auto-finalización por meta de equipo...');
+            DEBUG_MODE && console.log('[OPERADORA] Iniciando auto-finalización por meta de equipo...');
             // Pequeño delay para que el usuario vea el feedback
             setTimeout(() => {
                 mostrarToast('¡El equipo completó la meta del proceso!', 'success');
@@ -1747,7 +1753,7 @@ function sincronizarConSupervisora(captura) {
             };
             pedidosERP.push(nuevoPedido);
             pedidoIndex = pedidosERP.length - 1;
-            console.log('[OPERADORA] Pedido creado en pedidos_erp:', pedidoId);
+            DEBUG_MODE && console.log('[OPERADORA] Pedido creado en pedidos_erp:', pedidoId);
         }
 
         const pedido = pedidosERP[pedidoIndex];
@@ -1778,7 +1784,7 @@ function sincronizarConSupervisora(captura) {
             };
             pedido.procesos.push(nuevoProceso);
             procesoIndex = pedido.procesos.length - 1;
-            console.log('[OPERADORA] Proceso creado en pedidos_erp:', procesoId, procesoNombre);
+            DEBUG_MODE && console.log('[OPERADORA] Proceso creado en pedidos_erp:', procesoId, procesoNombre);
         }
 
         // Actualizar piezas del proceso (acumular)
@@ -1794,7 +1800,7 @@ function sincronizarConSupervisora(captura) {
         }
 
         localStorage.setItem('pedidos_erp', JSON.stringify(pedidosERP));
-        console.log('[OPERADORA] Avance actualizado en pedido:', pedidoId, 'proceso:', procesoId || procesoNombre, 'piezas:', pedido.procesos[procesoIndex].piezas);
+        DEBUG_MODE && console.log('[OPERADORA] Avance actualizado en pedido:', pedidoId, 'proceso:', procesoId || procesoNombre, 'piezas:', pedido.procesos[procesoIndex].piezas);
     }
 
     // También actualizar estado de la máquina en tiempo real
@@ -1813,7 +1819,7 @@ function sincronizarConSupervisora(captura) {
     };
     localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
 
-    console.log('[OPERADORA] Captura sincronizada:', registro.cantidad, 'piezas');
+    DEBUG_MODE && console.log('[OPERADORA] Captura sincronizada:', registro.cantidad, 'piezas');
 }
 
 function actualizarAvance() {
@@ -1997,7 +2003,7 @@ function obtenerOtrasOperadorasEnProceso() {
             }
         }
 
-        console.log('[OPERADORA] Otras operadoras en proceso "' + miProcesoNombre + '":', otrasOperadoras);
+        DEBUG_MODE && console.log('[OPERADORA] Otras operadoras en proceso "' + miProcesoNombre + '":', otrasOperadoras);
     } catch (e) {
         console.error('[OPERADORA] Error obteniendo otras operadoras:', e);
     }
@@ -2089,7 +2095,7 @@ function actualizarProgresoEquipo() {
         }
     }
 
-    console.log('[OPERADORA] Progreso equipo actualizado:', {
+    DEBUG_MODE && console.log('[OPERADORA] Progreso equipo actualizado:', {
         misPiezas,
         otrasOperadoras: otrasOperadoras.length,
         totalOtras,
@@ -2638,12 +2644,12 @@ function reanudarProceso() {
  * Similar a finalizarProceso pero sin confirmación del usuario
  */
 function finalizarProcesoAutomatico() {
-    console.log('[OPERADORA] === FINALIZANDO PROCESO AUTOMÁTICAMENTE ===');
-    console.log('[OPERADORA] Piezas capturadas:', operadoraState.piezasCapturadas, 'Meta:', operadoraState.piezasMeta);
-    console.log('[OPERADORA] Área de estación:', CONFIG_ESTACION.area);
+    DEBUG_MODE && console.log('[OPERADORA] === FINALIZANDO PROCESO AUTOMÁTICAMENTE ===');
+    DEBUG_MODE && console.log('[OPERADORA] Piezas capturadas:', operadoraState.piezasCapturadas, 'Meta:', operadoraState.piezasMeta);
+    DEBUG_MODE && console.log('[OPERADORA] Área de estación:', CONFIG_ESTACION.area);
 
     if (!operadoraState.procesoIniciado) {
-        console.warn('[OPERADORA] Proceso no iniciado, no se puede auto-finalizar');
+        DEBUG_MODE && console.warn('[OPERADORA] Proceso no iniciado, no se puede auto-finalizar');
         return;
     }
 
@@ -2807,8 +2813,8 @@ function finalizarProcesoAutomatico() {
     const asignacionOriginalAuto = asignacionCompletada || {};
 
     if (asignacionOriginalAuto?.esCorteInventario && asignacionOriginalAuto?.piezaInventarioId && piezasProducidas > 0) {
-        console.log('[OPERADORA] *** CORTE DE INVENTARIO DETECTADO (Auto) ***');
-        console.log('[OPERADORA] Agregando', piezasProducidas, 'piezas al inventario');
+        DEBUG_MODE && console.log('[OPERADORA] *** CORTE DE INVENTARIO DETECTADO (Auto) ***');
+        DEBUG_MODE && console.log('[OPERADORA] Agregando', piezasProducidas, 'piezas al inventario');
 
         try {
             const dbData = JSON.parse(localStorage.getItem('erp_multifundas_db') || '{}');
@@ -2835,7 +2841,7 @@ function finalizarProcesoAutomatico() {
                     });
 
                     localStorage.setItem('erp_multifundas_db', JSON.stringify(dbData));
-                    console.log('[OPERADORA] Inventario actualizado (auto):', piezaAntes, '->', piezaAntes + piezasProducidas);
+                    DEBUG_MODE && console.log('[OPERADORA] Inventario actualizado (auto):', piezaAntes, '->', piezaAntes + piezasProducidas);
                 }
             }
         } catch (e) {
@@ -2914,7 +2920,7 @@ function finalizarProcesoAutomatico() {
     operadoraState.procesosSimultaneos = [];
     operadoraState.capturasDia = [];
 
-    console.log('[OPERADORA] Proceso finalizado automáticamente');
+    DEBUG_MODE && console.log('[OPERADORA] Proceso finalizado automáticamente');
 
     // 7. Mostrar pantalla correspondiente
     if (haySiguienteProceso) {
@@ -2927,21 +2933,21 @@ function finalizarProcesoAutomatico() {
 }
 
 function finalizarProceso() {
-    console.log('[OPERADORA] === FINALIZANDO PROCESO ===');
-    console.log('[OPERADORA] procesoIniciado:', operadoraState.procesoIniciado);
-    console.log('[OPERADORA] pedidoActual:', operadoraState.pedidoActual?.id);
-    console.log('[OPERADORA] procesoActual:', operadoraState.procesoActual?.procesoNombre, operadoraState.procesoActual?.procesoId);
-    console.log('[OPERADORA] piezasCapturadas:', operadoraState.piezasCapturadas);
-    console.log('[OPERADORA] Área de estación:', CONFIG_ESTACION.area);
+    DEBUG_MODE && console.log('[OPERADORA] === FINALIZANDO PROCESO ===');
+    DEBUG_MODE && console.log('[OPERADORA] procesoIniciado:', operadoraState.procesoIniciado);
+    DEBUG_MODE && console.log('[OPERADORA] pedidoActual:', operadoraState.pedidoActual?.id);
+    DEBUG_MODE && console.log('[OPERADORA] procesoActual:', operadoraState.procesoActual?.procesoNombre, operadoraState.procesoActual?.procesoId);
+    DEBUG_MODE && console.log('[OPERADORA] piezasCapturadas:', operadoraState.piezasCapturadas);
+    DEBUG_MODE && console.log('[OPERADORA] Área de estación:', CONFIG_ESTACION.area);
 
     if (!operadoraState.procesoIniciado) {
-        console.warn('[OPERADORA] Proceso no iniciado, saliendo');
+        DEBUG_MODE && console.warn('[OPERADORA] Proceso no iniciado, saliendo');
         return;
     }
 
     // Si es área de corte, pedir metros lineales antes de finalizar
     const esAreaCorte = esEstacionDeCorte();
-    console.log('[OPERADORA] ¿Es área de corte?:', esAreaCorte);
+    DEBUG_MODE && console.log('[OPERADORA] ¿Es área de corte?:', esAreaCorte);
     if (esAreaCorte) {
         mostrarModalMetrosCorte(false); // false = no es automático
         return;
@@ -3005,6 +3011,9 @@ function finalizarProceso() {
     detenerMonitoreoDesempeno();
     resetearFeedbackState();
 
+    // *** INTEGRACIÓN INCENTIVOS: Guardar premio del proceso ***
+    const resumenPremio = obtenerResumenPremio();
+
     // ========================================
     // *** SINCRONIZACIÓN CON SUPERVISORA ***
     // ========================================
@@ -3031,23 +3040,23 @@ function finalizarProceso() {
                 pedido.procesos[procesoIndex].operadoraId = authState.operadoraActual?.id;
                 pedido.procesos[procesoIndex].operadoraNombre = authState.operadoraActual?.nombre;
                 pedido.procesos[procesoIndex].estacionId = CONFIG_ESTACION.id;
-                console.log('[OPERADORA] Proceso marcado como completado en pedidos_erp:', procesoId, 'piezas:', piezasProducidas);
+                DEBUG_MODE && console.log('[OPERADORA] Proceso marcado como completado en pedidos_erp:', procesoId, 'piezas:', piezasProducidas);
             } else {
-                console.warn('[OPERADORA] Proceso no encontrado en pedido:', procesoId, 'procesos disponibles:', pedido.procesos.map(p => p.id));
+                DEBUG_MODE && console.warn('[OPERADORA] Proceso no encontrado en pedido:', procesoId, 'procesos disponibles:', pedido.procesos.map(p => p.id));
             }
         }
         localStorage.setItem('pedidos_erp', JSON.stringify(pedidosERP));
     } else {
-        console.warn('[OPERADORA] Pedido no encontrado en pedidos_erp:', pedidoId);
+        DEBUG_MODE && console.warn('[OPERADORA] Pedido no encontrado en pedidos_erp:', pedidoId);
     }
 
     // 2. Guardar historial de asignación completada (para que supervisora lo lea)
     const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
     let haySiguienteProceso = false;
 
-    console.log('[OPERADORA] === ELIMINANDO ASIGNACIÓN ===');
-    console.log('[OPERADORA] CONFIG_ESTACION.id:', CONFIG_ESTACION.id);
-    console.log('[OPERADORA] Asignaciones antes de limpiar:', JSON.stringify(asignaciones, null, 2));
+    DEBUG_MODE && console.log('[OPERADORA] === ELIMINANDO ASIGNACIÓN ===');
+    DEBUG_MODE && console.log('[OPERADORA] CONFIG_ESTACION.id:', CONFIG_ESTACION.id);
+    DEBUG_MODE && console.log('[OPERADORA] Asignaciones antes de limpiar:', JSON.stringify(asignaciones, null, 2));
 
     // Buscar la asignación con búsqueda flexible (igual que en cargarPedidoAsignado)
     let estacionIdEncontrada = CONFIG_ESTACION.id;
@@ -3059,7 +3068,7 @@ function finalizarProceso() {
                 estIdNormalizado.includes(miIdNormalizado) ||
                 miIdNormalizado.includes(estIdNormalizado)) {
                 estacionIdEncontrada = estId;
-                console.log('[OPERADORA] Asignación encontrada con ID alternativo:', estId);
+                DEBUG_MODE && console.log('[OPERADORA] Asignación encontrada con ID alternativo:', estId);
                 break;
             }
         }
@@ -3095,16 +3104,16 @@ function finalizarProceso() {
                 fechaAsignacion: new Date().toISOString()
             };
             haySiguienteProceso = true;
-            console.log('[OPERADORA] Siguiente proceso en cola:', siguienteProceso.procesoNombre);
+            DEBUG_MODE && console.log('[OPERADORA] Siguiente proceso en cola:', siguienteProceso.procesoNombre);
         } else {
             // No hay más procesos, limpiar asignación
             delete asignaciones[estacionIdEncontrada];
-            console.log('[OPERADORA] Asignación eliminada para estación:', estacionIdEncontrada);
+            DEBUG_MODE && console.log('[OPERADORA] Asignación eliminada para estación:', estacionIdEncontrada);
         }
         localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
-        console.log('[OPERADORA] Asignaciones después de limpiar:', JSON.stringify(asignaciones, null, 2));
+        DEBUG_MODE && console.log('[OPERADORA] Asignaciones después de limpiar:', JSON.stringify(asignaciones, null, 2));
     } else {
-        console.warn('[OPERADORA] No se encontró asignación para eliminar. ID buscado:', estacionIdEncontrada);
+        DEBUG_MODE && console.warn('[OPERADORA] No se encontró asignación para eliminar. ID buscado:', estacionIdEncontrada);
     }
 
     // 2.5 VERIFICAR SI ES CORTE DE INVENTARIO - Agregar piezas al inventario
@@ -3112,8 +3121,8 @@ function finalizarProceso() {
                                asignacionCompletada || {};
 
     if (asignacionOriginal?.esCorteInventario && asignacionOriginal?.piezaInventarioId && piezasProducidas > 0) {
-        console.log('[OPERADORA] *** CORTE DE INVENTARIO DETECTADO ***');
-        console.log('[OPERADORA] Agregando', piezasProducidas, 'piezas al inventario');
+        DEBUG_MODE && console.log('[OPERADORA] *** CORTE DE INVENTARIO DETECTADO ***');
+        DEBUG_MODE && console.log('[OPERADORA] Agregando', piezasProducidas, 'piezas al inventario');
 
         // Agregar las piezas producidas al inventario
         try {
@@ -3143,10 +3152,10 @@ function finalizarProceso() {
                     });
 
                     localStorage.setItem('erp_multifundas_db', JSON.stringify(dbData));
-                    console.log('[OPERADORA] Inventario actualizado:', piezaAntes, '->', piezaAntes + piezasProducidas);
+                    DEBUG_MODE && console.log('[OPERADORA] Inventario actualizado:', piezaAntes, '->', piezaAntes + piezasProducidas);
                     mostrarToast(`+${piezasProducidas} piezas agregadas al inventario`, 'success');
                 } else {
-                    console.warn('[OPERADORA] Pieza de inventario no encontrada:', asignacionOriginal.piezaInventarioId);
+                    DEBUG_MODE && console.warn('[OPERADORA] Pieza de inventario no encontrada:', asignacionOriginal.piezaInventarioId);
                 }
             }
         } catch (e) {
@@ -3235,12 +3244,13 @@ function finalizarProceso() {
     operadoraState.procesosSimultaneos = [];
     operadoraState.capturasDia = []; // Limpiar capturas en memoria (las del día siguen en localStorage filtradas por proceso)
 
-    console.log('[OPERADORA] Proceso finalizado y sincronizado con supervisora');
+    DEBUG_MODE && console.log('[OPERADORA] Proceso finalizado y sincronizado con supervisora');
 
     // 7. Mostrar pantalla correspondiente
     if (haySiguienteProceso) {
         // Cargar el siguiente proceso de la cola automáticamente
-        mostrarToast(`Proceso finalizado. Tiempo: ${resumenProceso.tiempoTotalFormateado}. Cargando siguiente proceso...`, 'success');
+        const msgPremio = resumenPremio.premioGanado > 0 ? ` Premio: $${resumenPremio.premioGanado} (${resumenPremio.tier.nombre})` : '';
+        mostrarToast(`Proceso finalizado. Tiempo: ${resumenProceso.tiempoTotalFormateado}.${msgPremio} Cargando siguiente proceso...`, 'success');
         setTimeout(() => {
             cargarPedidoAsignado();
         }, 500);
@@ -3278,7 +3288,8 @@ function finalizarProceso() {
             progressBarEl.style.strokeDashoffset = circumference;
         }
 
-        mostrarToast(`Proceso finalizado. Tiempo: ${resumenProceso.tiempoTotalFormateado}. Esperando nueva asignación de Coco.`, 'success');
+        const msgPremio2 = resumenPremio.premioGanado > 0 ? ` Premio: $${resumenPremio.premioGanado} (${resumenPremio.tier.nombre})` : '';
+        mostrarToast(`Proceso finalizado. Tiempo: ${resumenProceso.tiempoTotalFormateado}.${msgPremio2} Esperando nueva asignación.`, 'success');
     }
 }
 
@@ -3319,12 +3330,12 @@ function esEstacionDeCorte() {
 
     const esCorte = esCorteArea || esCorteId || esCorteNombre || esCorteProceso;
 
-    console.log('[OPERADORA] Verificando área de corte:');
-    console.log('  - ID estación:', idEstacion, '-> esCorteId:', esCorteId);
-    console.log('  - Área configurada:', area, '-> esCorteArea:', esCorteArea);
-    console.log('  - Nombre estación:', CONFIG_ESTACION.nombre, '-> esCorteNombre:', esCorteNombre);
-    console.log('  - Proceso actual:', procesoActual, '-> esCorteProceso:', esCorteProceso);
-    console.log('  - RESULTADO FINAL:', esCorte);
+    DEBUG_MODE && console.log('[OPERADORA] Verificando área de corte:');
+    DEBUG_MODE && console.log('  - ID estación:', idEstacion, '-> esCorteId:', esCorteId);
+    DEBUG_MODE && console.log('  - Área configurada:', area, '-> esCorteArea:', esCorteArea);
+    DEBUG_MODE && console.log('  - Nombre estación:', CONFIG_ESTACION.nombre, '-> esCorteNombre:', esCorteNombre);
+    DEBUG_MODE && console.log('  - Proceso actual:', procesoActual, '-> esCorteProceso:', esCorteProceso);
+    DEBUG_MODE && console.log('  - RESULTADO FINAL:', esCorte);
 
     return esCorte;
 }
@@ -3369,11 +3380,11 @@ function esEstacionCalidadEmpaque() {
 
     const resultado = esCalidadArea || esEmpaqueArea || esIdCalidadEmpaque || esNombreCalidadEmpaque;
 
-    console.log('[OPERADORA] Verificando área Calidad/Empaque:');
-    console.log('  - ID estación:', idEstacion, '-> esIdCalidadEmpaque:', esIdCalidadEmpaque);
-    console.log('  - Área configurada:', area, '-> esCalidadArea:', esCalidadArea, 'esEmpaqueArea:', esEmpaqueArea);
-    console.log('  - Nombre estación:', CONFIG_ESTACION.nombre, '-> esNombreCalidadEmpaque:', esNombreCalidadEmpaque);
-    console.log('  - RESULTADO FINAL:', resultado);
+    DEBUG_MODE && console.log('[OPERADORA] Verificando área Calidad/Empaque:');
+    DEBUG_MODE && console.log('  - ID estación:', idEstacion, '-> esIdCalidadEmpaque:', esIdCalidadEmpaque);
+    DEBUG_MODE && console.log('  - Área configurada:', area, '-> esCalidadArea:', esCalidadArea, 'esEmpaqueArea:', esEmpaqueArea);
+    DEBUG_MODE && console.log('  - Nombre estación:', CONFIG_ESTACION.nombre, '-> esNombreCalidadEmpaque:', esNombreCalidadEmpaque);
+    DEBUG_MODE && console.log('  - RESULTADO FINAL:', resultado);
 
     return resultado;
 }
@@ -3517,8 +3528,8 @@ function confirmarFinalizarConMetros() {
 }
 
 function finalizarProcesoConMetros(metrosUtilizados) {
-    console.log('[OPERADORA] === FINALIZANDO PROCESO DE CORTE CON METROS ===');
-    console.log('[OPERADORA] Metros utilizados:', metrosUtilizados);
+    DEBUG_MODE && console.log('[OPERADORA] === FINALIZANDO PROCESO DE CORTE CON METROS ===');
+    DEBUG_MODE && console.log('[OPERADORA] Metros utilizados:', metrosUtilizados);
 
     // Calcular tiempo total
     let tiempoTotal = operadoraState.tiempoProcesoAcumulado;
@@ -3725,7 +3736,7 @@ function finalizarProcesoConMetros(metrosUtilizados) {
     operadoraState.procesosSimultaneos = [];
     operadoraState.capturasDia = [];
 
-    console.log('[OPERADORA] Proceso de corte finalizado con', metrosUtilizados, 'metros registrados');
+    DEBUG_MODE && console.log('[OPERADORA] Proceso de corte finalizado con', metrosUtilizados, 'metros registrados');
 
     // 7. Mostrar resultado
     if (haySiguienteProceso) {
@@ -3779,7 +3790,7 @@ function guardarConsumoMaterial(resumenProceso) {
 
     // Mantener solo los últimos 500 registros
     localStorage.setItem('historial_consumo_material', JSON.stringify(historialConsumo.slice(0, 500)));
-    console.log('[OPERADORA] Consumo de material guardado:', resumenProceso.metrosUtilizados, 'm');
+    DEBUG_MODE && console.log('[OPERADORA] Consumo de material guardado:', resumenProceso.metrosUtilizados, 'm');
 }
 
 function actualizarTiempoProceso() {
@@ -4125,8 +4136,21 @@ function agregarAColaOffline(tipo, datos) {
     localStorage.setItem('cola_offline', JSON.stringify(cola));
 }
 
+var _syncRetryCount = 0;
+var _syncRetryTimer = null;
+
 function sincronizarColaOffline() {
-    if (!verificarConexion()) return;
+    if (!verificarConexion()) {
+        // Programar retry con backoff exponencial
+        var delay = Math.min(1000 * Math.pow(2, _syncRetryCount), 60000); // max 60s
+        _syncRetryCount++;
+        clearTimeout(_syncRetryTimer);
+        _syncRetryTimer = setTimeout(sincronizarColaOffline, delay);
+        return;
+    }
+
+    _syncRetryCount = 0;
+    clearTimeout(_syncRetryTimer);
 
     const cola = JSON.parse(localStorage.getItem('cola_offline') || '{"capturas":[],"problemas":[],"eventos":[]}');
     var totalPendientes = (cola.capturas || []).length + (cola.problemas || []).length;
@@ -4146,11 +4170,13 @@ function sincronizarColaOffline() {
 
     if (totalPendientes > 0) {
         mostrarToast('Conexión restaurada. ' + totalPendientes + ' acciones sincronizadas', 'success');
+        reproducirSonido('notificacion');
     }
 
     // Quitar banner offline
     var banner = document.getElementById('offlineBanner');
     if (banner) banner.remove();
+    actualizarIndicadorConexion();
 }
 
 function actualizarIndicadorConexion() {
@@ -4654,7 +4680,10 @@ function mostrarRankingPersonal() {
             </div>
 
             <div class="ranking-lista">
-                ${ranking.length > 0 ? ranking.slice(0, 10).map((op, idx) => `
+                ${ranking.length > 0 ? ranking.slice(0, 10).map((op, idx) => {
+                    const tierOp = calcularTierLocal(op.eficiencia);
+                    const premioOp = tierOp ? Math.round((op.premioBase || getConfigIncentivosLocal().premioBaseDefault) * tierOp.multiplicador) : 0;
+                    return `
                     <div class="ranking-item ${op.id === authState.operadoraActual?.id ? 'es-yo' : ''}">
                         <span class="ranking-pos">
                             ${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
@@ -4662,8 +4691,11 @@ function mostrarRankingPersonal() {
                         <span class="ranking-nombre">${op.nombre}</span>
                         <span class="ranking-piezas">${op.piezas} pzas</span>
                         <span class="ranking-eficiencia">${op.eficiencia}%</span>
-                    </div>
-                `).join('') : '<p class="sin-datos">Sin datos de hoy</p>'}
+                        <span class="ranking-premio" style="color:${tierOp ? tierOp.color : '#999'}">
+                            ${tierOp ? '<i class="fas ' + tierOp.icono + '"></i> $' + premioOp : '-'}
+                        </span>
+                    </div>`;
+                }).join('') : '<p class="sin-datos">Sin datos de hoy</p>'}
             </div>
         </div>
     `;
@@ -4676,6 +4708,7 @@ function mostrarRankingPersonal() {
 function obtenerRankingOperadoras() {
     const produccionHoy = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
     const hoy = new Date().toISOString().split('T')[0];
+    const operadorasDB = JSON.parse(localStorage.getItem('operadoras_db') || '[]');
 
     const porOperadora = {};
 
@@ -4683,10 +4716,12 @@ function obtenerRankingOperadoras() {
         .filter(p => p.fecha?.startsWith(hoy) && p.tipo === 'captura')
         .forEach(p => {
             if (!porOperadora[p.operadoraId]) {
+                const opDB = operadorasDB.find(o => o.id === p.operadoraId || o.id == p.operadoraId);
                 porOperadora[p.operadoraId] = {
                     id: p.operadoraId,
                     nombre: p.operadoraNombre,
-                    piezas: 0
+                    piezas: 0,
+                    premioBase: opDB?.premioProduccion || getConfigIncentivosLocal().premioBaseDefault
                 };
             }
             porOperadora[p.operadoraId].piezas += p.cantidad || 0;
@@ -4718,7 +4753,7 @@ function verificarMensajesCoco() {
         return esParaMi && !yaLeido;
     });
 
-    console.log('[OPERADORA] Mensajes pendientes:', misMensajes.length);
+    DEBUG_MODE && console.log('[OPERADORA] Mensajes pendientes:', misMensajes.length);
 
     if (misMensajes.length > 0) {
         // Solo mostrar si no hay overlay ya visible
@@ -4763,7 +4798,7 @@ function marcarMensajeLeido(mensajeId) {
         // Agregar como número y string para evitar problemas de tipo
         if (!mensaje.leidoPor.includes(miId) && !mensaje.leidoPor.includes(String(miId))) {
             mensaje.leidoPor.push(miId);
-            console.log('[OPERADORA] Mensaje', mensajeId, 'marcado como leído por', miId);
+            DEBUG_MODE && console.log('[OPERADORA] Mensaje', mensajeId, 'marcado como leído por', miId);
         }
         localStorage.setItem('mensajes_operadoras', JSON.stringify(mensajes));
     }
@@ -5299,10 +5334,14 @@ function iniciarMonitoreoDesempeno() {
     // Actualizar cada 30 segundos
     feedbackState.intervaloMonitoreo = setInterval(() => {
         actualizarIndicadorDesempeno();
+        actualizarPremioWidget();
     }, 30000);
 
     // Primera actualización inmediata
-    setTimeout(() => actualizarIndicadorDesempeno(), 2000);
+    setTimeout(() => {
+        actualizarIndicadorDesempeno();
+        actualizarPremioWidget();
+    }, 2000);
 }
 
 /**
@@ -5317,6 +5356,9 @@ function detenerMonitoreoDesempeno() {
     // Ocultar el indicador
     const indicador = document.getElementById('indicadorDesempeno');
     if (indicador) indicador.style.display = 'none';
+
+    // Resetear widget de premio
+    resetearPremioWidget();
 }
 
 /**
@@ -5351,11 +5393,17 @@ function actualizarIndicadorDesempeno() {
         barraFill.style.width = `${fillWidth}%`;
     }
 
-    // Actualizar mensaje motivacional
+    // Actualizar mensaje motivacional (enriquecido con premio)
     const mensajeEl = document.getElementById('desempenoMensaje');
     if (mensajeEl) {
         const mensajes = MENSAJES_FEEDBACK[nivel.id];
-        const mensaje = mensajes[Math.floor(Math.random() * mensajes.length)];
+        let mensaje = mensajes[Math.floor(Math.random() * mensajes.length)];
+
+        // Enriquecer mensaje con contexto económico
+        const tierPremio = calcularTierLocal(eficiencia);
+        if (tierPremio && incentivosState.premioEstimado > 0) {
+            mensaje += ` — Nivel ${tierPremio.nombre}, premio $${incentivosState.premioEstimado}`;
+        }
 
         mensajeEl.innerHTML = `<i class="fas fa-lightbulb"></i><span>${mensaje}</span>`;
         mensajeEl.className = `desempeno-mensaje ${nivel.id}`;
@@ -5389,6 +5437,10 @@ function mostrarFeedbackToast(nivel, eficiencia) {
     const mensajes = MENSAJES_FEEDBACK[nivel.id];
     const mensaje = mensajes[Math.floor(Math.random() * mensajes.length)];
 
+    // Enriquecer con contexto de premio
+    const tierPremioToast = calcularTierLocal(eficiencia);
+    const premioToast = tierPremioToast ? '$' + Math.round(getPremioBase() * tierPremioToast.multiplicador) : '';
+
     const toast = document.createElement('div');
     toast.className = `feedback-toast ${nivel.id}`;
     toast.innerHTML = `
@@ -5396,7 +5448,7 @@ function mostrarFeedbackToast(nivel, eficiencia) {
             <i class="fas ${nivel.icono}"></i>
         </div>
         <div class="feedback-toast-content">
-            <div class="feedback-toast-nivel">${nivel.emoji} ${nivel.nombre}</div>
+            <div class="feedback-toast-nivel">${nivel.emoji} ${nivel.nombre}${premioToast ? ' — ' + premioToast : ''}</div>
             <div class="feedback-toast-mensaje">${mensaje}</div>
         </div>
     `;
@@ -5697,11 +5749,11 @@ function obtenerInfoPedidoProceso(asignacion) {
  */
 function initModoMultiPedido() {
     if (!esEstacionCalidadEmpaque()) {
-        console.log('[OPERADORA] No es estación de Calidad/Empaque, usando modo normal');
+        DEBUG_MODE && console.log('[OPERADORA] No es estación de Calidad/Empaque, usando modo normal');
         return false;
     }
 
-    console.log('[OPERADORA] Inicializando modo Multi-Pedido para Calidad/Empaque');
+    DEBUG_MODE && console.log('[OPERADORA] Inicializando modo Multi-Pedido para Calidad/Empaque');
     operadoraState.modoMultiPedido = true;
 
     // Cambiar el panel-main de grid a flex para modo multi-pedido
@@ -5817,7 +5869,7 @@ function cargarPedidosMultiples() {
                 fechaAsignacion: miAsignacion.fechaAsignacion || new Date().toISOString()
             };
             misPedidos.push(pedidoConvertido);
-            console.log('[OPERADORA] Pedido manual convertido:', pedidoConvertido);
+            DEBUG_MODE && console.log('[OPERADORA] Pedido manual convertido:', pedidoConvertido);
         }
     }
 
@@ -5850,7 +5902,7 @@ function cargarPedidosMultiples() {
         };
     });
 
-    console.log('[OPERADORA] Pedidos multi cargados:', operadoraState.pedidosActivos.length);
+    DEBUG_MODE && console.log('[OPERADORA] Pedidos multi cargados:', operadoraState.pedidosActivos.length);
     renderizarTarjetasPedidos();
     actualizarContadorPedidos();
 }
@@ -5928,7 +5980,7 @@ function verificarNuevosPedidosMulti() {
     }
 
     if (nuevosPedidos.length > 0) {
-        console.log('[OPERADORA] Nuevos pedidos detectados:', nuevosPedidos.length);
+        DEBUG_MODE && console.log('[OPERADORA] Nuevos pedidos detectados:', nuevosPedidos.length);
 
         nuevosPedidos.forEach(p => {
             operadoraState.pedidosActivos.push({
@@ -7248,7 +7300,7 @@ function iniciarTimerPedido(pedidoId) {
         actualizarDisplayTimerPedido(pedidoId);
     }, 1000);
 
-    console.log('[OPERADORA] Timer restaurado para pedido', pedidoId);
+    DEBUG_MODE && console.log('[OPERADORA] Timer restaurado para pedido', pedidoId);
 }
 
 /**
@@ -7898,7 +7950,7 @@ function desasignarEstacionEmpaque() {
         localStorage.setItem('asignaciones_multi_pedido', JSON.stringify(asignacionesMulti));
     }
 
-    console.log('[OPERADORA] Estación desasignada automáticamente:', estacionId);
+    DEBUG_MODE && console.log('[OPERADORA] Estación desasignada automáticamente:', estacionId);
 }
 
 /**
@@ -8075,4 +8127,474 @@ function reimprimirEtiqueta(etiquetaId) {
     };
 
     mostrarToast('Reimprimiendo etiquetas...', 'info');
+}
+
+// ========================================
+// SISTEMA DE INCENTIVOS - PREMIO EN TIEMPO REAL
+// ========================================
+
+/**
+ * Estado del sistema de incentivos
+ */
+const incentivosState = {
+    tierActual: null,
+    premioEstimado: 0,
+    premiosSemanales: [],
+    intervaloPremio: null
+};
+
+/**
+ * Obtiene la configuración de incentivos (desde admin o defaults)
+ */
+function getConfigIncentivosLocal() {
+    // Usar la función global si está disponible (cargada desde app.js)
+    if (typeof window.getConfigIncentivos === 'function') {
+        return window.getConfigIncentivos();
+    }
+    // Fallback: leer directamente de localStorage
+    const saved = localStorage.getItem('erp_config_incentivos');
+    if (saved) {
+        try { return JSON.parse(saved); } catch(e) {}
+    }
+    return {
+        tiers: [
+            { nombre: 'Bronce', minEficiencia: 80, multiplicador: 0.5, color: '#CD7F32', icono: 'fa-medal' },
+            { nombre: 'Plata', minEficiencia: 90, multiplicador: 0.75, color: '#C0C0C0', icono: 'fa-medal' },
+            { nombre: 'Oro', minEficiencia: 100, multiplicador: 1.0, color: '#FFD700', icono: 'fa-star' },
+            { nombre: 'Diamante', minEficiencia: 110, multiplicador: 1.5, color: '#B9F2FF', icono: 'fa-gem' }
+        ],
+        premioBaseDefault: 100,
+        metaEquipoSupervisora: 90,
+        multiplicadorSupervisora: 1.0,
+        premioPuntualidadDefault: 50
+    };
+}
+
+/**
+ * Calcula el tier correspondiente a una eficiencia dada
+ */
+function calcularTierLocal(eficiencia) {
+    if (typeof window.calcularTierPorEficiencia === 'function') {
+        return window.calcularTierPorEficiencia(eficiencia);
+    }
+    const config = getConfigIncentivosLocal();
+    const tiersSorted = [...config.tiers].sort((a, b) => b.minEficiencia - a.minEficiencia);
+    for (const tier of tiersSorted) {
+        if (eficiencia >= tier.minEficiencia) {
+            return tier;
+        }
+    }
+    return null;
+}
+
+/**
+ * Obtiene el premio base de la operadora actual
+ */
+function getPremioBase() {
+    const operadora = authState.operadoraActual;
+    if (operadora && operadora.premioProduccion && operadora.premioProduccion > 0) {
+        return operadora.premioProduccion;
+    }
+    // Fallback: buscar en personal de localStorage
+    const personal = JSON.parse(localStorage.getItem('erp_personal') || '[]');
+    const empleado = personal.find(p => p.id === operadora?.id || p.numEmpleado === operadora?.numEmpleado);
+    if (empleado && empleado.premioProduccion > 0) {
+        return empleado.premioProduccion;
+    }
+    // Usar default de config
+    return getConfigIncentivosLocal().premioBaseDefault;
+}
+
+/**
+ * Actualiza el widget de premio en tiempo real
+ * Se llama cada 30 segundos junto con actualizarIndicadorDesempeno()
+ */
+function actualizarPremioWidget() {
+    const eficiencia = calcularEficienciaActual();
+    const premioBase = getPremioBase();
+    const tier = calcularTierLocal(eficiencia);
+    const config = getConfigIncentivosLocal();
+
+    // Calcular premio estimado
+    let premioEstimado = 0;
+    if (tier) {
+        premioEstimado = Math.round(premioBase * tier.multiplicador);
+    }
+    incentivosState.premioEstimado = premioEstimado;
+
+    // Actualizar monto
+    const montoEl = document.getElementById('premioMonto');
+    if (montoEl) {
+        montoEl.textContent = '$' + premioEstimado;
+        montoEl.style.color = tier ? tier.color : '#999';
+    }
+
+    // Actualizar tier badge
+    const tierBadgeEl = document.getElementById('premioTierBadge');
+    if (tierBadgeEl) {
+        if (tier) {
+            tierBadgeEl.innerHTML = '<i class="fas ' + tier.icono + '"></i> ' + tier.nombre;
+            tierBadgeEl.style.background = tier.color + '22';
+            tierBadgeEl.style.color = tier.color;
+            tierBadgeEl.style.borderColor = tier.color;
+        } else {
+            tierBadgeEl.innerHTML = '<i class="fas fa-minus"></i> Sin bono';
+            tierBadgeEl.style.background = '#f0f0f0';
+            tierBadgeEl.style.color = '#999';
+            tierBadgeEl.style.borderColor = '#ddd';
+        }
+    }
+
+    // Actualizar barra de progreso hacia siguiente tier
+    const barraFill = document.getElementById('premioBarraFill');
+    const siguienteEl = document.getElementById('premioSiguiente');
+    if (barraFill && siguienteEl) {
+        const tiersSorted = [...config.tiers].sort((a, b) => a.minEficiencia - b.minEficiencia);
+        let siguienteTier = null;
+
+        if (!tier) {
+            // No tiene tier, el siguiente es el primero
+            siguienteTier = tiersSorted[0];
+        } else {
+            // Buscar el tier siguiente al actual
+            const idxActual = tiersSorted.findIndex(t => t.nombre === tier.nombre);
+            if (idxActual < tiersSorted.length - 1) {
+                siguienteTier = tiersSorted[idxActual + 1];
+            }
+        }
+
+        if (siguienteTier) {
+            const minActual = tier ? tier.minEficiencia : 0;
+            const rango = siguienteTier.minEficiencia - minActual;
+            const progreso = rango > 0 ? Math.min(100, Math.max(0, ((eficiencia - minActual) / rango) * 100)) : 0;
+            barraFill.style.width = progreso + '%';
+            barraFill.style.background = siguienteTier.color;
+
+            // Calcular piezas faltantes para siguiente tier
+            const piezasFaltantes = calcularPiezasParaTier(siguienteTier.minEficiencia);
+            if (piezasFaltantes > 0) {
+                siguienteEl.innerHTML = '<i class="fas fa-arrow-up" style="color:' + siguienteTier.color + '"></i> ' +
+                    'Te faltan <strong>' + piezasFaltantes + ' piezas</strong> para <span style="color:' + siguienteTier.color + '">' + siguienteTier.nombre + '</span>';
+            } else {
+                siguienteEl.innerHTML = '';
+            }
+        } else {
+            // Ya está en el tier más alto
+            barraFill.style.width = '100%';
+            barraFill.style.background = tier ? tier.color : '#ddd';
+            siguienteEl.innerHTML = '<i class="fas fa-crown" style="color:' + (tier ? tier.color : '#FFD700') + '"></i> <strong>Nivel máximo alcanzado</strong>';
+        }
+    }
+
+    // Actualizar proyección
+    const proyeccionEl = document.getElementById('premioProyeccion');
+    if (proyeccionEl && operadoraState.procesoIniciado) {
+        proyeccionEl.innerHTML = '<i class="fas fa-chart-line"></i> ' +
+            '<span>A este ritmo ganarás <strong>$' + premioEstimado + '</strong> hoy</span>';
+    }
+
+    // Actualizar badge en header
+    actualizarNivelBadgeHeader(tier);
+
+    // Verificar cambio de tier para celebración
+    if (tier && incentivosState.tierActual && tier.nombre !== incentivosState.tierActual) {
+        // Verificar si subió de tier
+        const tierAnterior = config.tiers.find(t => t.nombre === incentivosState.tierActual);
+        if (tierAnterior && tier.minEficiencia > tierAnterior.minEficiencia) {
+            celebrarCambioTier(tier, premioEstimado);
+        }
+    }
+    incentivosState.tierActual = tier ? tier.nombre : null;
+}
+
+/**
+ * Calcula cuántas piezas faltan para alcanzar una eficiencia objetivo
+ */
+function calcularPiezasParaTier(eficienciaObjetivo) {
+    if (!operadoraState.procesoIniciado || !operadoraState.tiempoProcesoInicio) return 0;
+
+    let tiempoTrabajadoMs = operadoraState.tiempoProcesoAcumulado;
+    if (!operadoraState.procesoEnPausa || (operadoraState.motivoPausaActual && !operadoraState.motivoPausaActual.detieneTiempo)) {
+        tiempoTrabajadoMs += (new Date() - operadoraState.tiempoProcesoInicio);
+    }
+    const minutosTrabajados = tiempoTrabajadoMs / 60000;
+    if (minutosTrabajados < 1) return 0;
+
+    const piezasNecesarias = Math.ceil((eficienciaObjetivo / 100) * minutosTrabajados * operadoraState.metaPorMinuto);
+    const faltantes = piezasNecesarias - operadoraState.piezasCapturadas;
+    return Math.max(0, faltantes);
+}
+
+/**
+ * Actualiza el badge de nivel en el header
+ */
+function actualizarNivelBadgeHeader(tier) {
+    const badgeEl = document.getElementById('nivelBadgeHeader');
+    if (!badgeEl) return;
+
+    if (tier && operadoraState.procesoIniciado) {
+        badgeEl.style.display = 'inline-flex';
+        badgeEl.innerHTML = '<i class="fas ' + tier.icono + '"></i> ' + tier.nombre;
+        badgeEl.style.background = tier.color + '22';
+        badgeEl.style.color = tier.color;
+        badgeEl.style.borderColor = tier.color;
+    } else {
+        badgeEl.style.display = 'none';
+    }
+}
+
+/**
+ * Celebración al subir de tier
+ */
+function celebrarCambioTier(nuevoTier, premioEstimado) {
+    // Usar el sistema de celebraciones existente
+    if (typeof mostrarLogroCelebracion === 'function') {
+        mostrarLogroCelebracion({
+            titulo: '¡Subiste a ' + nuevoTier.nombre + '!',
+            mensaje: 'Tu premio estimado: $' + premioEstimado,
+            icono: nuevoTier.icono,
+            color: nuevoTier.color
+        });
+    }
+
+    // Toast adicional con info del premio
+    mostrarToast('¡Nivel ' + nuevoTier.nombre + '! Premio estimado: $' + premioEstimado, 'success');
+
+    // Sonido de celebración
+    if (typeof reproducirSonido === 'function') {
+        reproducirSonido('meta');
+    }
+}
+
+/**
+ * Guarda el premio del día actual para historial semanal
+ */
+function guardarPremioDelDia(eficiencia, premioGanado, tierNombre) {
+    const operadoraId = authState.operadoraActual?.id;
+    if (!operadoraId) return;
+
+    const hoy = new Date();
+    const semanaKey = 'premios_' + operadoraId + '_' + getWeekKey(hoy);
+
+    const premiosSemanales = JSON.parse(localStorage.getItem(semanaKey) || '[]');
+
+    const fechaHoy = hoy.toISOString().split('T')[0];
+    const existente = premiosSemanales.findIndex(p => p.fecha === fechaHoy);
+
+    const datosDia = {
+        fecha: fechaHoy,
+        eficiencia: eficiencia,
+        tier: tierNombre || 'Sin bono',
+        premio: premioGanado,
+        piezas: operadoraState.piezasCapturadas,
+        timestamp: hoy.toISOString()
+    };
+
+    if (existente >= 0) {
+        premiosSemanales[existente] = datosDia;
+    } else {
+        premiosSemanales.push(datosDia);
+    }
+
+    localStorage.setItem(semanaKey, JSON.stringify(premiosSemanales));
+}
+
+/**
+ * Obtiene la clave de semana (YYYY-WW)
+ */
+function getWeekKey(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+    const week1 = new Date(d.getFullYear(), 0, 4);
+    const weekNum = 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+    return d.getFullYear() + '-W' + String(weekNum).padStart(2, '0');
+}
+
+/**
+ * Muestra el modal "Mis Ganancias" con historial semanal
+ */
+function mostrarMisGanancias() {
+    const operadoraId = authState.operadoraActual?.id;
+    if (!operadoraId) {
+        mostrarToast('Inicia sesión para ver tus ganancias', 'warning');
+        return;
+    }
+
+    const hoy = new Date();
+    const semanaKey = 'premios_' + operadoraId + '_' + getWeekKey(hoy);
+    const premiosSemanales = JSON.parse(localStorage.getItem(semanaKey) || '[]');
+
+    // Calcular totales
+    const totalSemana = premiosSemanales.reduce((sum, p) => sum + (p.premio || 0), 0);
+    const mejorDia = premiosSemanales.reduce((best, p) => (p.premio || 0) > (best.premio || 0) ? p : best, { premio: 0 });
+    const eficienciaPromedio = premiosSemanales.length > 0
+        ? Math.round(premiosSemanales.reduce((sum, p) => sum + (p.eficiencia || 0), 0) / premiosSemanales.length)
+        : 0;
+
+    // Premio de hoy (si hay proceso activo)
+    const premioHoy = incentivosState.premioEstimado || 0;
+
+    // Días de la semana para la gráfica
+    const diasSemana = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const maxPremio = Math.max(...premiosSemanales.map(p => p.premio || 0), premioHoy, 1);
+
+    const content = `
+        <div class="ganancias-modal">
+            <div class="ganancias-resumen">
+                <div class="ganancia-stat principal">
+                    <div class="ganancia-valor">$${totalSemana + premioHoy}</div>
+                    <div class="ganancia-label">Total esta semana</div>
+                </div>
+                <div class="ganancias-stats-grid">
+                    <div class="ganancia-stat">
+                        <div class="ganancia-valor">$${premioHoy}</div>
+                        <div class="ganancia-label">Hoy (estimado)</div>
+                    </div>
+                    <div class="ganancia-stat">
+                        <div class="ganancia-valor">${eficienciaPromedio}%</div>
+                        <div class="ganancia-label">Eficiencia prom.</div>
+                    </div>
+                    <div class="ganancia-stat">
+                        <div class="ganancia-valor">${premiosSemanales.length + (premioHoy > 0 ? 1 : 0)}</div>
+                        <div class="ganancia-label">Días con bono</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ganancias-grafica">
+                <h5><i class="fas fa-chart-bar"></i> Premios de la semana</h5>
+                <div class="grafica-barras">
+                    ${diasSemana.map((dia, idx) => {
+                        const fechaDia = obtenerFechaDiaSemana(idx);
+                        const datoDia = premiosSemanales.find(p => p.fecha === fechaDia);
+                        const esHoy = fechaDia === hoy.toISOString().split('T')[0];
+                        const premio = esHoy ? premioHoy : (datoDia ? datoDia.premio : 0);
+                        const altura = maxPremio > 0 ? (premio / maxPremio) * 100 : 0;
+                        const tier = esHoy ? (incentivosState.tierActual || '') : (datoDia?.tier || '');
+                        const config = getConfigIncentivosLocal();
+                        const tierObj = config.tiers.find(t => t.nombre === tier);
+                        const color = tierObj ? tierObj.color : '#e0e0e0';
+                        return `
+                            <div class="barra-dia ${esHoy ? 'hoy' : ''}">
+                                <div class="barra-valor">$${premio}</div>
+                                <div class="barra-fill" style="height:${Math.max(4, altura)}%;background:${premio > 0 ? color : '#e0e0e0'}"></div>
+                                <div class="barra-label">${dia}</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+
+            <div class="ganancias-detalle">
+                <h5><i class="fas fa-list"></i> Detalle por día</h5>
+                <table class="ganancias-tabla">
+                    <thead>
+                        <tr><th>Día</th><th>Piezas</th><th>Eficiencia</th><th>Nivel</th><th>Premio</th></tr>
+                    </thead>
+                    <tbody>
+                        ${premiosSemanales.length > 0 ? premiosSemanales.map(p => {
+                            const tierObj = getConfigIncentivosLocal().tiers.find(t => t.nombre === p.tier);
+                            return `
+                                <tr>
+                                    <td>${formatearFechaCorta(p.fecha)}</td>
+                                    <td>${p.piezas || 0}</td>
+                                    <td>${p.eficiencia}%</td>
+                                    <td><span style="color:${tierObj ? tierObj.color : '#999'}">${p.tier}</span></td>
+                                    <td><strong>$${p.premio}</strong></td>
+                                </tr>
+                            `;
+                        }).join('') : '<tr><td colspan="5" style="text-align:center;color:#999">Sin datos esta semana</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+
+            ${mejorDia.premio > 0 ? `
+                <div class="ganancias-mejor-dia">
+                    <i class="fas fa-trophy" style="color:#FFD700"></i>
+                    Mejor día: <strong>${formatearFechaCorta(mejorDia.fecha)}</strong> — $${mejorDia.premio} (${mejorDia.eficiencia}% eficiencia)
+                </div>
+            ` : ''}
+        </div>
+    `;
+
+    mostrarModal('Mis Ganancias', content, [
+        { text: 'Cerrar', class: 'btn-primary', onclick: 'cerrarModal()' }
+    ]);
+}
+
+/**
+ * Obtiene la fecha (YYYY-MM-DD) de un día de la semana actual (0=Lun, 5=Sab)
+ */
+function obtenerFechaDiaSemana(diaSemana) {
+    const hoy = new Date();
+    const diaActual = (hoy.getDay() + 6) % 7; // 0=Lun
+    const diff = diaSemana - diaActual;
+    const fecha = new Date(hoy);
+    fecha.setDate(hoy.getDate() + diff);
+    return fecha.toISOString().split('T')[0];
+}
+
+/**
+ * Formatea fecha corta (YYYY-MM-DD -> "Lun 13")
+ */
+function formatearFechaCorta(fechaStr) {
+    const dias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const fecha = new Date(fechaStr + 'T12:00:00');
+    return dias[fecha.getDay()] + ' ' + fecha.getDate();
+}
+
+/**
+ * Agrega premio al resumen de fin de proceso
+ * Se llama desde finalizarProceso() para mostrar el premio ganado
+ */
+function obtenerResumenPremio() {
+    const eficiencia = calcularEficienciaActual();
+    const premioBase = getPremioBase();
+    const tier = calcularTierLocal(eficiencia);
+    const premioGanado = tier ? Math.round(premioBase * tier.multiplicador) : 0;
+
+    // Guardar en historial semanal
+    guardarPremioDelDia(eficiencia, premioGanado, tier ? tier.nombre : null);
+
+    return {
+        eficiencia: eficiencia,
+        tier: tier,
+        premioGanado: premioGanado,
+        premioBase: premioBase
+    };
+}
+
+/**
+ * Resetea el widget de premio a estado inicial
+ */
+function resetearPremioWidget() {
+    incentivosState.tierActual = null;
+    incentivosState.premioEstimado = 0;
+
+    const montoEl = document.getElementById('premioMonto');
+    if (montoEl) { montoEl.textContent = '$0'; montoEl.style.color = '#999'; }
+
+    const tierBadgeEl = document.getElementById('premioTierBadge');
+    if (tierBadgeEl) {
+        tierBadgeEl.innerHTML = '<i class="fas fa-minus"></i> Sin bono';
+        tierBadgeEl.style.background = '#f0f0f0';
+        tierBadgeEl.style.color = '#999';
+        tierBadgeEl.style.borderColor = '#ddd';
+    }
+
+    const barraFill = document.getElementById('premioBarraFill');
+    if (barraFill) barraFill.style.width = '0%';
+
+    const siguienteEl = document.getElementById('premioSiguiente');
+    if (siguienteEl) siguienteEl.innerHTML = '';
+
+    const proyeccionEl = document.getElementById('premioProyeccion');
+    if (proyeccionEl) {
+        proyeccionEl.innerHTML = '<i class="fas fa-chart-line"></i> <span>Inicia tu proceso para ver estimación</span>';
+    }
+
+    // Ocultar badge header
+    const badgeEl = document.getElementById('nivelBadgeHeader');
+    if (badgeEl) badgeEl.style.display = 'none';
 }

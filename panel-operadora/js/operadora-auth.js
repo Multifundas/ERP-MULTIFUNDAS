@@ -3,6 +3,7 @@
 // ========================================
 
 // Estado de autenticación
+var DEBUG_MODE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const authState = {
     operadoraActual: null,
     sesionActiva: false,
@@ -27,6 +28,42 @@ function getOperadorasDB() {
 }
 
 // ========================================
+// RATE LIMITING - Protección contra intentos fallidos
+// ========================================
+const _rateLimiter = {
+    maxIntentos: 3,
+    bloqueoMinutos: 5,
+    getKey: function(numEmpleado) { return 'rl_' + (numEmpleado || 'global'); },
+    verificar: function(numEmpleado) {
+        var key = this.getKey(numEmpleado);
+        var data = JSON.parse(localStorage.getItem(key) || '{}');
+        if (data.bloqueadoHasta && new Date().getTime() < data.bloqueadoHasta) {
+            var restante = Math.ceil((data.bloqueadoHasta - new Date().getTime()) / 60000);
+            return { bloqueado: true, minutosRestantes: restante };
+        }
+        if (data.bloqueadoHasta && new Date().getTime() >= data.bloqueadoHasta) {
+            localStorage.removeItem(key);
+            return { bloqueado: false };
+        }
+        return { bloqueado: false };
+    },
+    registrarFallo: function(numEmpleado) {
+        var key = this.getKey(numEmpleado);
+        var data = JSON.parse(localStorage.getItem(key) || '{"intentos":0}');
+        data.intentos = (data.intentos || 0) + 1;
+        if (data.intentos >= this.maxIntentos) {
+            data.bloqueadoHasta = new Date().getTime() + (this.bloqueoMinutos * 60000);
+            data.intentos = 0;
+        }
+        localStorage.setItem(key, JSON.stringify(data));
+        return { intentosRestantes: this.maxIntentos - data.intentos, bloqueado: !!data.bloqueadoHasta };
+    },
+    limpiar: function(numEmpleado) {
+        localStorage.removeItem(this.getKey(numEmpleado));
+    }
+};
+
+// ========================================
 // FUNCIONES DE AUTENTICACIÓN
 // ========================================
 
@@ -41,6 +78,14 @@ async function iniciarSesion() {
 
     if (!pin || pin.length !== 4) {
         mostrarErrorLogin('Ingresa tu PIN de 4 dígitos');
+        return;
+    }
+
+    // Verificar rate limiting
+    var rlCheck = _rateLimiter.verificar(numEmpleado);
+    if (rlCheck.bloqueado) {
+        mostrarErrorLogin('Demasiados intentos fallidos. Espera ' + rlCheck.minutosRestantes + ' minuto(s).');
+        document.getElementById('pinInput').value = '';
         return;
     }
 
@@ -73,10 +118,20 @@ async function iniciarSesion() {
             }
 
             if (!row.valid) {
-                mostrarErrorLogin(row.mensaje);
+                var rlResult = _rateLimiter.registrarFallo(numEmpleado);
+                var msg = row.mensaje;
+                if (!rlResult.bloqueado && rlResult.intentosRestantes > 0) {
+                    msg += ' (' + rlResult.intentosRestantes + ' intento(s) restante(s))';
+                } else if (rlResult.bloqueado) {
+                    msg = 'Demasiados intentos. Espera ' + _rateLimiter.bloqueoMinutos + ' minutos.';
+                }
+                mostrarErrorLogin(msg);
                 document.getElementById('pinInput').value = '';
                 return;
             }
+
+            // Login exitoso - limpiar rate limiter
+            _rateLimiter.limpiar(numEmpleado);
 
             // Login exitoso via Supabase
             var operadora = {
@@ -129,10 +184,20 @@ function iniciarSesionLocal(numEmpleado, pin) {
     );
 
     if (!operadora) {
-        mostrarErrorLogin('Número de empleado o PIN incorrecto');
+        var rlResult = _rateLimiter.registrarFallo(numEmpleado);
+        var msg = 'Número de empleado o PIN incorrecto';
+        if (!rlResult.bloqueado && rlResult.intentosRestantes > 0) {
+            msg += ' (' + rlResult.intentosRestantes + ' intento(s) restante(s))';
+        } else if (rlResult.bloqueado) {
+            msg = 'Demasiados intentos. Espera ' + _rateLimiter.bloqueoMinutos + ' minutos.';
+        }
+        mostrarErrorLogin(msg);
         document.getElementById('pinInput').value = '';
         return;
     }
+
+    // Login exitoso - limpiar rate limiter
+    _rateLimiter.limpiar(numEmpleado);
 
     // Login exitoso
     authState.operadoraActual = operadora;
@@ -484,7 +549,7 @@ function obtenerMensajeFinalTurno(stats) {
 }
 
 function confirmarCierreSesion() {
-    console.log('[AUTH] Iniciando cierre de sesión...');
+    DEBUG_MODE && console.log('[AUTH] Iniciando cierre de sesión...');
 
     try {
         // Cerrar modal
@@ -541,7 +606,7 @@ function confirmarCierreSesion() {
     mostrarLogin();
     limpiarFormLogin();
 
-    console.log('[AUTH] Sesión cerrada correctamente');
+    DEBUG_MODE && console.log('[AUTH] Sesión cerrada correctamente');
 
     if (typeof mostrarToast === 'function') {
         mostrarToast('Sesión cerrada. ¡Hasta mañana!', 'success');
@@ -749,7 +814,7 @@ function configurarEstacion(id, area, nombre) {
     CONFIG_ESTACION.area = area;
     CONFIG_ESTACION.nombre = nombre;
 
-    console.log('Estación configurada:', CONFIG_ESTACION);
+    DEBUG_MODE && console.log('Estación configurada:', CONFIG_ESTACION);
 }
 
 function mostrarConfigEstacion() {

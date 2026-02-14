@@ -180,6 +180,49 @@
     }
 
     // ========================================
+    // CONFIGURACIÓN CENTRALIZADA
+    // Constantes y valores por defecto usados en múltiples paneles
+    // ========================================
+    var ERP_CONFIG = {
+        // Producción
+        META_POR_MINUTO_DEFAULT: 2.5,
+        META_DIARIA_DEFAULT: 500,
+        HORAS_TURNO: 8,
+
+        // Tiempos (ms)
+        INTERVALO_MONITOREO: 30000,
+        INTERVALO_SYNC: 60000,
+        TOAST_DURACION: 3000,
+        FEEDBACK_MIN_INTERVALO: 120000,
+
+        // Rate limiting
+        LOGIN_MAX_INTENTOS: 3,
+        LOGIN_BLOQUEO_MINUTOS: 5,
+
+        // Offline
+        OFFLINE_RETRY_MAX_DELAY: 60000,
+        COLA_OFFLINE_MAX: 500,
+
+        // Historial
+        HISTORIAL_MAX_ITEMS: 100,
+        NOTIFICACIONES_MAX: 50,
+
+        // Paginación
+        PAGE_SIZE: 25,
+
+        // localStorage keys
+        KEYS: {
+            CONFIG_INCENTIVOS: 'erp_config_incentivos',
+            PERSONAL: 'erp_personal',
+            OPERADORAS_DB: 'operadoras_db',
+            PEDIDOS_ERP: 'pedidos_erp',
+            ESTADO_MAQUINAS: 'estado_maquinas',
+            HISTORIAL_PRODUCCION: 'historial_produccion',
+            HISTORIAL_TURNOS: 'historial_turnos'
+        }
+    };
+
+    // ========================================
     // EXPORTAR GLOBALMENTE
     // ========================================
     window.getIniciales = getIniciales;
@@ -194,5 +237,6 @@
     window.saveFilter = saveFilter;
     window.getFilter = getFilter;
     window.clearFilters = clearFilters;
+    window.ERP_CONFIG = ERP_CONFIG;
 
 })();

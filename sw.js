@@ -3,7 +3,7 @@
 // Cache de archivos estáticos, network-first para API
 // ========================================
 
-var CACHE_NAME = 'erp-multifundas-v1';
+var CACHE_NAME = 'erp-multifundas-v2';
 var STATIC_ASSETS = [
     '/',
     '/index.html',
@@ -12,6 +12,7 @@ var STATIC_ASSETS = [
     '/layout-editor.html',
     '/css/styles.css',
     '/css/supervisora.css',
+    '/css/coco-dashboard.css',
     '/js/utils.js',
     '/js/sanitize.js',
     '/js/data.js',
@@ -20,10 +21,17 @@ var STATIC_ASSETS = [
     '/js/admin-auth.js',
     '/js/dev-switcher.js',
     '/js/supabase-config.js',
+    '/js/supabase-client.js',
     '/js/database-adapter.js',
     '/js/realtime-sync.js',
     '/js/coco-dashboard.js',
-    '/manifest.json'
+    '/manifest.json',
+    // Panel Operadora
+    '/panel-operadora/operadora.html',
+    '/panel-operadora/css/operadora.css',
+    '/panel-operadora/js/operadora.js',
+    '/panel-operadora/js/operadora-auth.js',
+    '/panel-operadora/js/operadora-modules.js'
 ];
 
 // Install: cache static assets

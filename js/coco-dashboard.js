@@ -3,6 +3,7 @@
 // ========================================
 
 // Estado del dashboard de Coco
+var DEBUG_MODE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const cocoState = {
     calendarioMes: new Date().getMonth(),
     calendarioAnio: new Date().getFullYear(),
@@ -275,6 +276,9 @@ function renderCocoDashboard() {
                 </div>
             </div>
 
+            <!-- Sección de Incentivos del Equipo -->
+            ${renderSeccionIncentivosEquipo(stats, topOperadoras)}
+
             <!-- Seccion de dos columnas -->
             <div class="coco-two-columns">
                 <!-- Top Operadoras -->
@@ -301,6 +305,14 @@ function renderCocoDashboard() {
                                 <div class="top-stats">
                                     <span class="top-piezas">${op.piezas} pzas</span>
                                     <span class="top-eficiencia ${op.eficiencia >= 100 ? 'excellent' : ''}">${op.eficiencia}%</span>
+                                    ${(() => {
+                                        const tierOp = calcularTierDashboard(op.eficiencia);
+                                        if (tierOp) {
+                                            const premioOp = calcularPremioDashboard(op.eficiencia, op.id);
+                                            return '<span class="top-tier" style="color:' + tierOp.color + '"><i class="fas ' + tierOp.icono + '"></i> $' + premioOp + '</span>';
+                                        }
+                                        return '';
+                                    })()}
                                 </div>
                             </div>
                         `).join('') : `
@@ -392,6 +404,10 @@ function renderCocoDashboard() {
                     <button class="accion-btn" onclick="typeof mostrarModalBackups === 'function' ? mostrarModalBackups() : showToast('Función no disponible', 'error')">
                         <i class="fas fa-database"></i>
                         <span>Backups</span>
+                    </button>
+                    <button class="accion-btn" onclick="mostrarPremiosEquipo()">
+                        <i class="fas fa-coins"></i>
+                        <span>Premios Equipo</span>
                     </button>
                     <button class="accion-btn" onclick="typeof toggleModoTV === 'function' ? toggleModoTV() : showToast('Función no disponible', 'error')">
                         <i class="fas fa-tv"></i>
@@ -585,6 +601,23 @@ function generarAlertasInteligentes() {
         });
     }
 
+    // Alertas motivacionales de incentivos
+    try {
+        const alertasMotiv = generarAlertasMotivacionales();
+        // Solo agregar las de prioridad alta/media (máximo 2)
+        const motivAltas = alertasMotiv.filter(a => a.prioridad === 'alta' || a.prioridad === 'media').slice(0, 2);
+        motivAltas.forEach(m => {
+            alertas.push({
+                tipo: 'info',
+                icono: m.icono,
+                titulo: m.titulo,
+                mensaje: m.mensaje,
+                accion: `mostrarPremiosEquipo()`,
+                accionTexto: 'Ver premios'
+            });
+        });
+    } catch(e) {}
+
     return alertas;
 }
 
@@ -716,6 +749,341 @@ function formatearFecha(fechaStr) {
         month: 'short',
         year: 'numeric'
     });
+}
+
+// ========================================
+// SISTEMA DE INCENTIVOS - DASHBOARD SUPERVISORA
+// ========================================
+
+/**
+ * Obtiene config de incentivos (reutiliza la de app.js si está disponible)
+ */
+function getConfigIncentivosDashboard() {
+    if (typeof window.getConfigIncentivos === 'function') {
+        return window.getConfigIncentivos();
+    }
+    var saved = localStorage.getItem('erp_config_incentivos');
+    if (saved) { try { return JSON.parse(saved); } catch(e) {} }
+    return {
+        tiers: [
+            { nombre: 'Bronce', minEficiencia: 80, multiplicador: 0.5, color: '#CD7F32', icono: 'fa-medal' },
+            { nombre: 'Plata', minEficiencia: 90, multiplicador: 0.75, color: '#C0C0C0', icono: 'fa-medal' },
+            { nombre: 'Oro', minEficiencia: 100, multiplicador: 1.0, color: '#FFD700', icono: 'fa-star' },
+            { nombre: 'Diamante', minEficiencia: 110, multiplicador: 1.5, color: '#B9F2FF', icono: 'fa-gem' }
+        ],
+        premioBaseDefault: 100,
+        metaEquipoSupervisora: 90,
+        multiplicadorSupervisora: 1.0,
+        premioPuntualidadDefault: 50
+    };
+}
+
+/**
+ * Calcula el tier para una eficiencia dada
+ */
+function calcularTierDashboard(eficiencia) {
+    if (typeof window.calcularTierPorEficiencia === 'function') {
+        return window.calcularTierPorEficiencia(eficiencia);
+    }
+    var config = getConfigIncentivosDashboard();
+    var tiersSorted = config.tiers.slice().sort(function(a, b) { return b.minEficiencia - a.minEficiencia; });
+    for (var i = 0; i < tiersSorted.length; i++) {
+        if (eficiencia >= tiersSorted[i].minEficiencia) return tiersSorted[i];
+    }
+    return null;
+}
+
+/**
+ * Calcula el premio estimado para una operadora
+ */
+function calcularPremioDashboard(eficiencia, operadoraId) {
+    var tier = calcularTierDashboard(eficiencia);
+    if (!tier) return 0;
+    var premioBase = getConfigIncentivosDashboard().premioBaseDefault;
+    // Buscar premio individual
+    var operadorasDB = JSON.parse(localStorage.getItem('operadoras_db') || '[]');
+    var op = operadorasDB.find(function(o) { return o.id == operadoraId; });
+    if (op && op.premioProduccion > 0) premioBase = op.premioProduccion;
+    return Math.round(premioBase * tier.multiplicador);
+}
+
+/**
+ * Renderiza la sección de incentivos del equipo
+ */
+function renderSeccionIncentivosEquipo(stats, topOperadoras) {
+    var config = getConfigIncentivosDashboard();
+    var eficienciaEquipo = stats.eficienciaGeneral || 0;
+
+    // Contar operadoras por tier
+    var conteoTiers = { sinBono: 0 };
+    config.tiers.forEach(function(t) { conteoTiers[t.nombre] = 0; });
+
+    var premioTotalEquipo = 0;
+    topOperadoras.forEach(function(op) {
+        var tier = calcularTierDashboard(op.eficiencia);
+        if (tier) {
+            conteoTiers[tier.nombre] = (conteoTiers[tier.nombre] || 0) + 1;
+            premioTotalEquipo += calcularPremioDashboard(op.eficiencia, op.id);
+        } else {
+            conteoTiers.sinBono++;
+        }
+    });
+
+    // Incentivo de la supervisora
+    var metaEquipo = config.metaEquipoSupervisora || 90;
+    var multiplicadorSup = config.multiplicadorSupervisora || 1.0;
+    var supervisoraData = JSON.parse(localStorage.getItem('supervisora_sesion') || '{}');
+    var premioBaseSup = 0;
+    // Buscar premio de la supervisora en personal
+    var operadorasDB = JSON.parse(localStorage.getItem('operadoras_db') || '[]');
+    var supData = operadorasDB.find(function(o) { return o.rol === 'supervisora' || o.rol === 'supervisor'; });
+    if (supData && supData.premioProduccion > 0) {
+        premioBaseSup = supData.premioProduccion;
+    } else {
+        premioBaseSup = config.premioBaseDefault;
+    }
+    var cumpleMeta = eficienciaEquipo >= metaEquipo;
+    var premioSupervisora = cumpleMeta ? Math.round(premioBaseSup * multiplicadorSup) : 0;
+    var progresoMeta = metaEquipo > 0 ? Math.min(100, Math.round((eficienciaEquipo / metaEquipo) * 100)) : 0;
+
+    return '<div class="coco-incentivos-section">' +
+        '<div class="incentivos-equipo-grid">' +
+
+        // Widget: Rendimiento del Equipo
+        '<div class="coco-card incentivo-card equipo-rendimiento">' +
+            '<div class="card-header">' +
+                '<h3><i class="fas fa-users-cog"></i> Rendimiento del Equipo</h3>' +
+            '</div>' +
+            '<div class="incentivo-body">' +
+                '<div class="equipo-eficiencia-display">' +
+                    '<div class="eficiencia-circulo" style="--progreso:' + Math.min(eficienciaEquipo, 130) + ';--color:' + (eficienciaEquipo >= 100 ? '#10b981' : eficienciaEquipo >= 80 ? '#f59e0b' : '#ef4444') + '">' +
+                        '<span class="eficiencia-valor">' + eficienciaEquipo + '%</span>' +
+                        '<span class="eficiencia-label">Eficiencia</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="equipo-premio-total">' +
+                    '<span class="premio-label">Premios del equipo hoy</span>' +
+                    '<span class="premio-valor">$' + premioTotalEquipo + '</span>' +
+                '</div>' +
+                '<div class="equipo-tiers-resumen">' +
+                    config.tiers.slice().reverse().map(function(tier) {
+                        var count = conteoTiers[tier.nombre] || 0;
+                        return '<div class="tier-count" style="--tier-color:' + tier.color + '">' +
+                            '<i class="fas ' + tier.icono + '" style="color:' + tier.color + '"></i>' +
+                            '<span class="tier-num">' + count + '</span>' +
+                            '<span class="tier-name">' + tier.nombre + '</span>' +
+                        '</div>';
+                    }).join('') +
+                    '<div class="tier-count" style="--tier-color:#999">' +
+                        '<i class="fas fa-minus" style="color:#999"></i>' +
+                        '<span class="tier-num">' + conteoTiers.sinBono + '</span>' +
+                        '<span class="tier-name">Sin bono</span>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>' +
+
+        // Widget: Mi Incentivo (Supervisora)
+        '<div class="coco-card incentivo-card mi-incentivo">' +
+            '<div class="card-header">' +
+                '<h3><i class="fas fa-coins"></i> Mi Incentivo</h3>' +
+            '</div>' +
+            '<div class="incentivo-body">' +
+                '<div class="sup-premio-display">' +
+                    '<div class="sup-premio-monto' + (cumpleMeta ? ' activo' : '') + '">$' + premioSupervisora + '</div>' +
+                    '<div class="sup-premio-estado">' +
+                        (cumpleMeta ?
+                            '<i class="fas fa-check-circle" style="color:#10b981"></i> Meta alcanzada' :
+                            '<i class="fas fa-bullseye" style="color:#f59e0b"></i> Meta: ' + metaEquipo + '% eficiencia equipo') +
+                    '</div>' +
+                '</div>' +
+                '<div class="sup-progreso-container">' +
+                    '<div class="sup-progreso-barra">' +
+                        '<div class="sup-progreso-fill" style="width:' + progresoMeta + '%;background:' + (cumpleMeta ? '#10b981' : '#f59e0b') + '"></div>' +
+                        '<div class="sup-progreso-meta" style="left:100%"></div>' +
+                    '</div>' +
+                    '<div class="sup-progreso-labels">' +
+                        '<span>0%</span>' +
+                        '<span>' + eficienciaEquipo + '% actual</span>' +
+                        '<span>' + metaEquipo + '%</span>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="sup-proyeccion">' +
+                    '<i class="fas fa-chart-line"></i> ' +
+                    (cumpleMeta ?
+                        'Si el equipo mantiene este ritmo, ganaras <strong>$' + premioSupervisora + '</strong> hoy' :
+                        'Faltan <strong>' + (metaEquipo - eficienciaEquipo) + ' puntos</strong> de eficiencia para alcanzar tu premio') +
+                '</div>' +
+            '</div>' +
+        '</div>' +
+
+    '</div>' +
+    '</div>';
+}
+
+/**
+ * Modal "Premios del Equipo" - tabla detallada de todas las operadoras
+ */
+function mostrarPremiosEquipo() {
+    var allOperadoras = getTopOperadoras(50); // Obtener todas
+    var config = getConfigIncentivosDashboard();
+
+    // Calcular totales
+    var totalPremios = 0;
+    var totalPiezas = 0;
+    var eficienciaSum = 0;
+
+    var rows = allOperadoras.map(function(op) {
+        var tier = calcularTierDashboard(op.eficiencia);
+        var premio = calcularPremioDashboard(op.eficiencia, op.id);
+        totalPremios += premio;
+        totalPiezas += op.piezas;
+        eficienciaSum += op.eficiencia;
+
+        // Detectar si está cerca de subir de tier
+        var cercaDeSubir = '';
+        if (tier) {
+            var tiersSorted = config.tiers.slice().sort(function(a, b) { return a.minEficiencia - b.minEficiencia; });
+            var idxActual = tiersSorted.findIndex(function(t) { return t.nombre === tier.nombre; });
+            if (idxActual < tiersSorted.length - 1) {
+                var siguiente = tiersSorted[idxActual + 1];
+                var diff = siguiente.minEficiencia - op.eficiencia;
+                if (diff <= 10) {
+                    cercaDeSubir = '<span class="cerca-subir" style="color:' + siguiente.color + '"><i class="fas fa-arrow-up"></i> A ' + diff + '% de ' + siguiente.nombre + '</span>';
+                }
+            }
+        } else {
+            // Sin tier, ver si está cerca del primero
+            var primerTier = config.tiers.slice().sort(function(a, b) { return a.minEficiencia - b.minEficiencia; })[0];
+            if (primerTier) {
+                var diff = primerTier.minEficiencia - op.eficiencia;
+                if (diff <= 15 && diff > 0) {
+                    cercaDeSubir = '<span class="cerca-subir" style="color:' + primerTier.color + '"><i class="fas fa-arrow-up"></i> A ' + diff + '% de ' + primerTier.nombre + '</span>';
+                }
+            }
+        }
+
+        return '<tr>' +
+            '<td>' + op.nombre + '</td>' +
+            '<td>' + (op.estacion || '-') + '</td>' +
+            '<td><strong>' + op.piezas + '</strong></td>' +
+            '<td>' + op.eficiencia + '%</td>' +
+            '<td>' + (tier ? '<span style="color:' + tier.color + '"><i class="fas ' + tier.icono + '"></i> ' + tier.nombre + '</span>' : '<span style="color:#999">-</span>') + '</td>' +
+            '<td><strong>$' + premio + '</strong></td>' +
+            '<td>' + cercaDeSubir + '</td>' +
+        '</tr>';
+    });
+
+    var eficienciaProm = allOperadoras.length > 0 ? Math.round(eficienciaSum / allOperadoras.length) : 0;
+
+    var content = '<div class="premios-equipo-modal">' +
+        '<div class="premios-totales">' +
+            '<div class="premio-total-stat"><span class="stat-valor">' + allOperadoras.length + '</span><span class="stat-label">Operadoras</span></div>' +
+            '<div class="premio-total-stat"><span class="stat-valor">' + totalPiezas + '</span><span class="stat-label">Piezas Total</span></div>' +
+            '<div class="premio-total-stat"><span class="stat-valor">' + eficienciaProm + '%</span><span class="stat-label">Efic. Promedio</span></div>' +
+            '<div class="premio-total-stat principal"><span class="stat-valor">$' + totalPremios + '</span><span class="stat-label">Premios Total</span></div>' +
+        '</div>' +
+        '<table class="premios-tabla">' +
+            '<thead><tr><th>Nombre</th><th>Estación</th><th>Piezas</th><th>Efic.</th><th>Nivel</th><th>Premio</th><th>Próximo</th></tr></thead>' +
+            '<tbody>' + (rows.length > 0 ? rows.join('') : '<tr><td colspan="7" style="text-align:center;padding:20px;opacity:0.5">Sin datos de producción hoy</td></tr>') + '</tbody>' +
+        '</table>' +
+    '</div>';
+
+    if (typeof openModal === 'function') {
+        openModal('Premios del Equipo', content, '<button class="btn btn-primary" onclick="closeModal()">Cerrar</button>');
+    }
+}
+
+/**
+ * Genera alertas motivacionales para la supervisora
+ * Se integra con el sistema de alertas existente
+ */
+function generarAlertasMotivacionales() {
+    var alertas = [];
+    var config = getConfigIncentivosDashboard();
+    var operadoras = getTopOperadoras(50);
+
+    operadoras.forEach(function(op) {
+        var tier = calcularTierDashboard(op.eficiencia);
+        var tiersSorted = config.tiers.slice().sort(function(a, b) { return a.minEficiencia - b.minEficiencia; });
+
+        if (tier) {
+            var idxActual = tiersSorted.findIndex(function(t) { return t.nombre === tier.nombre; });
+            if (idxActual < tiersSorted.length - 1) {
+                var siguiente = tiersSorted[idxActual + 1];
+                var diff = siguiente.minEficiencia - op.eficiencia;
+                if (diff <= 8 && diff > 0) {
+                    alertas.push({
+                        tipo: 'motivacion',
+                        icono: 'fa-arrow-up',
+                        titulo: op.nombre + ' cerca de ' + siguiente.nombre,
+                        mensaje: 'Le faltan ' + diff + ' puntos de eficiencia para subir a nivel ' + siguiente.nombre + '. Motívala!',
+                        color: siguiente.color,
+                        prioridad: diff <= 3 ? 'alta' : 'media'
+                    });
+                }
+            }
+        } else {
+            // Sin tier - ver si está cerca del primero
+            if (tiersSorted.length > 0) {
+                var primerTier = tiersSorted[0];
+                var diff = primerTier.minEficiencia - op.eficiencia;
+                if (diff <= 10 && diff > 0) {
+                    alertas.push({
+                        tipo: 'motivacion',
+                        icono: 'fa-hand-holding-heart',
+                        titulo: op.nombre + ' cerca de ' + primerTier.nombre,
+                        mensaje: 'Le faltan ' + diff + ' puntos para alcanzar su primer bono. Dale ánimo!',
+                        color: primerTier.color,
+                        prioridad: 'media'
+                    });
+                }
+            }
+        }
+
+        // Operadoras en Diamante (celebrar)
+        if (tier && tier.nombre === 'Diamante') {
+            alertas.push({
+                tipo: 'motivacion',
+                icono: 'fa-gem',
+                titulo: op.nombre + ' en Diamante!',
+                mensaje: 'Está en el nivel máximo con ' + op.eficiencia + '% eficiencia.',
+                color: '#B9F2FF',
+                prioridad: 'baja'
+            });
+        }
+    });
+
+    // Alerta si equipo supera meta
+    var stats = calcularEstadisticasDia();
+    if (stats.eficienciaGeneral >= (config.metaEquipoSupervisora || 90)) {
+        alertas.push({
+            tipo: 'motivacion',
+            icono: 'fa-trophy',
+            titulo: 'Equipo supera la meta!',
+            mensaje: 'El equipo tiene ' + stats.eficienciaGeneral + '% de eficiencia. Tu premio está asegurado!',
+            color: '#FFD700',
+            prioridad: 'alta'
+        });
+    }
+
+    // Contar Diamantes
+    var diamantes = operadoras.filter(function(op) {
+        var t = calcularTierDashboard(op.eficiencia);
+        return t && t.nombre === 'Diamante';
+    });
+    if (diamantes.length >= 3) {
+        alertas.push({
+            tipo: 'motivacion',
+            icono: 'fa-star',
+            titulo: diamantes.length + ' operadoras en Diamante!',
+            mensaje: 'Excelente rendimiento del equipo hoy.',
+            color: '#B9F2FF',
+            prioridad: 'media'
+        });
+    }
+
+    return alertas;
 }
 
 // ========================================
@@ -2050,7 +2418,7 @@ function getReporteOperadoras() {
             const personal = db.getPersonal();
             operadores = personal.filter(p => p.rol === 'operador' && p.activo !== false);
         } catch (e) {
-            console.warn('[COCO] Error obteniendo personal:', e);
+            DEBUG_MODE && console.warn('[COCO] Error obteniendo personal:', e);
         }
     }
 
@@ -2251,7 +2619,7 @@ function verDetalleOperadora(operadorId) {
             const personal = db.getPersonal();
             operador = personal.find(p => p.id === operadorId || p.id == operadorId);
         } catch (e) {
-            console.warn('[COCO] Error buscando operador:', e);
+            DEBUG_MODE && console.warn('[COCO] Error buscando operador:', e);
         }
     }
 
@@ -2262,7 +2630,7 @@ function verDetalleOperadora(operadorId) {
     }
 
     if (!operador) {
-        console.warn('[COCO] Operador no encontrado:', operadorId);
+        DEBUG_MODE && console.warn('[COCO] Operador no encontrado:', operadorId);
         openModal('Error', '<p style="text-align:center; padding: 20px;">No se encontró información del operador</p>', '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>');
         return;
     }
@@ -2479,6 +2847,17 @@ function exportarReporteCSV() {
     showToast('Reporte CSV exportado correctamente', 'success');
 }
 
+function cargarHtml2Pdf() {
+    return new Promise(function(resolve, reject) {
+        if (typeof html2pdf !== 'undefined') { resolve(); return; }
+        var script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+        script.onload = resolve;
+        script.onerror = function() { reject(new Error('No se pudo cargar html2pdf')); };
+        document.head.appendChild(script);
+    });
+}
+
 function exportarReportePDF() {
     const elemento = document.querySelector('.coco-reportes');
     if (!elemento) {
@@ -2486,6 +2865,16 @@ function exportarReportePDF() {
         return;
     }
 
+    showToast('Cargando generador PDF...', 'info');
+
+    cargarHtml2Pdf().then(function() {
+        _generarPDF(elemento);
+    }).catch(function() {
+        showToast('Error al cargar la librería de PDF', 'error');
+    });
+}
+
+function _generarPDF(elemento) {
     showToast('Generando PDF...', 'info');
 
     const opciones = {

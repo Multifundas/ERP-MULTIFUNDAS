@@ -1,7 +1,8 @@
 // ========================================
 // ERP MULTIFUNDAS - APLICACIÓN PRINCIPAL
 // ========================================
-console.log('[app.js] Iniciando carga del módulo...');
+DEBUG_MODE && console.log('[app.js] Iniciando carga del módulo...');
+var DEBUG_MODE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
 // Estado de la aplicación
 const app = {
@@ -26,11 +27,11 @@ const ESTADOS_PEDIDO_INACTIVO = [
  */
 function esPedidoActivo(pedido) {
     if (!pedido) {
-        console.log('[esPedidoActivo] Pedido es null/undefined');
+        DEBUG_MODE && console.log('[esPedidoActivo] Pedido es null/undefined');
         return false;
     }
     if (!pedido.estado) {
-        console.log('[esPedidoActivo] Pedido #' + pedido.id + ' no tiene estado, retornando TRUE (asumiendo activo)');
+        DEBUG_MODE && console.log('[esPedidoActivo] Pedido #' + pedido.id + ' no tiene estado, retornando TRUE (asumiendo activo)');
         return true; // Si no tiene estado, asumimos que es nuevo/activo
     }
     const estado = pedido.estado.toLowerCase().trim();
@@ -85,28 +86,28 @@ window.ADMIN = {
         }
     },
     verEstado: () => {
-        console.log('=== ESTADO DEL SISTEMA ===');
-        console.log('Clientes:', db.getClientes ? db.getClientes().length : 'N/A');
-        console.log('Productos:', db.getProductos ? db.getProductos().length : 'N/A');
-        console.log('Pedidos:', db.getPedidos ? db.getPedidos().length : 'N/A');
-        console.log('Personal:', db.getPersonal ? db.getPersonal().length : 'N/A');
-        console.log('Asignaciones:', Object.keys(JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}')).length);
-        console.log('Historial producción:', JSON.parse(localStorage.getItem('historial_produccion') || '[]').length);
-        console.log('Notificaciones:', JSON.parse(localStorage.getItem('notificaciones_coco') || '[]').length);
+        DEBUG_MODE && console.log('=== ESTADO DEL SISTEMA ===');
+        DEBUG_MODE && console.log('Clientes:', db.getClientes ? db.getClientes().length : 'N/A');
+        DEBUG_MODE && console.log('Productos:', db.getProductos ? db.getProductos().length : 'N/A');
+        DEBUG_MODE && console.log('Pedidos:', db.getPedidos ? db.getPedidos().length : 'N/A');
+        DEBUG_MODE && console.log('Personal:', db.getPersonal ? db.getPersonal().length : 'N/A');
+        DEBUG_MODE && console.log('Asignaciones:', Object.keys(JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}')).length);
+        DEBUG_MODE && console.log('Historial producción:', JSON.parse(localStorage.getItem('historial_produccion') || '[]').length);
+        DEBUG_MODE && console.log('Notificaciones:', JSON.parse(localStorage.getItem('notificaciones_coco') || '[]').length);
     },
     sincronizar: () => {
         if (typeof ejecutarSincronizacionCompleta === 'function') {
             ejecutarSincronizacionCompleta();
-            console.log('✅ Sincronización ejecutada');
+            DEBUG_MODE && console.log('✅ Sincronización ejecutada');
         }
     }
 };
 
-console.log('🔧 Comandos de Admin disponibles:');
-console.log('   ADMIN.limpiarTodo()      - Borra TODOS los datos');
-console.log('   ADMIN.limpiarProduccion() - Solo datos de producción');
-console.log('   ADMIN.verEstado()        - Ver estado del sistema');
-console.log('   ADMIN.sincronizar()      - Forzar sincronización');
+DEBUG_MODE && console.log('🔧 Comandos de Admin disponibles:');
+DEBUG_MODE && console.log('   ADMIN.limpiarTodo()      - Borra TODOS los datos');
+DEBUG_MODE && console.log('   ADMIN.limpiarProduccion() - Solo datos de producción');
+DEBUG_MODE && console.log('   ADMIN.verEstado()        - Ver estado del sistema');
+DEBUG_MODE && console.log('   ADMIN.sincronizar()      - Forzar sincronización');
 
 // ========================================
 // DROPDOWN DE HERRAMIENTAS
@@ -168,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             // Sincronizar estado de operadores al inicio
             sincronizarEstadoOperadoresAlInicio();
-            console.log('[ADMIN] Sincronización inicial ejecutada');
+            DEBUG_MODE && console.log('[ADMIN] Sincronización inicial ejecutada');
         }, 1500);
     });
 });
@@ -222,7 +223,7 @@ function sincronizarEstadoOperadoresAlInicio() {
         loadPlantMap();
     }
 
-    console.log('[ADMIN] Estado de operadores sincronizado al inicio');
+    DEBUG_MODE && console.log('[ADMIN] Estado de operadores sincronizado al inicio');
 }
 
 // ========================================
@@ -395,7 +396,32 @@ function navigateTo(section) {
     loadSectionContent(section);
 }
 
+function showSectionLoading(sectionId) {
+    var el = document.getElementById('section-' + sectionId);
+    if (!el) return;
+    var existingContent = el.querySelector('.section-header');
+    var loadingDiv = el.querySelector('.loading-section');
+    if (!loadingDiv) {
+        loadingDiv = document.createElement('div');
+        loadingDiv.className = 'loading-section';
+        loadingDiv.innerHTML = '<div class="loading-spinner"></div><p>Cargando...</p>';
+        if (existingContent && existingContent.nextSibling) {
+            existingContent.parentNode.insertBefore(loadingDiv, existingContent.nextSibling);
+        } else {
+            el.appendChild(loadingDiv);
+        }
+    }
+}
+
+function hideSectionLoading(sectionId) {
+    var el = document.getElementById('section-' + sectionId);
+    if (!el) return;
+    var loadingDiv = el.querySelector('.loading-section');
+    if (loadingDiv) loadingDiv.remove();
+}
+
 function loadSectionContent(section) {
+    showSectionLoading(section);
     switch(section) {
         case 'dashboard':
             loadDashboard();
@@ -427,9 +453,229 @@ function loadSectionContent(section) {
         case 'usuarios':
             loadUsuarios();
             break;
+        case 'incentivos':
+            loadIncentivos();
+            break;
         case 'auditoria':
             loadAuditoria();
             break;
+    }
+    hideSectionLoading(section);
+}
+
+// ========================================
+// CONFIGURACIÓN DE INCENTIVOS
+// ========================================
+
+function getConfigIncentivos() {
+    var defaults = {
+        tiers: [
+            { nombre: 'Bronce', minEficiencia: 80, multiplicador: 0.5, color: '#CD7F32', icono: 'fa-medal' },
+            { nombre: 'Plata', minEficiencia: 90, multiplicador: 0.75, color: '#C0C0C0', icono: 'fa-medal' },
+            { nombre: 'Oro', minEficiencia: 100, multiplicador: 1.0, color: '#FFD700', icono: 'fa-star' },
+            { nombre: 'Diamante', minEficiencia: 110, multiplicador: 1.5, color: '#B9F2FF', icono: 'fa-gem' }
+        ],
+        premioBaseDefault: 100,
+        metaEquipoSupervisora: 90,
+        multiplicadorSupervisora: 1.0,
+        premioPuntualidadDefault: 50
+    };
+    try {
+        var saved = JSON.parse(localStorage.getItem('erp_config_incentivos'));
+        if (saved && saved.tiers) return saved;
+    } catch (e) {}
+    return defaults;
+}
+
+function guardarConfigIncentivos(config) {
+    localStorage.setItem('erp_config_incentivos', JSON.stringify(config));
+}
+
+function calcularTierPorEficiencia(eficiencia) {
+    var config = getConfigIncentivos();
+    var tierActual = null;
+    for (var i = config.tiers.length - 1; i >= 0; i--) {
+        if (eficiencia >= config.tiers[i].minEficiencia) {
+            tierActual = config.tiers[i];
+            break;
+        }
+    }
+    return tierActual;
+}
+
+function calcularPremioEstimado(eficiencia, premioBase) {
+    var config = getConfigIncentivos();
+    var tier = calcularTierPorEficiencia(eficiencia);
+    if (!tier) return { monto: 0, tier: null };
+    var base = premioBase || config.premioBaseDefault;
+    return { monto: Math.round(base * tier.multiplicador), tier: tier };
+}
+
+// Exportar funciones globalmente para que operadora y supervisora las usen
+window.getConfigIncentivos = getConfigIncentivos;
+window.calcularTierPorEficiencia = calcularTierPorEficiencia;
+window.calcularPremioEstimado = calcularPremioEstimado;
+
+function loadIncentivos() {
+    var config = getConfigIncentivos();
+    var container = document.getElementById('section-incentivos');
+    if (!container) {
+        // Crear la sección si no existe
+        container = document.createElement('section');
+        container.className = 'section';
+        container.id = 'section-incentivos';
+        document.getElementById('contentArea').appendChild(container);
+    }
+
+    var tiersHTML = config.tiers.map(function(tier, idx) {
+        return '<div class="tier-config-card" style="border-left: 4px solid ' + tier.color + ';">' +
+            '<div class="tier-config-header">' +
+                '<div class="tier-badge" style="background: ' + tier.color + '; color: ' + (tier.color === '#FFD700' || tier.color === '#B9F2FF' ? '#333' : '#fff') + ';">' +
+                    '<i class="fas ' + tier.icono + '"></i>' +
+                '</div>' +
+                '<input type="text" class="tier-nombre-input" value="' + tier.nombre + '" data-tier="' + idx + '" data-field="nombre" onchange="actualizarTier(this)">' +
+            '</div>' +
+            '<div class="tier-config-fields">' +
+                '<div class="tier-field">' +
+                    '<label>Eficiencia mínima (%)</label>' +
+                    '<input type="number" value="' + tier.minEficiencia + '" data-tier="' + idx + '" data-field="minEficiencia" onchange="actualizarTier(this)" min="0" max="200">' +
+                '</div>' +
+                '<div class="tier-field">' +
+                    '<label>Multiplicador</label>' +
+                    '<input type="number" value="' + tier.multiplicador + '" data-tier="' + idx + '" data-field="multiplicador" onchange="actualizarTier(this)" step="0.05" min="0" max="5">' +
+                '</div>' +
+                '<div class="tier-field">' +
+                    '<label>Color</label>' +
+                    '<input type="color" value="' + tier.color + '" data-tier="' + idx + '" data-field="color" onchange="actualizarTier(this)">' +
+                '</div>' +
+            '</div>' +
+            '<div class="tier-preview">' +
+                '<span>Ejemplo: Premio base $' + config.premioBaseDefault + ' × ' + tier.multiplicador + ' = <strong>$' + Math.round(config.premioBaseDefault * tier.multiplicador) + '</strong></span>' +
+            '</div>' +
+        '</div>';
+    }).join('');
+
+    container.innerHTML =
+        '<div class="section-header">' +
+            '<h1><i class="fas fa-coins"></i> Configuración de Incentivos</h1>' +
+            '<button class="btn btn-primary" onclick="resetearIncentivos()"><i class="fas fa-undo"></i> Restaurar Defaults</button>' +
+        '</div>' +
+
+        '<div class="incentivos-grid">' +
+            // Configuración general
+            '<div class="incentivos-card">' +
+                '<h3><i class="fas fa-sliders-h"></i> Configuración General</h3>' +
+                '<div class="config-form">' +
+                    '<div class="config-field">' +
+                        '<label>Premio base por defecto (diario)</label>' +
+                        '<div class="input-with-prefix"><span>$</span><input type="number" id="premioBaseDefault" value="' + config.premioBaseDefault + '" onchange="guardarConfigGeneral()" min="0"></div>' +
+                        '<small>Se usa cuando la operadora no tiene premio individual asignado</small>' +
+                    '</div>' +
+                    '<div class="config-field">' +
+                        '<label>Premio puntualidad por defecto</label>' +
+                        '<div class="input-with-prefix"><span>$</span><input type="number" id="premioPuntualidadDefault" value="' + config.premioPuntualidadDefault + '" onchange="guardarConfigGeneral()" min="0"></div>' +
+                    '</div>' +
+                    '<div class="config-field">' +
+                        '<label>Meta equipo para supervisora (%)</label>' +
+                        '<input type="number" id="metaEquipoSupervisora" value="' + config.metaEquipoSupervisora + '" onchange="guardarConfigGeneral()" min="0" max="200">' +
+                        '<small>El equipo debe promediar este % para que la supervisora reciba premio</small>' +
+                    '</div>' +
+                    '<div class="config-field">' +
+                        '<label>Multiplicador premio supervisora</label>' +
+                        '<input type="number" id="multiplicadorSupervisora" value="' + config.multiplicadorSupervisora + '" onchange="guardarConfigGeneral()" step="0.1" min="0" max="5">' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+
+            // Simulador
+            '<div class="incentivos-card">' +
+                '<h3><i class="fas fa-calculator"></i> Simulador</h3>' +
+                '<div class="config-form">' +
+                    '<div class="config-field">' +
+                        '<label>Simular eficiencia (%)</label>' +
+                        '<input type="range" id="simuladorEficiencia" min="0" max="150" value="100" oninput="actualizarSimulador()">' +
+                        '<div class="simulador-display">' +
+                            '<span class="sim-eficiencia" id="simEficiencia">100%</span>' +
+                            '<span class="sim-tier" id="simTier">--</span>' +
+                            '<span class="sim-premio" id="simPremio">$0</span>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="simulador-barra" id="simuladorBarra">' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>' +
+
+        // Tiers
+        '<h2 class="section-subtitle"><i class="fas fa-layer-group"></i> Niveles de Premio</h2>' +
+        '<div class="tiers-grid">' + tiersHTML + '</div>' +
+
+        // Info
+        '<div class="usuarios-help" style="margin-top: 20px;">' +
+            '<i class="fas fa-info-circle"></i>' +
+            '<div>' +
+                '<strong>Cómo funciona:</strong> El premio diario de cada operadora se calcula como: ' +
+                '<code>Premio Base × Multiplicador del Nivel</code>. El nivel se determina por la eficiencia en tiempo real. ' +
+                'El premio base individual se configura en la sección de Personal (campo "Premio Producción"). ' +
+                'Si no tiene uno asignado, se usa el valor por defecto configurado arriba.' +
+            '</div>' +
+        '</div>';
+
+    actualizarSimulador();
+}
+
+function actualizarTier(input) {
+    var idx = parseInt(input.dataset.tier);
+    var field = input.dataset.field;
+    var config = getConfigIncentivos();
+    if (field === 'multiplicador' || field === 'minEficiencia') {
+        config.tiers[idx][field] = parseFloat(input.value);
+    } else {
+        config.tiers[idx][field] = input.value;
+    }
+    guardarConfigIncentivos(config);
+    loadIncentivos();
+}
+
+function guardarConfigGeneral() {
+    var config = getConfigIncentivos();
+    config.premioBaseDefault = parseFloat(document.getElementById('premioBaseDefault').value) || 100;
+    config.premioPuntualidadDefault = parseFloat(document.getElementById('premioPuntualidadDefault').value) || 50;
+    config.metaEquipoSupervisora = parseFloat(document.getElementById('metaEquipoSupervisora').value) || 90;
+    config.multiplicadorSupervisora = parseFloat(document.getElementById('multiplicadorSupervisora').value) || 1.0;
+    guardarConfigIncentivos(config);
+}
+
+function actualizarSimulador() {
+    var slider = document.getElementById('simuladorEficiencia');
+    if (!slider) return;
+    var eficiencia = parseInt(slider.value);
+    var config = getConfigIncentivos();
+    var resultado = calcularPremioEstimado(eficiencia, config.premioBaseDefault);
+
+    document.getElementById('simEficiencia').textContent = eficiencia + '%';
+    document.getElementById('simTier').textContent = resultado.tier ? resultado.tier.nombre : 'Sin bono';
+    document.getElementById('simTier').style.color = resultado.tier ? resultado.tier.color : '#999';
+    document.getElementById('simPremio').textContent = '$' + resultado.monto;
+    document.getElementById('simPremio').style.color = resultado.monto > 0 ? '#22c55e' : '#999';
+
+    // Actualizar barra del simulador
+    var barraContainer = document.getElementById('simuladorBarra');
+    if (barraContainer) {
+        var barHTML = '<div class="sim-barra-track">';
+        config.tiers.forEach(function(tier) {
+            barHTML += '<div class="sim-barra-zone" style="left:' + (tier.minEficiencia / 1.5) + '%;background:' + tier.color + ';" title="' + tier.nombre + ' (' + tier.minEficiencia + '%+)"></div>';
+        });
+        barHTML += '<div class="sim-barra-marker" style="left:' + Math.min(100, eficiencia / 1.5) + '%;"></div>';
+        barHTML += '</div>';
+        barraContainer.innerHTML = barHTML;
+    }
+}
+
+function resetearIncentivos() {
+    if (confirm('¿Restaurar la configuración de incentivos a los valores por defecto?')) {
+        localStorage.removeItem('erp_config_incentivos');
+        loadIncentivos();
     }
 }
 
@@ -612,7 +858,7 @@ function initModal() {
 }
 
 function openModal(title, content, onConfirmOrFooter) {
-    console.log('[openModal] Abriendo modal:', title);
+    DEBUG_MODE && console.log('[openModal] Abriendo modal:', title);
 
     const overlay = document.getElementById('modalOverlay');
     const modalTitle = document.getElementById('modalTitle');
@@ -628,7 +874,7 @@ function openModal(title, content, onConfirmOrFooter) {
 
     modalTitle.textContent = title;
     modalBody.innerHTML = content;
-    console.log('[openModal] Contenido asignado, longitud:', content?.length || 0);
+    DEBUG_MODE && console.log('[openModal] Contenido asignado, longitud:', content?.length || 0);
 
     // Si el tercer parámetro es un string, es un footer personalizado
     if (typeof onConfirmOrFooter === 'string') {
@@ -658,7 +904,7 @@ function openModal(title, content, onConfirmOrFooter) {
     }
 
     overlay.classList.add('active');
-    console.log('[openModal] Modal activado');
+    DEBUG_MODE && console.log('[openModal] Modal activado');
 }
 
 function closeModal() {
@@ -1301,7 +1547,7 @@ function confirmarAgregarPosiciones(areaId, ultimoNumero) {
     const cantidad = parseInt(form.querySelector('[name="cantidad"]').value) || 1;
     const area = db.getAreasPlanta().find(a => a.id === areaId);
 
-    console.log('Agregando posiciones:', { areaId, cantidad, ultimoNumero });
+    DEBUG_MODE && console.log('Agregando posiciones:', { areaId, cantidad, ultimoNumero });
 
     for (let i = 1; i <= cantidad; i++) {
         const nuevoNumero = ultimoNumero + i;
@@ -1319,7 +1565,7 @@ function confirmarAgregarPosiciones(areaId, ultimoNumero) {
     const nuevaCantidadTotal = db.getEstaciones().filter(e => e.areaPlantaId === areaId).length;
     db.updateAreaPlanta(areaId, { posiciones: nuevaCantidadTotal });
 
-    console.log('Posiciones guardadas. Total en área:', nuevaCantidadTotal);
+    DEBUG_MODE && console.log('Posiciones guardadas. Total en área:', nuevaCantidadTotal);
 
     showToast(`${cantidad} posicion(es) agregada(s) al área ${area.nombre}`, 'success');
     loadPlantMap();
@@ -1646,7 +1892,7 @@ function sincronizarEstacionesConPaneles() {
     // También sincronizar estadoOperadores en la DB
     sincronizarEstadoOperadoresDB();
 
-    console.log('[SYNC] Estaciones sincronizadas con paneles:', Object.keys(mapaEstaciones).length);
+    DEBUG_MODE && console.log('[SYNC] Estaciones sincronizadas con paneles:', Object.keys(mapaEstaciones).length);
 }
 
 function sincronizarEstadoOperadoresDB() {
@@ -1734,7 +1980,7 @@ function crearEstadoOperadorEnMapa(empleado, estacionId) {
     };
     localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
 
-    console.log(`[MAPA] Operador ${empleado.nombre} asignado a estación ${estacionId}`);
+    DEBUG_MODE && console.log(`[MAPA] Operador ${empleado.nombre} asignado a estación ${estacionId}`);
 }
 
 function eliminarEstadoOperadorDeMapa(estacionId) {
@@ -1754,7 +2000,7 @@ function eliminarEstadoOperadorDeMapa(estacionId) {
         localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
     }
 
-    console.log(`[MAPA] Estación ${estacionId} desasignada`);
+    DEBUG_MODE && console.log(`[MAPA] Estación ${estacionId} desasignada`);
 }
 
 // ========================================
@@ -2235,13 +2481,13 @@ function generarEtapasPedido(pedido, productos) {
     const historialProduccion = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
     const pedidoERP = pedidosERP.find(pe => pe.id == pedido.id);
 
-    console.log('[generarEtapasPedido] Pedido:', pedido.id, 'pedidoERP:', pedidoERP ? 'encontrado' : 'no encontrado');
+    DEBUG_MODE && console.log('[generarEtapasPedido] Pedido:', pedido.id, 'pedidoERP:', pedidoERP ? 'encontrado' : 'no encontrado');
 
     return productosArr.map(pp => {
         // Usar == para comparación flexible de tipos
         const producto = productos.find(p => p.id == pp.productoId);
         if (!producto) {
-            console.warn('[generarEtapasPedido] Producto no encontrado:', pp.productoId);
+            DEBUG_MODE && console.warn('[generarEtapasPedido] Producto no encontrado:', pp.productoId);
             return '<p class="text-muted">Producto no encontrado</p>';
         }
 
@@ -2277,7 +2523,7 @@ function generarEtapasPedido(pedido, productos) {
                         completadas: proc.piezas || proc.piezasCompletadas || proc.completadas || 0,
                         estado: proc.estado || 'pendiente'
                     }));
-                    console.log('[generarEtapasPedido] Usando pedidoERP.procesos:', avanceProcesos.length);
+                    DEBUG_MODE && console.log('[generarEtapasPedido] Usando pedidoERP.procesos:', avanceProcesos.length);
                 }
             }
         }
@@ -2337,7 +2583,7 @@ function generarEtapasPedido(pedido, productos) {
             const completadas = Math.max(proc.completadas || 0, piezasHistorial, piezasERP);
             const porcentaje = pp.cantidad > 0 ? (completadas / pp.cantidad) * 100 : 0;
 
-            console.log('[generarEtapasPedido] Proceso:', proc.nombre, 'historial:', piezasHistorial, 'ERP:', piezasERP, 'total:', completadas);
+            DEBUG_MODE && console.log('[generarEtapasPedido] Proceso:', proc.nombre, 'historial:', piezasHistorial, 'ERP:', piezasERP, 'total:', completadas);
 
             return {
                 ...proc,
@@ -2848,13 +3094,13 @@ function savePedido() {
     imagenesApoyoPedido = [];
 
     const nuevoPedido = db.addPedido(pedido);
-    console.log('[savePedido] Pedido creado:', nuevoPedido);
+    DEBUG_MODE && console.log('[savePedido] Pedido creado:', nuevoPedido);
 
     closeModal();
 
     // Recargar la sección correcta
     if (app.currentSection === 'dashboard') {
-        console.log('[savePedido] Recargando dashboard...');
+        DEBUG_MODE && console.log('[savePedido] Recargando dashboard...');
         loadPedidosPendientes();
         loadPedidosCriticos();
         if (typeof updateDashboardKPIs === 'function') {
@@ -2894,21 +3140,21 @@ function viewPedido(id) {
     const productos = db.getProductos();
     const procesos = db.getProcesos();
 
-    console.log('[viewPedido] Pedido:', id, 'Productos en pedido:', pedido.productos?.length);
-    console.log('[viewPedido] Catálogo productos:', productos.length, 'procesos:', procesos.length);
+    DEBUG_MODE && console.log('[viewPedido] Pedido:', id, 'Productos en pedido:', pedido.productos?.length);
+    DEBUG_MODE && console.log('[viewPedido] Catálogo productos:', productos.length, 'procesos:', procesos.length);
 
     // Leer datos sincronizados de localStorage
     const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
     const historialProduccion = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
     const pedidoERP = pedidosERP.find(pe => pe.id == id);
-    console.log('[viewPedido] pedidoERP encontrado:', !!pedidoERP);
+    DEBUG_MODE && console.log('[viewPedido] pedidoERP encontrado:', !!pedidoERP);
 
     // Generar HTML para el avance por proceso de cada producto
     const productosDetalleHTML = pedido.productos.map(p => {
         // Usar == para comparación flexible de tipos
         const prod = productos.find(pr => pr.id == p.productoId);
 
-        console.log('[viewPedido] Producto:', p.productoId, 'encontrado:', !!prod, 'rutaProcesos:', prod?.rutaProcesos?.length || 0);
+        DEBUG_MODE && console.log('[viewPedido] Producto:', p.productoId, 'encontrado:', !!prod, 'rutaProcesos:', prod?.rutaProcesos?.length || 0);
 
         // Obtener avanceProcesos, generando desde rutaProcesos si no existe
         let avanceProcesos = p.avanceProcesos;
@@ -2919,7 +3165,7 @@ function viewPedido(id) {
                 // Primero buscar en productos[].procesos
                 const productoERP = pedidoERP.productos?.find(pe => pe.productoId == p.productoId);
                 if (productoERP && productoERP.procesos && productoERP.procesos.length > 0) {
-                    console.log('[viewPedido] Usando procesos de productoERP:', productoERP.procesos.length);
+                    DEBUG_MODE && console.log('[viewPedido] Usando procesos de productoERP:', productoERP.procesos.length);
                     avanceProcesos = productoERP.procesos.map(proc => ({
                         procesoId: proc.procesoId || proc.id,
                         nombre: proc.nombre || proc.procesoNombre,
@@ -2931,7 +3177,7 @@ function viewPedido(id) {
                 // Si no hay productos[].procesos, buscar en pedidoERP.procesos directamente
                 // (el operador guarda aquí)
                 else if (pedidoERP.procesos && pedidoERP.procesos.length > 0) {
-                    console.log('[viewPedido] Usando pedidoERP.procesos directamente:', pedidoERP.procesos.length);
+                    DEBUG_MODE && console.log('[viewPedido] Usando pedidoERP.procesos directamente:', pedidoERP.procesos.length);
                     avanceProcesos = pedidoERP.procesos.map(proc => ({
                         procesoId: proc.id || proc.procesoId,
                         nombre: proc.nombre || proc.procesoNombre,
@@ -2946,7 +3192,7 @@ function viewPedido(id) {
         // Si aún no hay avanceProcesos, generar desde rutaProcesos del producto
         if (!avanceProcesos || !Array.isArray(avanceProcesos) || avanceProcesos.length === 0) {
             const rutaProcesos = prod?.rutaProcesos || prod?.procesos || [];
-            console.log('[viewPedido] Generando desde rutaProcesos:', rutaProcesos.length, rutaProcesos);
+            DEBUG_MODE && console.log('[viewPedido] Generando desde rutaProcesos:', rutaProcesos.length, rutaProcesos);
             if (rutaProcesos.length > 0) {
                 avanceProcesos = rutaProcesos.map((proc, i) => {
                     // rutaProcesos puede tener procesoId o solo nombre
@@ -2990,7 +3236,7 @@ function viewPedido(id) {
                     });
                     if (procesoERP) {
                         piezasERP = procesoERP.piezas || procesoERP.piezasCompletadas || procesoERP.completadas || 0;
-                        console.log('[viewPedido] Encontrado en pedidoERP.procesos:', procesoERP.nombre, 'piezas:', piezasERP);
+                        DEBUG_MODE && console.log('[viewPedido] Encontrado en pedidoERP.procesos:', procesoERP.nombre, 'piezas:', piezasERP);
                     }
                 }
 
@@ -3007,7 +3253,7 @@ function viewPedido(id) {
         }
 
         avanceProcesos = avanceProcesos || [];
-        console.log('[viewPedido] avanceProcesos final:', avanceProcesos.length, avanceProcesos);
+        DEBUG_MODE && console.log('[viewPedido] avanceProcesos final:', avanceProcesos.length, avanceProcesos);
 
         // Calcular avance general del producto como promedio de procesos
         let avanceGeneral;
@@ -7301,7 +7547,7 @@ function showAsignarPosicionesModal(empleadoId) {
             const checkboxes = form.querySelectorAll('input[name="posicion"]:checked');
             const nuevasPosiciones = Array.from(checkboxes).map(cb => cb.value);
 
-            console.log('Guardando posiciones para empleado', empleadoId, ':', nuevasPosiciones);
+            DEBUG_MODE && console.log('Guardando posiciones para empleado', empleadoId, ':', nuevasPosiciones);
 
             // Obtener empleado para crear estado en mapa
             const empleado = db.getEmpleado(empleadoId);
@@ -7310,7 +7556,7 @@ function showAsignarPosicionesModal(empleadoId) {
             const estaciones = db.getEstaciones();
             estaciones.forEach(est => {
                 if (est.operadorId === empleadoId && !nuevasPosiciones.includes(est.id)) {
-                    console.log('Liberando estacion:', est.id);
+                    DEBUG_MODE && console.log('Liberando estacion:', est.id);
                     db.asignarOperadorAEstacion(est.id, null);
                     // Eliminar del mapa
                     eliminarEstadoOperadorDeMapa(est.id);
@@ -7319,7 +7565,7 @@ function showAsignarPosicionesModal(empleadoId) {
 
             // Asignar las nuevas posiciones
             nuevasPosiciones.forEach(posId => {
-                console.log('Asignando estacion:', posId, 'a empleado:', empleadoId);
+                DEBUG_MODE && console.log('Asignando estacion:', posId, 'a empleado:', empleadoId);
                 db.asignarOperadorAEstacion(posId, empleadoId);
                 // Crear estado en el mapa
                 crearEstadoOperadorEnMapa(empleado, posId);
@@ -7328,7 +7574,7 @@ function showAsignarPosicionesModal(empleadoId) {
             // Actualizar empleado con sus posiciones
             db.updateEmpleado(empleadoId, { posiciones: nuevasPosiciones });
 
-            console.log('Posiciones guardadas correctamente');
+            DEBUG_MODE && console.log('Posiciones guardadas correctamente');
 
             // Sincronizar con paneles
             sincronizarEstacionesConPaneles();
@@ -11635,11 +11881,11 @@ function showKPIDetalle(tipo) {
 // DETALLE DE POSICIÓN EN MAPA DE PLANTA
 // ========================================
 function showPosicionDetalle(estacionId) {
-    console.log('[showPosicionDetalle] Iniciando para estación:', estacionId);
+    DEBUG_MODE && console.log('[showPosicionDetalle] Iniciando para estación:', estacionId);
 
     try {
         const estacion = db.getEstacion(estacionId);
-        console.log('[showPosicionDetalle] Estación encontrada:', estacion);
+        DEBUG_MODE && console.log('[showPosicionDetalle] Estación encontrada:', estacion);
 
         if (!estacion) {
             console.error('[showPosicionDetalle] Estación no encontrada:', estacionId);
@@ -11656,16 +11902,16 @@ function showPosicionDetalle(estacionId) {
         const procesos = db.getProcesos() || [];
         const clientes = db.getClientes() || [];
 
-        console.log('[showPosicionDetalle] Datos cargados - Personal:', personal.length, 'EstadoOps:', estadoOps.length);
+        DEBUG_MODE && console.log('[showPosicionDetalle] Datos cargados - Personal:', personal.length, 'EstadoOps:', estadoOps.length);
 
         const operador = estacion.operadorId ? personal.find(p => p.id === estacion.operadorId) : null;
         const estadoOp = estadoOps.find(e => e.estacionId === estacionId);
 
-        console.log('[showPosicionDetalle] Operador asignado:', operador ? operador.nombre : 'Ninguno');
+        DEBUG_MODE && console.log('[showPosicionDetalle] Operador asignado:', operador ? operador.nombre : 'Ninguno');
 
         // Si no hay operador asignado, mostrar modal simple
         if (!operador) {
-            console.log('[showPosicionDetalle] Mostrando modal sin operador');
+            DEBUG_MODE && console.log('[showPosicionDetalle] Mostrando modal sin operador');
             showPosicionSinOperador(estacionId, estacion, personal);
             return;
         }
@@ -11684,9 +11930,9 @@ function showPosicionDetalle(estacionId) {
                 tiempoPromedio: Number(stats.tiempoPromedio) || 0
             };
         } catch (e) {
-            console.warn('[showPosicionDetalle] Error calculando estadísticas:', e);
+            DEBUG_MODE && console.warn('[showPosicionDetalle] Error calculando estadísticas:', e);
         }
-        console.log('[showPosicionDetalle] Estadísticas:', estadisticasEmpleado);
+        DEBUG_MODE && console.log('[showPosicionDetalle] Estadísticas:', estadisticasEmpleado);
 
     // Obtener historial reciente del operador (últimos 7 días)
     const hace7Dias = new Date();
@@ -11991,10 +12237,10 @@ function showPosicionDetalle(estacionId) {
         </div>
     `;
 
-    console.log('[showPosicionDetalle] Abriendo modal con contenido');
+    DEBUG_MODE && console.log('[showPosicionDetalle] Abriendo modal con contenido');
     openModal(`Estación ${estacionId} - ${operador.nombre}`, content, null);
     document.getElementById('modalFooter').style.display = 'none';
-    console.log('[showPosicionDetalle] Modal abierto exitosamente');
+    DEBUG_MODE && console.log('[showPosicionDetalle] Modal abierto exitosamente');
 
     } catch (error) {
         console.error('[showPosicionDetalle] Error:', error);
@@ -12015,7 +12261,7 @@ function generarSeccionProcesosAsignados(operadorId, pedidos, productos, proceso
     const estacionOperador = estaciones.find(e => e.operadorId === operadorId);
     const estacionId = estacionOperador?.id;
 
-    console.log('[generarSeccionProcesosAsignados] Buscando para operador:', operadorId, 'Estación:', estacionId);
+    DEBUG_MODE && console.log('[generarSeccionProcesosAsignados] Buscando para operador:', operadorId, 'Estación:', estacionId);
 
     // Buscar todas las asignaciones del operador
     let asignacionesOperador = [];
@@ -12037,7 +12283,7 @@ function generarSeccionProcesosAsignados(operadorId, pedidos, productos, proceso
     // 1. Desde supervisora_maquinas (proceso activo y cola)
     if (estacionId && supervisoraMaquinas[estacionId]) {
         const maquina = supervisoraMaquinas[estacionId];
-        console.log('[generarSeccionProcesosAsignados] Maquina encontrada:', maquina);
+        DEBUG_MODE && console.log('[generarSeccionProcesosAsignados] Maquina encontrada:', maquina);
 
         // Proceso principal activo
         if (maquina.procesoId) {
@@ -12103,7 +12349,7 @@ function generarSeccionProcesosAsignados(operadorId, pedidos, productos, proceso
     // 1.5. Desde estado_maquinas (donde el operador guarda los procesos simultáneos)
     if (estacionId && estadoMaquinas[estacionId]) {
         const estadoMaq = estadoMaquinas[estacionId];
-        console.log('[generarSeccionProcesosAsignados] Estado maquina encontrado:', estadoMaq);
+        DEBUG_MODE && console.log('[generarSeccionProcesosAsignados] Estado maquina encontrado:', estadoMaq);
 
         // Procesos simultáneos desde estado_maquinas (donde el operador los guarda)
         if (estadoMaq.procesosSimultaneos && Array.isArray(estadoMaq.procesosSimultaneos)) {
@@ -12126,7 +12372,7 @@ function generarSeccionProcesosAsignados(operadorId, pedidos, productos, proceso
     // 2. Desde asignaciones_estaciones
     if (estacionId && asignacionesEstaciones[estacionId]) {
         const asig = asignacionesEstaciones[estacionId];
-        console.log('[generarSeccionProcesosAsignados] Asignación estación:', asig);
+        DEBUG_MODE && console.log('[generarSeccionProcesosAsignados] Asignación estación:', asig);
 
         // Proceso principal
         if (asig.procesoId) {
@@ -12206,7 +12452,7 @@ function generarSeccionProcesosAsignados(operadorId, pedidos, productos, proceso
 
         // PROCESOS SIMULTÁNEOS - Todos son activos y marcados como simultáneos
         if (estado.procesosSimultaneos && Array.isArray(estado.procesosSimultaneos)) {
-            console.log('[generarSeccionProcesosAsignados] Procesos simultáneos encontrados:', estado.procesosSimultaneos.length);
+            DEBUG_MODE && console.log('[generarSeccionProcesosAsignados] Procesos simultáneos encontrados:', estado.procesosSimultaneos.length);
             estado.procesosSimultaneos.forEach(proc => {
                 // Usar pedidoId del proceso o del estado general
                 const pedidoIdProc = proc.pedidoId || estado.pedidoId;
@@ -12231,7 +12477,7 @@ function generarSeccionProcesosAsignados(operadorId, pedidos, productos, proceso
     const historialProduccion = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
 
     asignacionesOperador.forEach(asig => {
-        console.log('[generarSeccionProcesosAsignados] Procesando asignación:', asig.procesoNombre, 'procesoId:', asig.procesoId, 'pedidoId:', asig.pedidoId);
+        DEBUG_MODE && console.log('[generarSeccionProcesosAsignados] Procesando asignación:', asig.procesoNombre, 'procesoId:', asig.procesoId, 'pedidoId:', asig.pedidoId);
 
         // Inicializar piezasCompletadas en 0 si no está definido
         if (asig.piezasCompletadas === undefined || asig.piezasCompletadas === null) {
@@ -12266,7 +12512,7 @@ function generarSeccionProcesosAsignados(operadorId, pedidos, productos, proceso
 
         if (produccionProceso.length > 0) {
             const totalPiezasHistorial = produccionProceso.reduce((sum, h) => sum + (h.cantidad || 0), 0);
-            console.log('[generarSeccionProcesosAsignados] Historial encontrado para', asig.procesoNombre,
+            DEBUG_MODE && console.log('[generarSeccionProcesosAsignados] Historial encontrado para', asig.procesoNombre,
                 'pedido:', asig.pedidoId, ':', totalPiezasHistorial, 'piezas de', produccionProceso.length, 'registros');
             asig.piezasCompletadas = totalPiezasHistorial;
         }
@@ -12301,7 +12547,7 @@ function generarSeccionProcesosAsignados(operadorId, pedidos, productos, proceso
                 const piezasERP = procesoERP.piezas || 0;
                 // Solo actualizar si las piezas de ERP son mayores (y son del mismo pedido)
                 if (piezasERP > asig.piezasCompletadas) {
-                    console.log('[generarSeccionProcesosAsignados] Actualizando piezas desde pedidos_erp:',
+                    DEBUG_MODE && console.log('[generarSeccionProcesosAsignados] Actualizando piezas desde pedidos_erp:',
                         asig.procesoNombre, 'pedido:', asig.pedidoId, 'de', asig.piezasCompletadas, 'a', piezasERP);
                     asig.piezasCompletadas = piezasERP;
                 }
@@ -12319,14 +12565,14 @@ function generarSeccionProcesosAsignados(operadorId, pedidos, productos, proceso
                 (!asig.pedidoId || !estadoMaq.pedidoId || estadoMaq.pedidoId == asig.pedidoId);
 
             if (mismoProcesoYPedido && estadoMaq.piezasHoy > asig.piezasCompletadas) {
-                console.log('[generarSeccionProcesosAsignados] Actualizando desde estado_maquinas:',
+                DEBUG_MODE && console.log('[generarSeccionProcesosAsignados] Actualizando desde estado_maquinas:',
                     asig.procesoNombre, 'piezasHoy:', estadoMaq.piezasHoy);
                 asig.piezasCompletadas = estadoMaq.piezasHoy;
             }
         }
 
         // Log final del estado de la asignación
-        console.log('[generarSeccionProcesosAsignados] Resultado:', asig.procesoNombre,
+        DEBUG_MODE && console.log('[generarSeccionProcesosAsignados] Resultado:', asig.procesoNombre,
             'pedidoId:', asig.pedidoId, 'piezasCompletadas:', asig.piezasCompletadas, 'piezasAsignadas:', asig.piezasAsignadas);
     });
 
@@ -12338,7 +12584,7 @@ function generarSeccionProcesosAsignados(operadorId, pedidos, productos, proceso
         }
     });
 
-    console.log('[generarSeccionProcesosAsignados] Total asignaciones encontradas:', asignacionesOperador.length);
+    DEBUG_MODE && console.log('[generarSeccionProcesosAsignados] Total asignaciones encontradas:', asignacionesOperador.length);
 
     if (asignacionesOperador.length === 0) {
         return `
@@ -12509,9 +12755,9 @@ function generarSeccionProcesosAsignados(operadorId, pedidos, productos, proceso
 
 // Modal simplificado para posición sin operador
 function showPosicionSinOperador(estacionId, estacion, personal) {
-    console.log('[showPosicionSinOperador] Iniciando para estación:', estacionId);
+    DEBUG_MODE && console.log('[showPosicionSinOperador] Iniciando para estación:', estacionId);
     const operadoresDisponibles = personal.filter(p => p.rol === 'operador' && p.activo !== false);
-    console.log('[showPosicionSinOperador] Operadores disponibles:', operadoresDisponibles.length);
+    DEBUG_MODE && console.log('[showPosicionSinOperador] Operadores disponibles:', operadoresDisponibles.length);
 
     const content = `
         <div class="posicion-sin-operador">
@@ -12554,17 +12800,17 @@ function showPosicionSinOperador(estacionId, estacion, personal) {
         </div>
     `;
 
-    console.log('[showPosicionSinOperador] Abriendo modal');
+    DEBUG_MODE && console.log('[showPosicionSinOperador] Abriendo modal');
     openModal(`Estación ${estacionId}`, content, null);
     document.getElementById('modalFooter').style.display = 'none';
-    console.log('[showPosicionSinOperador] Modal abierto exitosamente');
+    DEBUG_MODE && console.log('[showPosicionSinOperador] Modal abierto exitosamente');
 }
 
 // Asegurar que las funciones estén disponibles globalmente
 if (typeof window !== 'undefined') {
     window.showPosicionDetalle = showPosicionDetalle;
     window.showPosicionSinOperador = showPosicionSinOperador;
-    console.log('[app.js] Funciones de posición exportadas a window');
+    DEBUG_MODE && console.log('[app.js] Funciones de posición exportadas a window');
 }
 
 // Función para calcular estadísticas del empleado
@@ -12654,7 +12900,7 @@ function calcularEstadisticasEmpleado(operadorId, historialProduccion, produccio
 
         return { piezasHoy, piezasSemana, efectividad, tiempoPromedio };
     } catch (error) {
-        console.warn('Error en calcularEstadisticasEmpleado:', error);
+        DEBUG_MODE && console.warn('Error en calcularEstadisticasEmpleado:', error);
         return resultado;
     }
 }
@@ -20100,6 +20346,6 @@ document.addEventListener('DOMContentLoaded', function() {
     addThemeToggleButton();
 });
 
-console.log('[app.js] Módulo cargado completamente');
-console.log('[app.js] showPosicionDetalle disponible:', typeof showPosicionDetalle);
-console.log('[app.js] window.showPosicionDetalle disponible:', typeof window.showPosicionDetalle);
+DEBUG_MODE && console.log('[app.js] Módulo cargado completamente');
+DEBUG_MODE && console.log('[app.js] showPosicionDetalle disponible:', typeof showPosicionDetalle);
+DEBUG_MODE && console.log('[app.js] window.showPosicionDetalle disponible:', typeof window.showPosicionDetalle);

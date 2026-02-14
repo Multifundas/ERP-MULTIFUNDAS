@@ -13,7 +13,8 @@
     <!-- ========================================
          PANTALLA DE LOGIN
          ======================================== -->
-    <div id="loginScreen" class="login-screen">
+    <a href="#mainPanel" class="skip-nav" aria-label="Saltar al contenido principal">Saltar al contenido</a>
+    <div id="loginScreen" class="login-screen" role="main" aria-label="Inicio de sesión">
         <div class="login-container">
             <div class="login-header">
                 <div class="login-logo">
@@ -92,7 +93,7 @@
     <!-- ========================================
          PANEL PRINCIPAL
          ======================================== -->
-    <div id="panelOperadora" class="panel-operadora" style="display: none;">
+    <div id="panelOperadora" class="panel-operadora" style="display: none;" role="main" aria-label="Panel de producción">
         <!-- Header -->
         <header class="panel-header">
             <div class="header-left">
@@ -117,6 +118,10 @@
                 <div class="conexion-indicador online" id="conexionIndicador">
                     <i class="fas fa-wifi"></i>
                 </div>
+                <span class="nivel-badge-header" id="nivelBadgeHeader" style="display:none;"></span>
+                <button class="btn-header btn-ganancias" onclick="mostrarMisGanancias()" title="Mis Ganancias">
+                    <i class="fas fa-coins"></i>
+                </button>
                 <button class="btn-header btn-motivacion" onclick="mostrarPanelMotivacion()" title="Motivación">
                     <i class="fas fa-fire"></i>
                 </button>
@@ -518,6 +523,27 @@
                                 <span class="resumen-label">eficiencia</span>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Widget Mi Premio -->
+                <div class="premio-widget" id="premioWidget">
+                    <h4><i class="fas fa-coins"></i> Mi Premio</h4>
+                    <div class="premio-display">
+                        <div class="premio-monto" id="premioMonto">$0</div>
+                        <div class="premio-tier-badge" id="premioTierBadge">
+                            <i class="fas fa-minus"></i> Sin bono
+                        </div>
+                    </div>
+                    <div class="premio-barra-container">
+                        <div class="premio-barra">
+                            <div class="premio-barra-fill" id="premioBarraFill" style="width:0%"></div>
+                        </div>
+                        <div class="premio-siguiente" id="premioSiguiente"></div>
+                    </div>
+                    <div class="premio-proyeccion" id="premioProyeccion">
+                        <i class="fas fa-chart-line"></i>
+                        <span>Inicia tu proceso para ver estimación</span>
                     </div>
                 </div>
 
