@@ -548,6 +548,9 @@ function showGestionAreasPlanta() {
         <div class="areas-planta-manager">
             <div class="manager-header">
                 <p class="text-muted">Gestiona las áreas de trabajo y sus posiciones/estaciones.</p>
+                <a href="layout-editor.html" class="btn btn-primary" style="margin-top:8px;" target="_blank">
+                    <i class="fas fa-drafting-compass"></i> Abrir Editor de Mapa
+                </a>
             </div>
 
             <div class="areas-list" id="areasPlantaList">

@@ -1104,6 +1104,17 @@
 .resumen-tag.ausencia { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
 .resumen-tag.otro { background: rgba(139, 92, 246, 0.15); color: #c4b5fd; }
 
+.evento-fechas {
+    display: block;
+    font-size: 0.72rem;
+    color: #93c5fd;
+    margin-top: 2px;
+}
+.evento-fechas i {
+    margin-right: 3px;
+    font-size: 0.65rem;
+}
+
 .evento-prioridad {
     display: block;
     font-size: 0.7rem;
@@ -1201,6 +1212,11 @@
     display: block;
     font-size: 0.9rem;
     color: #fff;
+}
+
+.timeline-fechas {
+    font-size: 0.7rem;
+    color: #93c5fd;
 }
 
 .timeline-restante {

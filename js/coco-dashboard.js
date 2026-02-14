@@ -1388,13 +1388,22 @@ function renderDiasCalendario(anio, mes, diasMes, primerDia, eventos) {
     let html = '';
     const hoy = new Date();
 
+    // Helper: check if a day falls within an event's range
+    function eventoCaeEnDia(e, diaDate) {
+        if (e.fechaInicio && e.fechaFin) {
+            var ini = new Date(e.fechaInicio); ini.setHours(0,0,0,0);
+            var fin = new Date(e.fechaFin); fin.setHours(23,59,59,999);
+            return diaDate >= ini && diaDate <= fin;
+        }
+        var f = new Date(e.fecha);
+        return f.getDate() === diaDate.getDate() && f.getMonth() === diaDate.getMonth() && f.getFullYear() === diaDate.getFullYear();
+    }
+
     // Calcular carga máxima del mes para normalizar barras
     var maxEventos = 1;
     for (let d = 1; d <= diasMes; d++) {
-        var c = eventos.filter(function(e) {
-            var f = new Date(e.fecha);
-            return f.getDate() === d && f.getMonth() === mes;
-        }).length;
+        var diaCheck = new Date(anio, mes, d);
+        var c = eventos.filter(function(e) { return eventoCaeEnDia(e, diaCheck); }).length;
         if (c > maxEventos) maxEventos = c;
     }
 
@@ -1409,10 +1418,7 @@ function renderDiasCalendario(anio, mes, diasMes, primerDia, eventos) {
         const esHoy = fecha.toDateString() === hoy.toDateString();
         const esSeleccionado = fecha.toDateString() === cocoState.diaSeleccionado.toDateString();
 
-        const eventosDelDia = eventos.filter(e => {
-            const fechaEvento = new Date(e.fecha);
-            return fechaEvento.getDate() === dia && fechaEvento.getMonth() === mes;
-        });
+        const eventosDelDia = eventos.filter(e => eventoCaeEnDia(e, fecha));
 
         const tieneEntrega = eventosDelDia.some(e => e.tipo === 'entrega');
         const tieneUrgente = eventosDelDia.some(e => e.tipo === 'urgente');
@@ -1454,23 +1460,33 @@ function renderDiasCalendario(anio, mes, diasMes, primerDia, eventos) {
 function getEventosCalendario(anio, mes) {
     const eventos = [];
     const pedidos = supervisoraState.pedidosHoy || [];
+    const primerDiaMes = new Date(anio, mes, 1);
+    const ultimoDiaMes = new Date(anio, mes + 1, 0, 23, 59, 59);
 
-    // Obtener entregas de pedidos
+    // Obtener entregas de pedidos con rango fechaInicio-fechaFin
     pedidos.forEach(pedido => {
         if (pedido.fechaEntrega) {
-            const fecha = new Date(pedido.fechaEntrega);
-            if (fecha.getMonth() === mes && fecha.getFullYear() === anio) {
-                // Detectar pedidos urgentes (prioridad alta o entrega en menos de 2 días)
+            const fechaFin = new Date(pedido.fechaEntrega);
+            const fechaIni = pedido.fechaCarga ? new Date(pedido.fechaCarga) : null;
+
+            // Incluir si el rango del pedido intersecta con el mes visible
+            var inicioRango = fechaIni || fechaFin;
+            var finRango = fechaFin;
+            var intersecta = inicioRango <= ultimoDiaMes && finRango >= primerDiaMes;
+
+            if (intersecta) {
                 var hoy = new Date();
-                var diasRestantes = Math.ceil((fecha - hoy) / (1000 * 60 * 60 * 24));
+                var diasRestantes = Math.ceil((fechaFin - hoy) / (1000 * 60 * 60 * 24));
                 var esUrgente = pedido.prioridad === 'alta' || pedido.prioridad === 'urgente' || diasRestantes <= 2;
 
                 eventos.push({
                     id: `entrega-${pedido.id}`,
                     tipo: esUrgente ? 'urgente' : 'entrega',
-                    titulo: (esUrgente ? '⚡ ' : '') + `Entrega Pedido #${pedido.id}`,
+                    titulo: (esUrgente ? '⚡ ' : '') + `Pedido #${pedido.id}`,
                     descripcion: (pedido.clienteNombre || 'Cliente') + (esUrgente ? ' - URGENTE' : ''),
                     fecha: pedido.fechaEntrega,
+                    fechaInicio: pedido.fechaCarga || null,
+                    fechaFin: pedido.fechaEntrega,
                     prioridad: pedido.prioridad
                 });
             }
@@ -1489,6 +1505,11 @@ function getEventosCalendario(anio, mes) {
 
 function renderEventosDelDia(fecha, eventos) {
     const eventosDelDia = eventos.filter(e => {
+        if (e.fechaInicio && e.fechaFin) {
+            var ini = new Date(e.fechaInicio); ini.setHours(0,0,0,0);
+            var fin = new Date(e.fechaFin); fin.setHours(23,59,59,999);
+            return fecha >= ini && fecha <= fin;
+        }
         const fechaEvento = new Date(e.fecha);
         return fechaEvento.toDateString() === fecha.toDateString();
     });
@@ -1511,11 +1532,21 @@ function renderEventosDelDia(fecha, eventos) {
 
     var items = eventosDelDia.map(function(e) {
         var tipoLabel = e.tipo === 'urgente' ? '⚡ Urgente' : e.tipo.charAt(0).toUpperCase() + e.tipo.slice(1);
+        // Build date range info
+        var fechasHtml = '';
+        if (e.fechaInicio && e.fechaFin) {
+            var fi = new Date(e.fechaInicio);
+            var ff = new Date(e.fechaFin);
+            var fmtOpts = { day: '2-digit', month: 'short' };
+            fechasHtml = '<span class="evento-fechas"><i class="fas fa-calendar-day"></i> ' +
+                fi.toLocaleDateString('es-MX', fmtOpts) + ' → ' + ff.toLocaleDateString('es-MX', fmtOpts) + '</span>';
+        }
         return '<div class="evento-item ' + S(e.tipo) + '">' +
             '<div class="evento-tipo-badge ' + S(e.tipo) + '">' + S(tipoLabel) + '</div>' +
             '<div class="evento-info">' +
                 '<strong>' + S(e.titulo) + '</strong>' +
                 '<span>' + S(e.descripcion || '') + '</span>' +
+                fechasHtml +
                 (e.prioridad ? '<span class="evento-prioridad">Prioridad: ' + S(e.prioridad) + '</span>' : '') +
             '</div>' +
             (e.tipo !== 'entrega' && e.tipo !== 'urgente' ? '<button class="btn-icon" onclick="eliminarEvento(\'' + S(e.id) + '\')" title="Eliminar"><i class="fas fa-trash"></i></button>' : '') +
@@ -1551,6 +1582,7 @@ function renderProximasEntregas() {
                 <div class="timeline-linea"></div>
                 <div class="timeline-content">
                     <span class="timeline-pedido">#${p.id} - ${p.clienteNombre || 'Cliente'}</span>
+                    ${p.fechaCarga ? `<span class="timeline-fechas">Inicio: ${new Date(p.fechaCarga).toLocaleDateString('es-MX', {day:'2-digit',month:'short'})}</span>` : ''}
                     <span class="timeline-restante">${diasRestantes === 0 ? 'Hoy' : diasRestantes === 1 ? 'Manana' : `En ${diasRestantes} dias`}</span>
                 </div>
             </div>
