@@ -373,6 +373,8 @@ body {
     flex-direction: column;
     height: 100vh;
     background: var(--gray-100);
+    overflow-x: hidden;
+    max-width: 100vw;
 }
 
 /* Header */
@@ -8618,10 +8620,12 @@ body {
 .btn-ganancias { color: #FFD700 !important; }
 .btn-ganancias:hover { background: rgba(255, 215, 0, 0.15) !important; }
 
-/* Modal Ganancias */
+/* Modal Ganancias - light background modal */
+.ganancias-modal { color: #1e293b; }
+
 .ganancias-resumen {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr 1fr;
     gap: 12px;
     margin-bottom: 20px;
 }
@@ -8629,90 +8633,137 @@ body {
 .ganancia-stat {
     text-align: center;
     padding: 16px 12px;
-    background: rgba(102, 126, 234, 0.06);
+    background: #f1f5f9;
     border-radius: 12px;
 }
 
-.ganancia-stat .valor {
+.ganancia-stat.principal {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea15, #764ba215);
+    border: 1px solid #667eea30;
+}
+
+.ganancias-stats-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ganancia-stat .ganancia-valor {
     font-size: 1.5rem;
     font-weight: 800;
     color: #22c55e;
     display: block;
+    line-height: 1.2;
 }
 
-.ganancia-stat .label {
+.ganancia-stat.principal .ganancia-valor {
+    font-size: 2rem;
+    color: #667eea;
+}
+
+.ganancia-stat .ganancia-label {
     font-size: 0.75rem;
-    color: var(--text-muted, #64748b);
+    color: #64748b;
     margin-top: 4px;
     display: block;
 }
 
+/* Chart */
 .ganancias-grafica {
-    display: flex;
-    align-items: flex-end;
-    gap: 8px;
-    height: 120px;
-    padding: 0 8px;
     margin: 16px 0;
 }
 
-.ganancia-barra {
+.ganancias-grafica h5 {
+    font-size: 0.85rem;
+    color: #334155;
+    margin: 0 0 12px 0;
+}
+
+.grafica-barras {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    height: 120px;
+    padding: 0 4px;
+}
+
+.barra-dia {
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 4px;
+    height: 100%;
+    justify-content: flex-end;
 }
 
-.ganancia-barra-fill {
-    width: 100%;
+.barra-dia.hoy { font-weight: 700; }
+.barra-dia.hoy .barra-label {
+    color: #667eea;
+    font-weight: 700;
+}
+
+.barra-valor {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #334155;
+    white-space: nowrap;
+}
+
+.barra-fill {
+    width: 80%;
     min-height: 4px;
     border-radius: 4px 4px 0 0;
     transition: height 0.3s;
+    max-width: 40px;
 }
 
-.ganancia-barra-valor {
-    font-size: 0.7rem;
-    font-weight: 700;
-    color: var(--text-primary, #e2e8f0);
-}
-
-.ganancia-barra-dia {
+.barra-label {
     font-size: 0.65rem;
-    color: var(--text-muted, #64748b);
+    color: #64748b;
+    white-space: nowrap;
+}
+
+/* Table */
+.ganancias-detalle h5 {
+    font-size: 0.85rem;
+    color: #334155;
+    margin: 0 0 8px 0;
 }
 
 .ganancias-tabla {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 16px;
 }
 
 .ganancias-tabla th {
     text-align: left;
-    font-size: 0.75rem;
-    color: var(--text-muted, #64748b);
-    padding: 8px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    font-size: 0.7rem;
+    color: #64748b;
+    padding: 8px 6px;
+    border-bottom: 2px solid #e2e8f0;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
 .ganancias-tabla td {
-    padding: 8px;
-    font-size: 0.85rem;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    padding: 8px 6px;
+    font-size: 0.8rem;
+    color: #334155;
+    border-bottom: 1px solid #f1f5f9;
 }
 
-.ganancias-tabla .tier-cell {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.tier-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    display: inline-block;
+.ganancias-mejor-dia {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: #fefce8;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    color: #854d0e;
 }

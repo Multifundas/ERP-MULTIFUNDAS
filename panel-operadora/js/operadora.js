@@ -5402,7 +5402,7 @@ function actualizarIndicadorDesempeno() {
         // Enriquecer mensaje con contexto económico
         const tierPremio = calcularTierLocal(eficiencia);
         if (tierPremio && incentivosState.premioEstimado > 0) {
-            mensaje += ` — Nivel ${tierPremio.nombre}, premio $${incentivosState.premioEstimado}`;
+            mensaje += ` | <strong>${tierPremio.nombre}</strong> · $${incentivosState.premioEstimado}`;
         }
 
         mensajeEl.innerHTML = `<i class="fas fa-lightbulb"></i><span>${mensaje}</span>`;
@@ -8238,7 +8238,7 @@ function actualizarPremioWidget() {
             tierBadgeEl.style.color = tier.color;
             tierBadgeEl.style.borderColor = tier.color;
         } else {
-            tierBadgeEl.innerHTML = '<i class="fas fa-minus"></i> Sin bono';
+            tierBadgeEl.innerHTML = '<i class="fas fa-minus"></i> Sin nivel';
             tierBadgeEl.style.background = '#f0f0f0';
             tierBadgeEl.style.color = '#999';
             tierBadgeEl.style.borderColor = '#ddd';
@@ -8453,11 +8453,11 @@ function mostrarMisGanancias() {
                     </div>
                     <div class="ganancia-stat">
                         <div class="ganancia-valor">${eficienciaPromedio}%</div>
-                        <div class="ganancia-label">Eficiencia prom.</div>
+                        <div class="ganancia-label">Eficiencia promedio</div>
                     </div>
                     <div class="ganancia-stat">
                         <div class="ganancia-valor">${premiosSemanales.length + (premioHoy > 0 ? 1 : 0)}</div>
-                        <div class="ganancia-label">Días con bono</div>
+                        <div class="ganancia-label">Días con premio</div>
                     </div>
                 </div>
             </div>
@@ -8577,7 +8577,7 @@ function resetearPremioWidget() {
 
     const tierBadgeEl = document.getElementById('premioTierBadge');
     if (tierBadgeEl) {
-        tierBadgeEl.innerHTML = '<i class="fas fa-minus"></i> Sin bono';
+        tierBadgeEl.innerHTML = '<i class="fas fa-minus"></i> Sin nivel';
         tierBadgeEl.style.background = '#f0f0f0';
         tierBadgeEl.style.color = '#999';
         tierBadgeEl.style.borderColor = '#ddd';
@@ -8591,7 +8591,7 @@ function resetearPremioWidget() {
 
     const proyeccionEl = document.getElementById('premioProyeccion');
     if (proyeccionEl) {
-        proyeccionEl.innerHTML = '<i class="fas fa-chart-line"></i> <span>Inicia tu proceso para ver estimación</span>';
+        proyeccionEl.innerHTML = '<i class="fas fa-chart-line"></i> <span>Inicia tu proceso para ver tu premio estimado</span>';
     }
 
     // Ocultar badge header

@@ -22,7 +22,9 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    width: 100vw;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
 }
 
 /* ============================================
@@ -237,6 +239,7 @@ body {
 .sidebar-right {
     border-right: none;
     border-left: 1px solid #2d3748;
+    overflow-x: hidden;
 }
 
 .sidebar-section {
@@ -245,6 +248,9 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow-x: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .sidebar-section:last-child {
@@ -2335,6 +2341,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    overflow: hidden;
+    max-width: 100%;
 }
 
 .info-row {
@@ -2344,17 +2352,27 @@ body {
     padding: 8px 12px;
     background: rgba(0,0,0,0.2);
     border-radius: 8px;
+    overflow: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .info-row label {
     font-size: 0.75rem;
     color: #6b7280;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-right: 8px;
 }
 
 .info-row span {
     font-size: 0.85rem;
     color: #fff;
     font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .piezas-count {
@@ -2368,6 +2386,15 @@ body {
     padding: 8px 10px;
     border-radius: 6px;
     margin: 8px 0;
+    flex-wrap: wrap;
+    overflow: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.proceso-actual-row label {
+    flex-basis: 100%;
+    margin-bottom: 4px;
 }
 
 .proceso-actual-info-sm {
@@ -2380,13 +2407,17 @@ body {
 .proceso-nombre-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
+    gap: 4px;
+    padding: 3px 8px;
     background: rgba(102, 126, 234, 0.2);
     color: #667eea;
     border-radius: 12px;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 500;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .btn-quitar-proceso {
@@ -2449,9 +2480,12 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 10px;
+    padding: 6px 8px;
     background: rgba(30, 58, 47, 0.8);
     border-radius: 6px;
+    overflow: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
     border-left: 3px solid #10b981;
 }
 
@@ -2468,8 +2502,10 @@ body {
 .proceso-activo-info {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .proceso-activo-info .proceso-nombre-badge {
@@ -2514,11 +2550,14 @@ body {
 .cola-proceso-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
+    gap: 6px;
+    padding: 6px 8px;
     background: rgba(102, 126, 234, 0.1);
     border-radius: 8px;
     border-left: 3px solid #667eea;
+    overflow: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .cola-proceso-num {
@@ -3987,13 +4026,17 @@ body.day-mode .proceso-drag-item.asignado-pendiente {
 
 .detalle-operador-item {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 4px 6px;
     padding: 6px 8px;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 6px;
     border-left: 3px solid transparent;
     transition: all 0.3s;
+    overflow: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 .detalle-operador-item.trabajando {
@@ -4009,6 +4052,57 @@ body.day-mode .proceso-drag-item.asignado-pendiente {
 .detalle-operador-item.sin-iniciar {
     border-left-color: #6b7280;
     background: rgba(107, 114, 128, 0.1);
+}
+
+/* Main container: avatar + info side by side */
+.detalle-operador-item .detalle-op-main {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.detalle-operador-item .detalle-op-info {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.detalle-operador-item .detalle-op-nombre {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.8rem;
+    color: #e5e7eb;
+    max-width: 100%;
+}
+
+.detalle-operador-item .detalle-op-proceso {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    display: block;
+}
+
+/* Cola badge inline - compact version inside operator item */
+.detalle-operador-item .detalle-op-cola {
+    background: none;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    margin: 0;
+}
+
+/* Actions row: wrap to second line, compact */
+.detalle-operador-item .detalle-op-actions {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+    margin-top: 0;
 }
 
 .detalle-op-avatar {
@@ -4218,7 +4312,8 @@ body.day-mode .modal-op-nombre {
 /* Container de acciones del operador */
 .detalle-op-actions {
     display: flex;
-    gap: 4px;
+    gap: 3px;
+    flex-wrap: wrap;
 }
 
 /* Formulario de liberación */
