@@ -522,7 +522,7 @@ function loadIncentivos() {
     if (!container) {
         // Crear la sección si no existe
         container = document.createElement('section');
-        container.className = 'section';
+        container.className = 'section active';
         container.id = 'section-incentivos';
         document.getElementById('contentArea').appendChild(container);
     }
@@ -2036,6 +2036,7 @@ function loadAlertas() {
 function generarAlertasDinamicas() {
     const alertas = [];
     const pedidos = db.getPedidos() || [];
+    const productos = db.getProductos() || [];
     const hoy = new Date();
 
     // Alerta: Pedidos atrasados

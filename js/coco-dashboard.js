@@ -150,7 +150,7 @@ function renderCocoDashboard() {
     if (!container) return;
 
     const hora = new Date().getHours();
-    const saludo = hora < 12 ? 'Buenos dias' : hora < 18 ? 'Buenas tardes' : 'Buenas noches';
+    const saludo = hora < 12 ? 'Buenos días' : hora < 18 ? 'Buenas tardes' : 'Buenas noches';
 
     // Obtener estadisticas del dia
     const stats = calcularEstadisticasDia();
@@ -198,7 +198,7 @@ function renderCocoDashboard() {
             <!-- Alertas Inteligentes -->
             ${alertas.length > 0 ? `
                 <div class="coco-alertas-section">
-                    <h3><i class="fas fa-bell"></i> Atencion, Coco</h3>
+                    <h3><i class="fas fa-bell"></i> Atención, Coco</h3>
                     <div class="alertas-grid">
                         ${alertas.map(alerta => `
                             <div class="alerta-card ${alerta.tipo}">
@@ -225,7 +225,7 @@ function renderCocoDashboard() {
                 <div class="metric-card produccion">
                     <div class="metric-header">
                         <i class="fas fa-cubes"></i>
-                        <span>Produccion Hoy</span>
+                        <span>Producción Hoy</span>
                     </div>
                     <div class="metric-value">${stats.piezasHoy.toLocaleString()}</div>
                     <div class="metric-comparison ${stats.comparacionAyer >= 0 ? 'positive' : 'negative'}">
@@ -252,7 +252,7 @@ function renderCocoDashboard() {
                 <div class="metric-card pedidos">
                     <div class="metric-header">
                         <i class="fas fa-clipboard-list"></i>
-                        <span>Pedidos del Dia</span>
+                        <span>Pedidos del Día</span>
                     </div>
                     <div class="metric-value">${stats.pedidosActivos}</div>
                     <div class="metric-breakdown">
@@ -327,7 +327,7 @@ function renderCocoDashboard() {
                 <!-- Pedidos Urgentes con Predicción -->
                 <div class="coco-card pedidos-urgentes">
                     <div class="card-header">
-                        <h3><i class="fas fa-fire"></i> Pedidos que Requieren Atencion</h3>
+                        <h3><i class="fas fa-fire"></i> Pedidos que Requieren Atención</h3>
                     </div>
                     <div class="urgentes-list">
                         ${pedidosUrgentes.length > 0 ? pedidosUrgentes.map(pedido => {
@@ -375,15 +375,15 @@ function renderCocoDashboard() {
                         <i class="fas fa-robot"></i>
                     </div>
                     <div class="ia-intro">
-                        <h4>Recomendacion del Asistente</h4>
-                        <p>Basado en el rendimiento historico</p>
+                        <h4>Recomendación del Asistente</h4>
+                        <p>Basado en el rendimiento histórico</p>
                     </div>
                 </div>
                 <div class="ia-quick-content">
                     ${generarRecomendacionRapida()}
                 </div>
                 <button class="btn btn-primary" onclick="showSection('asistente')">
-                    <i class="fas fa-robot"></i> Ver mas recomendaciones
+                    <i class="fas fa-robot"></i> Ver más recomendaciones
                 </button>
             </div>
 
@@ -718,13 +718,13 @@ function generarRecomendacionRapida() {
     const recomendaciones = getRecomendacionesIA();
 
     if (recomendaciones.asignaciones.length === 0) {
-        return `<p>Todo esta bajo control, Coco. Tu equipo esta trabajando eficientemente.</p>`;
+        return `<p>Todo está bajo control, Coco. Tu equipo está trabajando eficientemente.</p>`;
     }
 
     const rec = recomendaciones.asignaciones[0];
     return `
         <div class="recomendacion-rapida">
-            <p><strong>${rec.titulo || 'Recomendacion de asignacion'}</strong></p>
+            <p><strong>${rec.titulo || 'Recomendación de asignación'}</strong></p>
             <p>${rec.razon || `Considera asignar a ${rec.operadora} al proceso de ${rec.procesoSugerido}.`}</p>
         </div>
     `;
@@ -2936,10 +2936,10 @@ function renderCocoAsistente() {
                         <i class="fas fa-database"></i>
                     </div>
                     <h3>Recopilando datos...</h3>
-                    <p>Para darte recomendaciones mas precisas, necesito analizar mas datos historicos.</p>
+                    <p>Para darte recomendaciones más precisas, necesito analizar más datos históricos.</p>
                     <div class="datos-progreso">
                         <div class="progreso-item">
-                            <span>Registros de produccion</span>
+                            <span>Registros de producción</span>
                             <div class="progreso-barra">
                                 <div class="progreso-fill" style="width: ${getProgresoRegistros()}%"></div>
                             </div>
@@ -2955,17 +2955,17 @@ function renderCocoAsistente() {
                     </div>
                     <p class="datos-tip">
                         <i class="fas fa-lightbulb"></i>
-                        Tip: Mientras mas uses el sistema de liberacion y captures datos de produccion,
-                        mejores seran mis recomendaciones.
+                        Tip: Mientras más uses el sistema de liberación y captures datos de producción,
+                        mejores serán mis recomendaciones.
                     </p>
                 </div>
             ` : ''}
 
-            <!-- Recomendaciones de Asignacion -->
+            <!-- Recomendaciones de Asignación -->
             <div class="asistente-seccion">
-                <h3><i class="fas fa-user-cog"></i> Recomendaciones de Asignacion</h3>
+                <h3><i class="fas fa-user-cog"></i> Recomendaciones de Asignación</h3>
                 <p class="seccion-descripcion">
-                    Basado en el rendimiento historico de cada operadora en diferentes procesos.
+                    Basado en el rendimiento histórico de cada operadora en diferentes procesos.
                 </p>
 
                 <div class="recomendaciones-grid">
@@ -2993,11 +2993,11 @@ function renderCocoAsistente() {
                                     <span>${rec.razon}</span>
                                 </div>
                                 <div class="rec-stats">
-                                    <span title="Eficiencia historica en este proceso">
+                                    <span title="Eficiencia histórica en este proceso">
                                         <i class="fas fa-tachometer-alt"></i> ${rec.eficienciaHistorica}%
                                     </span>
-                                    <span title="Piezas promedio por dia">
-                                        <i class="fas fa-cubes"></i> ${rec.promediodiario} pzas/dia
+                                    <span title="Piezas promedio por día">
+                                        <i class="fas fa-cubes"></i> ${rec.promediodiario} pzas/día
                                     </span>
                                 </div>
                             </div>
@@ -3264,7 +3264,7 @@ function aplicarRecomendacion(recId) {
         });
         localStorage.setItem('historial_recomendaciones', JSON.stringify(historial.slice(0, 50)));
 
-        showToast(`Recomendacion aplicada: ${rec.operadora} -> ${rec.procesoSugerido}`, 'success');
+        showToast(`Recomendación aplicada: ${rec.operadora} -> ${rec.procesoSugerido}`, 'success');
         renderCocoAsistente();
     }
 }
@@ -3283,7 +3283,7 @@ function ignorarRecomendacion(recId) {
         });
         localStorage.setItem('historial_recomendaciones', JSON.stringify(historial.slice(0, 50)));
 
-        showToast('Recomendacion ignorada', 'info');
+        showToast('Recomendación ignorada', 'info');
         renderCocoAsistente();
     }
 }
@@ -3335,33 +3335,33 @@ function generarRespuestaIA(pregunta) {
     if (preguntaLower.includes('mejor') && preguntaLower.includes('costura')) {
         const mejorCostura = encontrarMejorOperadoraPorProceso('costura');
         if (mejorCostura) {
-            return `Basado en los datos historicos, <strong>${mejorCostura.nombre}</strong> tiene el mejor rendimiento en costura con un promedio de ${mejorCostura.promedio} piezas por dia y ${mejorCostura.eficiencia}% de eficiencia.`;
+            return `Basado en los datos históricos, <strong>${mejorCostura.nombre}</strong> tiene el mejor rendimiento en costura con un promedio de ${mejorCostura.promedio} piezas por día y ${mejorCostura.eficiencia}% de eficiencia.`;
         }
-        return `Aun no tengo suficientes datos para determinar quien es mejor en costura, Coco. Necesito mas registros de produccion.`;
+        return `Aún no tengo suficientes datos para determinar quién es mejor en costura, Coco. Necesito más registros de producción.`;
     }
 
     if (preguntaLower.includes('mejor') && preguntaLower.includes('corte')) {
         const mejorCorte = encontrarMejorOperadoraPorProceso('corte');
         if (mejorCorte) {
-            return `Para corte, mi recomendacion es <strong>${mejorCorte.nombre}</strong> con ${mejorCorte.eficiencia}% de eficiencia y promedio de ${mejorCorte.promedio} piezas por dia.`;
+            return `Para corte, mi recomendación es <strong>${mejorCorte.nombre}</strong> con ${mejorCorte.eficiencia}% de eficiencia y promedio de ${mejorCorte.promedio} piezas por día.`;
         }
-        return `Necesito mas datos de produccion de corte para darte una recomendacion precisa.`;
+        return `Necesito más datos de producción de corte para darte una recomendación precisa.`;
     }
 
     if (preguntaLower.includes('capacitacion') || preguntaLower.includes('necesita ayuda')) {
         const bajoRendimiento = operadores.filter(op => calcularEficienciaOperadora(op.id) < 70);
         if (bajoRendimiento.length > 0) {
-            return `Te sugiero revisar el desempeno de: <strong>${bajoRendimiento.map(o => o.nombre).join(', ')}</strong>. Su eficiencia esta por debajo del 70%. Podrian beneficiarse de capacitacion adicional o revisar si estan en el proceso adecuado.`;
+            return `Te sugiero revisar el desempeño de: <strong>${bajoRendimiento.map(o => o.nombre).join(', ')}</strong>. Su eficiencia está por debajo del 70%. Podrían beneficiarse de capacitación adicional o revisar si están en el proceso adecuado.`;
         }
-        return `¡Buenas noticias, Coco! Todo tu equipo esta por encima del 70% de eficiencia. No detecto necesidades urgentes de capacitacion.`;
+        return `¡Buenas noticias, Coco! Todo tu equipo está por encima del 70% de eficiencia. No detecto necesidades urgentes de capacitación.`;
     }
 
     if (preguntaLower.includes('optimiz') && preguntaLower.includes('pedido')) {
         const urgentes = (supervisoraState.pedidosHoy || []).filter(p => p.prioridad === 'alta' || p.prioridad === 'urgente');
         if (urgentes.length > 0) {
-            return `Para optimizar el pedido urgente #${urgentes[0].id}, te recomiendo: 1) Asignar a tus operadoras mas eficientes, 2) Agregar mas estaciones si es posible, 3) Revisar que no haya cuellos de botella en procesos anteriores.`;
+            return `Para optimizar el pedido urgente #${urgentes[0].id}, te recomiendo: 1) Asignar a tus operadoras más eficientes, 2) Agregar más estaciones si es posible, 3) Revisar que no haya cuellos de botella en procesos anteriores.`;
         }
-        return `No tienes pedidos urgentes en este momento. ¿Hay algun pedido especifico que quieras optimizar?`;
+        return `No tienes pedidos urgentes en este momento. ¿Hay algún pedido específico que quieras optimizar?`;
     }
 
     if (preguntaLower.includes('cuantas') && preguntaLower.includes('operadora')) {
@@ -3372,11 +3372,11 @@ function generarRespuestaIA(pregunta) {
 
     if (preguntaLower.includes('produccion') && preguntaLower.includes('hoy')) {
         const piezasHoy = Object.values(supervisoraState.maquinas).reduce((sum, m) => sum + (m.piezasHoy || 0), 0);
-        return `La produccion de hoy es de <strong>${piezasHoy.toLocaleString()}</strong> piezas. ${piezasHoy > 500 ? '¡Vamos muy bien!' : 'Aun hay margen de mejora.'}`;
+        return `La producción de hoy es de <strong>${piezasHoy.toLocaleString()}</strong> piezas. ${piezasHoy > 500 ? '¡Vamos muy bien!' : 'Aún hay margen de mejora.'}`;
     }
 
     // Respuesta generica
-    return `Entiendo tu pregunta, Coco. Dejame analizar los datos... Para darte una mejor respuesta, ¿podrias ser mas especifica? Por ejemplo, puedes preguntarme sobre operadoras especificas, procesos, o pedidos.`;
+    return `Entiendo tu pregunta, Coco. Déjame analizar los datos... Para darte una mejor respuesta, ¿podrías ser más específica? Por ejemplo, puedes preguntarme sobre operadoras específicas, procesos, o pedidos.`;
 }
 
 function encontrarMejorOperadoraPorProceso(tipoProceso) {

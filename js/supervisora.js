@@ -4676,17 +4676,48 @@ function limpiarNotificaciones() {
     showToast('Notificaciones limpiadas', 'info');
 }
 
+// Registro de notificaciones ya mostradas (para evitar duplicados por sesión y entre recargas)
+const notificacionesMostradas = new Set(
+    JSON.parse(localStorage.getItem('supervisora_notif_mostradas') || '[]')
+);
+
+function registrarNotifMostrada(clave) {
+    notificacionesMostradas.add(clave);
+    // Guardar en localStorage para persistir entre recargas
+    // Mantener máximo 200 claves para no crecer indefinidamente
+    const arr = Array.from(notificacionesMostradas);
+    if (arr.length > 200) {
+        arr.splice(0, arr.length - 200);
+    }
+    localStorage.setItem('supervisora_notif_mostradas', JSON.stringify(arr));
+}
+
+// Limpiar registros de notificaciones al inicio de cada día
+function limpiarNotifMostradasSiNuevoDia() {
+    const hoy = new Date().toDateString();
+    const ultimoDia = localStorage.getItem('supervisora_notif_dia');
+    if (ultimoDia !== hoy) {
+        localStorage.setItem('supervisora_notif_dia', hoy);
+        localStorage.removeItem('supervisora_notif_mostradas');
+        notificacionesMostradas.clear();
+    }
+}
+limpiarNotifMostradasSiNuevoDia();
+
 function verificarEventosNotificacion() {
     // Verificar pedidos en riesgo
     supervisoraState.pedidosHoy.forEach(pedido => {
         const prediccion = predecirEntrega(pedido.id);
         if (prediccion && !prediccion.aTiempo && prediccion.margen > -24) {
-            // Solo si va a fallar en las próximas 24 horas
-            agregarNotificacion({
-                titulo: 'Pedido en riesgo',
-                mensaje: `El pedido ${pedido.id} podría no llegar a tiempo. Faltan ${Math.abs(prediccion.margen)} horas.`,
-                tipo: 'danger'
-            });
+            const clave = `pedido_riesgo_${pedido.id}`;
+            if (!notificacionesMostradas.has(clave)) {
+                agregarNotificacion({
+                    titulo: 'Pedido en riesgo',
+                    mensaje: `El pedido ${pedido.id} podría no llegar a tiempo. Faltan ${Math.abs(prediccion.margen)} horas.`,
+                    tipo: 'danger'
+                });
+                registrarNotifMostrada(clave);
+            }
         }
     });
 
@@ -4697,13 +4728,14 @@ function verificarEventosNotificacion() {
             maq.operadores.forEach(op => {
                 const piezas = op.piezasHoy || 0;
                 const meta = 100; // Meta por defecto
-                if (piezas >= meta && !op.notificadoMeta) {
+                const clave = `meta_${op.id || op.nombre}_${new Date().toDateString()}`;
+                if (piezas >= meta && !notificacionesMostradas.has(clave)) {
                     agregarNotificacion({
                         titulo: '¡Meta alcanzada!',
                         mensaje: `${op.nombre} ha completado ${piezas} piezas hoy.`,
                         tipo: 'success'
                     });
-                    op.notificadoMeta = true;
+                    registrarNotifMostrada(clave);
                 }
             });
         }
