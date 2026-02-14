@@ -3694,7 +3694,7 @@ function finalizarProcesoConMetros(metrosUtilizados) {
         metrosUtilizados: metrosUtilizados,
         metrosPorPieza: resumenProceso.metrosPorPieza,
         fecha: new Date().toISOString(),
-        leido: false
+        leida: false
     });
     localStorage.setItem('notificaciones_coco', JSON.stringify(notificacionesCoco.slice(0, 100)));
 

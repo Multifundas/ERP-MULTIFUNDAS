@@ -3662,6 +3662,7 @@ function agregarNotificacionCoco(notif) {
     const notificaciones = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
     notificaciones.unshift({
         id: Date.now(),
+        fecha: new Date().toISOString(),
         ...notif,
         leida: false
     });
@@ -3675,15 +3676,7 @@ function agregarNotificacionCoco(notif) {
     actualizarBadgeNotificaciones();
 }
 
-function actualizarBadgeNotificaciones() {
-    const notificaciones = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
-    const noLeidas = notificaciones.filter(n => !n.leida).length;
-    const badge = document.getElementById('notifBadge');
-    if (badge) {
-        badge.textContent = noLeidas;
-        badge.style.display = noLeidas > 0 ? 'flex' : 'none';
-    }
-}
+// Badge de notificaciones coco se maneja en actualizarBadgeNotificaciones() principal (línea ~4660)
 
 function formatearFecha(fechaISO) {
     const fecha = new Date(fechaISO);
@@ -4596,6 +4589,21 @@ function initNotificaciones() {
     });
     if (notificacionesState.notificaciones.length !== antes) {
         guardarNotificaciones();
+    }
+
+    // Limpiar también notificaciones_coco antiguas (>24h)
+    try {
+        const cocoNotifs = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+        const cocoAntes = cocoNotifs.length;
+        const cocoLimpio = cocoNotifs.filter(n => {
+            const fecha = new Date(n.fecha || n.timestamp).getTime();
+            return !isNaN(fecha) && (ahora - fecha) < NOTIF_EXPIRY;
+        });
+        if (cocoLimpio.length !== cocoAntes) {
+            localStorage.setItem('notificaciones_coco', JSON.stringify(cocoLimpio));
+        }
+    } catch (e) {
+        localStorage.setItem('notificaciones_coco', '[]');
     }
 
     // Solicitar permiso para notificaciones del navegador
@@ -5988,46 +5996,45 @@ function verificarNotificacionesDeOperadoras() {
     const noLeidas = notificaciones.filter(n => !n.leida);
 
     if (noLeidas.length > 0) {
+        let huboCambios = false;
         noLeidas.forEach(notif => {
-            // Verificar si ya la procesamos
-            const yaExiste = supervisoraState.alertasActivas &&
-                supervisoraState.alertasActivas.has(String(notif.id));
-
-            if (!yaExiste) {
-                // Si es pedido listo para entrega, mostrar modal de cierre
-                if (notif.tipo === 'pedido_listo_entrega') {
-                    mostrarModalCierrePedido(notif);
-                    marcarNotificacionLeida(notif.id);
-                } else if (typeof agregarNotificacion === 'function') {
-                    agregarNotificacion({
-                        tipo: notif.tipo || 'alerta',
-                        titulo: obtenerTituloNotificacionOp(notif),
-                        mensaje: notif.mensaje || notif.descripcion,
-                        icono: obtenerIconoNotificacionOp(notif.tipo),
-                        color: obtenerColorNotificacionOp(notif.tipo),
-                        origen: 'operadora',
-                        origenId: notif.id,
-                        operadoraId: notif.operadoraId,
-                        operadoraNombre: notif.operadoraNombre,
-                        estacionId: notif.estacionId,
-                        fecha: notif.fecha
-                    });
-                }
-
-                if (supervisoraState.alertasActivas) {
-                    supervisoraState.alertasActivas.add(String(notif.id));
-                }
+            // Si es pedido listo para entrega, mostrar modal de cierre
+            if (notif.tipo === 'pedido_listo_entrega') {
+                mostrarModalCierrePedido(notif);
+            } else if (typeof agregarNotificacion === 'function') {
+                agregarNotificacion({
+                    tipo: notif.tipo || 'alerta',
+                    titulo: obtenerTituloNotificacionOp(notif),
+                    mensaje: notif.mensaje || notif.descripcion,
+                    icono: obtenerIconoNotificacionOp(notif.tipo),
+                    color: obtenerColorNotificacionOp(notif.tipo),
+                    origen: 'operadora',
+                    origenId: notif.id,
+                    operadoraId: notif.operadoraId,
+                    operadoraNombre: notif.operadoraNombre,
+                    estacionId: notif.estacionId,
+                    fecha: notif.fecha
+                });
             }
+
+            // Marcar como leída en notificaciones_coco para que no se re-procese
+            notif.leida = true;
+            huboCambios = true;
         });
+
+        // Guardar los cambios de vuelta a localStorage
+        if (huboCambios) {
+            localStorage.setItem('notificaciones_coco', JSON.stringify(notificaciones));
+        }
     }
 
     return noLeidas;
 }
 
 /**
- * Marca una notificación como leída
+ * Marca una notificación de coco (operadora→supervisora) como leída
  */
-function marcarNotificacionLeida(notifId) {
+function marcarNotificacionCocoLeida(notifId) {
     const notificaciones = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
     const notif = notificaciones.find(n => n.id === notifId);
     if (notif) {
