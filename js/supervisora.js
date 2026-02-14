@@ -53,6 +53,18 @@ document.addEventListener('DOMContentLoaded', () => {
         initAlertasProximoTermino();
         cargarColaProcesos();
         cargarTiemposMuertos();
+
+        // Verificar que el mapa se renderizó correctamente después de la carga inicial
+        setTimeout(() => {
+            const mapEl = document.getElementById('plantMap');
+            if (mapEl && mapEl.children.length === 0 && supervisoraState.layout) {
+                console.warn('[SUPERVISORA] Mapa vacío después de init, re-renderizando...');
+                renderLayoutInSupervisora(supervisoraState.layout);
+                renderPedidosList();
+                renderOperadoresList();
+                updateStats();
+            }
+        }, 500);
     });
 });
 
@@ -151,6 +163,15 @@ function showNoLayoutMessage() {
 
 function renderLayoutInSupervisora(layout) {
     const container = document.getElementById('plantMap');
+    if (!container) {
+        console.warn('[SUPERVISORA] plantMap no encontrado en el DOM, reintentando...');
+        setTimeout(() => renderLayoutInSupervisora(layout), 200);
+        return;
+    }
+    if (!layout || !layout.elements) {
+        console.warn('[SUPERVISORA] Layout inválido');
+        return;
+    }
 
     container.style.width = layout.canvasWidth + 'px';
     container.style.height = layout.canvasHeight + 'px';
@@ -614,6 +635,16 @@ function loadDataFromERP() {
     } catch (e) {
         console.error('Error cargando datos:', e);
         loadMockData();
+    }
+
+    // Garantizar que el mapa siempre se renderice aunque hayan errores parciales
+    if (supervisoraState.layout && !document.querySelector('#plantMap .plant-zone, #plantMap .estacion-element, #plantMap .no-layout')) {
+        console.warn('[SUPERVISORA] Mapa vacío después de carga, forzando renderizado');
+        try {
+            renderLayoutInSupervisora(supervisoraState.layout);
+        } catch (renderErr) {
+            console.error('[SUPERVISORA] Error forzando renderizado:', renderErr);
+        }
     }
 }
 
@@ -1876,14 +1907,14 @@ function renderProcesosActivos() {
 // Clave = "tipo:cantidad" para que reaparezca si la situación cambia
 function getAlertasDescartadas() {
     try {
-        return JSON.parse(sessionStorage.getItem('sup_alertas_descartadas') || '{}');
+        return JSON.parse(localStorage.getItem('sup_alertas_descartadas') || '{}');
     } catch (e) { return {}; }
 }
 
 function descartarAlertaSup(alertaKey) {
     var descartadas = getAlertasDescartadas();
-    descartadas[alertaKey] = true;
-    sessionStorage.setItem('sup_alertas_descartadas', JSON.stringify(descartadas));
+    descartadas[alertaKey] = Date.now();
+    localStorage.setItem('sup_alertas_descartadas', JSON.stringify(descartadas));
     renderAlertas();
 }
 window.descartarAlertaSup = descartarAlertaSup;
@@ -1977,7 +2008,17 @@ function renderAlertas() {
     }
 
     // Filtrar alertas descartadas por la supervisora
-    const alertasVisibles = alertas.filter(a => !descartadas[a.key]);
+    // Las alertas descartadas expiran después de 24 horas
+    const ALERTA_EXPIRY_MS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const alertasVisibles = alertas.filter(a => {
+        const dismissedAt = descartadas[a.key];
+        if (!dismissedAt) return true;
+        // Compatibilidad: valor true (formato anterior) = descartada permanente por esta sesión
+        if (dismissedAt === true) return false;
+        // Valor timestamp: verificar si expiró
+        return (now - dismissedAt) > ALERTA_EXPIRY_MS;
+    });
 
     if (alertasVisibles.length === 0) {
         container.innerHTML = `
