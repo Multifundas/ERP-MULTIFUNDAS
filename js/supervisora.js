@@ -322,14 +322,24 @@ function renderLayoutInSupervisora(layout) {
         const activityIndicator = maquinaState.estado === 'activo' ?
             '<div class="activity-pulse"></div>' : '';
 
+        // Obtener info de procesos simultáneos y estado de trabajo
+        // (debe ir antes del bloque de operadores que usa estaTrabajando)
+        const asignacionesEstaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+        const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+        const asignacionEst = asignacionesEstaciones[element.id];
+        const estadoMaquinaLS = estadoMaquinas[element.id];
+
+        const modoSimultaneo = asignacionEst?.modoSimultaneo || estadoMaquinaLS?.modoSimultaneo;
+        const procesosSimultaneos = estadoMaquinaLS?.procesosSimultaneos || [];
+        const estaTrabajando = estadoMaquinaLS?.estado === 'trabajando' || estadoMaquinaLS?.procesoActivo;
+
         // Generar HTML para múltiples operadores
         const operadoresCount = maquinaState.operadores?.length || 0;
         let operadoresHTML = '';
 
         if (operadoresCount > 0) {
             // Calcular rendimiento del operador en esta estación
-            const estadoMaquinasData = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
-            const estadoEst = estadoMaquinasData[element.id];
+            const estadoEst = estadoMaquinas[element.id];
             const piezasRealizadas = estadoEst?.piezasHoy || maquinaState.piezasHoy || 0;
             const pedidoAsignado = maquinaState.pedidoId ? supervisoraState.pedidosHoy.find(p => p.id === maquinaState.pedidoId) : null;
             const cantidadObjetivo = pedidoAsignado?.productos?.[0]?.cantidad || pedidoAsignado?.cantidad || 0;
@@ -385,16 +395,6 @@ function renderLayoutInSupervisora(layout) {
                 </div>
             `;
         }
-
-        // Obtener info de procesos simultáneos del operador
-        const asignacionesEstaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
-        const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
-        const asignacionEst = asignacionesEstaciones[element.id];
-        const estadoMaquinaLS = estadoMaquinas[element.id];
-
-        const modoSimultaneo = asignacionEst?.modoSimultaneo || estadoMaquinaLS?.modoSimultaneo;
-        const procesosSimultaneos = estadoMaquinaLS?.procesosSimultaneos || [];
-        const estaTrabajando = estadoMaquinaLS?.estado === 'trabajando' || estadoMaquinaLS?.procesoActivo;
 
         // Determinar estado de trabajo para colores
         let claseTrabajoEstacion = '';
@@ -4579,7 +4579,23 @@ function initNotificaciones() {
     // Cargar notificaciones guardadas
     const saved = localStorage.getItem('supervisora_notificaciones');
     if (saved) {
-        notificacionesState.notificaciones = JSON.parse(saved);
+        try {
+            notificacionesState.notificaciones = JSON.parse(saved);
+        } catch (e) {
+            notificacionesState.notificaciones = [];
+        }
+    }
+
+    // Limpiar notificaciones antiguas (>24h)
+    const ahora = Date.now();
+    const NOTIF_EXPIRY = 24 * 60 * 60 * 1000;
+    const antes = notificacionesState.notificaciones.length;
+    notificacionesState.notificaciones = notificacionesState.notificaciones.filter(n => {
+        const fecha = new Date(n.fecha).getTime();
+        return (ahora - fecha) < NOTIF_EXPIRY;
+    });
+    if (notificacionesState.notificaciones.length !== antes) {
+        guardarNotificaciones();
     }
 
     // Solicitar permiso para notificaciones del navegador
@@ -4662,6 +4678,10 @@ function toggleNotificaciones() {
     notificacionesState.panelAbierto = !notificacionesState.panelAbierto;
 
     if (notificacionesState.panelAbierto) {
+        // Marcar todas como leídas al abrir el panel
+        notificacionesState.notificaciones.forEach(n => n.leida = true);
+        guardarNotificaciones();
+        actualizarBadgeNotificaciones();
         panel.classList.add('show');
         renderNotificaciones();
     } else {
