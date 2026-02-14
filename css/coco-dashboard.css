@@ -18,15 +18,15 @@
    ============================================ */
 .coco-nav {
     display: flex;
-    gap: 4px;
-    padding: 10px 20px;
+    gap: 3px;
+    padding: 5px 12px;
     background: linear-gradient(135deg, #1e2538 0%, #2a3549 100%);
     border-bottom: 2px solid #3d4a5c;
     overflow-x: auto;
     position: relative;
     z-index: 100;
     flex-shrink: 0;
-    min-height: 50px;
+    min-height: 36px;
     align-items: center;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
@@ -34,16 +34,16 @@
 .nav-tab {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 24px;
+    gap: 6px;
+    padding: 6px 14px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid transparent;
     color: #9ca3af;
-    border-radius: 10px;
+    border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s;
     white-space: nowrap;
-    font-size: 0.9rem;
+    font-size: 0.78rem;
     font-weight: 500;
 }
 
@@ -61,7 +61,7 @@
 }
 
 .nav-tab i {
-    font-size: 1.1rem;
+    font-size: 0.9rem;
 }
 
 .nav-tab span {
@@ -91,7 +91,7 @@
 /* Secciones del Panel Coco */
 .coco-section {
     display: none;
-    height: calc(100vh - 130px);
+    height: calc(100vh - 86px);
     overflow-y: auto;
     overflow-x: hidden;
 }
@@ -134,8 +134,8 @@
 .coco-calendario-container,
 .coco-reportes-container,
 .coco-asistente-container {
-    padding: 20px;
-    min-height: calc(100vh - 160px);
+    padding: 14px;
+    min-height: calc(100vh - 110px);
 }
 
 /* Seccion planta mantiene su layout original */
@@ -157,10 +157,10 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 24px 30px;
+    padding: 14px 20px;
     background: var(--coco-gradient);
-    border-radius: 16px;
-    margin-bottom: 24px;
+    border-radius: 12px;
+    margin-bottom: 16px;
     position: relative;
     overflow: hidden;
 }
@@ -179,25 +179,25 @@
 .welcome-content {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 12px;
     z-index: 1;
 }
 
 .welcome-avatar {
-    width: 64px;
-    height: 64px;
+    width: 44px;
+    height: 44px;
     background: rgba(255, 255, 255, 0.2);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.8rem;
+    font-size: 1.3rem;
     color: #fff;
 }
 
 .welcome-text h1 {
-    font-size: 1.5rem;
-    margin: 0 0 8px 0;
+    font-size: 1.1rem;
+    margin: 0 0 4px 0;
     color: #fff;
     font-weight: 600;
 }
@@ -219,14 +219,14 @@
 
 .welcome-date {
     color: rgba(255, 255, 255, 0.8);
-    font-size: 0.9rem;
-    margin: 0 0 5px 0;
+    font-size: 0.78rem;
+    margin: 0 0 3px 0;
     text-transform: capitalize;
 }
 
 .welcome-summary {
     color: rgba(255, 255, 255, 0.9);
-    font-size: 0.95rem;
+    font-size: 0.82rem;
     margin: 0;
 }
 
@@ -240,8 +240,8 @@
 
 .quick-stat {
     background: rgba(255, 255, 255, 0.2);
-    padding: 15px 25px;
-    border-radius: 12px;
+    padding: 8px 16px;
+    border-radius: 10px;
     text-align: center;
     backdrop-filter: blur(10px);
 }
@@ -260,7 +260,7 @@
 
 .quick-stat-value {
     display: block;
-    font-size: 2rem;
+    font-size: 1.4rem;
     font-weight: 700;
     color: #fff;
 }
@@ -276,16 +276,16 @@
    ALERTAS INTELIGENTES
    ============================================ */
 .coco-alertas-section {
-    margin-bottom: 24px;
+    margin-bottom: 16px;
 }
 
 .coco-alertas-section h3 {
-    font-size: 1rem;
+    font-size: 0.88rem;
     color: #e5e7eb;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
 .coco-alertas-section h3 i {
@@ -301,10 +301,10 @@
 .alerta-card {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
-    padding: 16px;
+    gap: 10px;
+    padding: 10px;
     background: #252d3d;
-    border-radius: 12px;
+    border-radius: 10px;
     border-left: 4px solid #6b7280;
 }
 
@@ -324,9 +324,9 @@
 }
 
 .alerta-card .alerta-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -386,14 +386,14 @@
 .coco-metrics-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 24px;
+    gap: 10px;
+    margin-bottom: 16px;
 }
 
 .metric-card {
     background: #1e2433;
-    border-radius: 12px;
-    padding: 20px;
+    border-radius: 10px;
+    padding: 12px;
     border: 1px solid #2d3748;
 }
 
@@ -416,10 +416,10 @@
 .metric-card.tiempo .metric-header i { color: var(--coco-info); }
 
 .metric-value {
-    font-size: 2rem;
+    font-size: 1.4rem;
     font-weight: 700;
     color: #fff;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
 .metric-comparison {
@@ -2563,6 +2563,30 @@
 /* ============================================
    RESPONSIVE
    ============================================ */
+/* Laptop screens */
+@media (max-width: 1600px) {
+    .coco-dashboard-container,
+    .coco-calendario-container,
+    .coco-reportes-container,
+    .coco-asistente-container {
+        padding: 12px;
+    }
+
+    .coco-welcome {
+        padding: 12px 16px;
+        margin-bottom: 12px;
+    }
+
+    .coco-metrics-grid {
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+
+    .metric-card {
+        padding: 10px;
+    }
+}
+
 @media (max-width: 1200px) {
     .coco-metrics-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -2570,6 +2594,10 @@
 
     .reporte-resumen {
         grid-template-columns: repeat(2, 1fr);
+    }
+
+    .metric-value {
+        font-size: 1.2rem;
     }
 }
 
@@ -2590,9 +2618,9 @@
 
 @media (max-width: 768px) {
     .coco-nav {
-        padding: 6px 8px;
-        gap: 3px;
-        min-height: 42px;
+        padding: 4px 6px;
+        gap: 2px;
+        min-height: 32px;
         scrollbar-width: none;
         -ms-overflow-style: none;
     }
@@ -2602,14 +2630,14 @@
     }
 
     .nav-tab {
-        padding: 8px 14px;
-        font-size: 0.85rem;
-        border-radius: 8px;
+        padding: 5px 10px;
+        font-size: 0.72rem;
+        border-radius: 6px;
         flex-shrink: 0;
     }
 
     .nav-tab i {
-        font-size: 1rem;
+        font-size: 0.82rem;
     }
 
     .nav-tab span {
@@ -2618,7 +2646,14 @@
 
     .coco-section {
         height: auto;
-        min-height: calc(100vh - 160px);
+        min-height: calc(100vh - 100px);
+    }
+
+    .coco-dashboard-container,
+    .coco-calendario-container,
+    .coco-reportes-container,
+    .coco-asistente-container {
+        padding: 10px;
     }
 
     .coco-metrics-grid {
@@ -2639,11 +2674,35 @@
 
     .reportes-header {
         flex-direction: column;
-        gap: 15px;
+        gap: 10px;
     }
 
     .reportes-filtros {
         width: 100%;
+    }
+
+    .coco-welcome {
+        padding: 10px 14px;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .welcome-avatar {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+    }
+
+    .welcome-text h1 {
+        font-size: 0.9rem;
+    }
+
+    .metric-card {
+        padding: 10px;
+    }
+
+    .metric-value {
+        font-size: 1.1rem;
     }
 }
 
@@ -2886,7 +2945,7 @@ body.day-mode .coco-error p {
 .acciones-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
+    gap: 8px;
 }
 
 .accion-btn {
@@ -2894,11 +2953,11 @@ body.day-mode .coco-error p {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 20px 15px;
+    gap: 5px;
+    padding: 12px 10px;
     background: rgba(102, 126, 234, 0.1);
     border: 1px solid rgba(102, 126, 234, 0.2);
-    border-radius: 12px;
+    border-radius: 10px;
     color: #a5b4fc;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -3082,14 +3141,14 @@ body.day-mode .accion-btn:hover {
 .tm-resumen {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 24px;
+    gap: 10px;
+    margin-bottom: 16px;
 }
 
 .tm-stat-card {
     background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    padding: 20px;
+    border-radius: 10px;
+    padding: 12px;
     text-align: center;
     transition: transform 0.2s;
 }
@@ -3104,9 +3163,9 @@ body.day-mode .accion-btn:hover {
 }
 
 .tm-stat-icon {
-    font-size: 1.5rem;
+    font-size: 1.1rem;
     color: #667eea;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
 .tm-stat-card.activos .tm-stat-icon {
@@ -3114,7 +3173,7 @@ body.day-mode .accion-btn:hover {
 }
 
 .tm-stat-value {
-    font-size: 1.5rem;
+    font-size: 1.15rem;
     font-weight: 700;
     color: #fff;
 }
@@ -3128,18 +3187,18 @@ body.day-mode .accion-btn:hover {
 /* Por motivo */
 .tm-por-motivo {
     background: rgba(255, 255, 255, 0.03);
-    border-radius: 16px;
-    padding: 20px;
-    margin-bottom: 24px;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 16px;
 }
 
 .tm-por-motivo h3 {
-    margin: 0 0 16px;
+    margin: 0 0 10px;
     color: #fff;
-    font-size: 1rem;
+    font-size: 0.88rem;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
 .tm-por-motivo h3 i {
