@@ -1,9 +1,9 @@
 // ========================================
 // ERP MULTIFUNDAS - Service Worker
-// Cache de archivos estáticos, network-first para API
+// Network-first para archivos propios, cache-first para CDN
 // ========================================
 
-var CACHE_NAME = 'erp-multifundas-v3';
+var CACHE_NAME = 'erp-multifundas-v4';
 var STATIC_ASSETS = [
     '/',
     '/index.html',
@@ -64,11 +64,11 @@ self.addEventListener('activate', function(event) {
     self.clients.claim();
 });
 
-// Fetch: network-first for API, cache-first for static
+// Fetch handler
 self.addEventListener('fetch', function(event) {
     var url = new URL(event.request.url);
 
-    // API calls (Supabase): network-first
+    // API calls (Supabase): network-only, no cache
     if (url.hostname.includes('supabase')) {
         event.respondWith(
             fetch(event.request).catch(function() {
@@ -78,8 +78,10 @@ self.addEventListener('fetch', function(event) {
         return;
     }
 
-    // CDN resources: cache-first
-    if (url.hostname.includes('cdnjs') || url.hostname.includes('fonts.googleapis')) {
+    // CDN resources (libraries, fonts): cache-first (never change)
+    if (url.hostname.includes('cdnjs') ||
+        url.hostname.includes('fonts.googleapis') ||
+        url.hostname.includes('cdn.jsdelivr')) {
         event.respondWith(
             caches.match(event.request).then(function(cached) {
                 return cached || fetch(event.request).then(function(response) {
@@ -93,22 +95,25 @@ self.addEventListener('fetch', function(event) {
         return;
     }
 
-    // Local assets: cache-first with network fallback
+    // Local assets (HTML, CSS, JS): network-first with cache fallback
+    // This ensures updates are always visible without needing cache busting
     event.respondWith(
-        caches.match(event.request).then(function(cached) {
-            if (cached) return cached;
-            return fetch(event.request).then(function(response) {
-                // Cache successful responses
-                if (response && response.status === 200) {
-                    var responseClone = response.clone();
-                    caches.open(CACHE_NAME).then(function(cache) {
-                        cache.put(event.request, responseClone);
-                    });
-                }
-                return response;
-            }).catch(function() {
-                // Offline fallback for HTML pages
-                if (event.request.headers.get('accept').includes('text/html')) {
+        fetch(event.request).then(function(response) {
+            // Cache successful responses for offline use
+            if (response && response.status === 200) {
+                var responseClone = response.clone();
+                caches.open(CACHE_NAME).then(function(cache) {
+                    cache.put(event.request, responseClone);
+                });
+            }
+            return response;
+        }).catch(function() {
+            // Offline: serve from cache
+            return caches.match(event.request).then(function(cached) {
+                if (cached) return cached;
+                // Last resort fallback for HTML pages
+                if (event.request.headers.get('accept') &&
+                    event.request.headers.get('accept').includes('text/html')) {
                     return caches.match('/index.html');
                 }
             });
