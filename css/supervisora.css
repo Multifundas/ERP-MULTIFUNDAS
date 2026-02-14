@@ -1658,120 +1658,152 @@ body {
         min-height: 100vh;
     }
 
+    /* ---- HEADER MOBILE ---- */
     .supervisora-header {
         flex-wrap: wrap;
         height: auto;
-        padding: 10px;
-        gap: 8px;
-    }
-
-    .header-left {
-        width: 100%;
-        justify-content: space-between;
-    }
-
-    .header-left h1 {
-        font-size: 0.95rem;
-    }
-
-    .header-badge {
-        font-size: 0.6rem;
-    }
-
-    .header-right {
-        width: 100%;
-        justify-content: flex-start;
-        flex-wrap: wrap;
+        padding: 8px 12px;
         gap: 6px;
     }
 
+    .header-left {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .header-left h1 {
+        font-size: 0.9rem;
+        white-space: nowrap;
+    }
+
+    .header-left .back-link {
+        font-size: 0.85rem;
+    }
+
+    .header-badge {
+        font-size: 0.55rem;
+        padding: 2px 6px;
+    }
+
+    /* Stats bar compact on mobile - full width row below header */
+    .header-center {
+        width: 100%;
+        order: 3;
+    }
+
+    .stats-bar {
+        justify-content: space-around;
+        gap: 4px;
+        padding: 4px 0;
+    }
+
+    .stat-value {
+        font-size: 1rem;
+    }
+
+    .stat-label {
+        font-size: 0.55rem;
+    }
+
+    .header-right {
+        display: flex;
+        gap: 4px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
     .header-right .btn-icon {
-        width: 34px;
-        height: 34px;
-        font-size: 12px;
+        width: 32px;
+        height: 32px;
+        font-size: 11px;
+        flex-shrink: 0;
     }
 
     .btn-outline,
     .btn-inventario {
-        font-size: 0.75rem;
-        padding: 6px 10px;
+        font-size: 0.7rem;
+        padding: 5px 8px;
+        flex-shrink: 0;
+        white-space: nowrap;
     }
 
+    /* Hide text on header buttons */
     .btn-outline span,
     .btn-inventario span {
         display: none;
     }
 
-    /* Theme toggle smaller */
     .theme-toggle {
-        transform: scale(0.85);
+        transform: scale(0.75);
+        flex-shrink: 0;
     }
 
-    /* Sidebars become scrollable stacked panels */
+    /* ---- SIDEBARS MOBILE ---- */
     .sidebar-left,
     .sidebar-right {
-        max-height: 200px;
+        max-height: 180px;
         flex-direction: column;
     }
 
     .sidebar-section {
         border-right: none;
         border-bottom: 1px solid #2d3748;
-        padding: 10px;
+        padding: 8px 10px;
     }
 
     .sidebar-section h3 {
         font-size: 0.8rem;
     }
 
-    /* Pedidos list compact */
     .pedidos-list-expanded {
-        max-height: 120px;
-    }
-
-    .pedido-card-expanded {
-        padding: 8px 10px;
-    }
-
-    .pedido-card-header {
-        font-size: 0.8rem;
-    }
-
-    /* Operadores list compact */
-    .operadores-list {
         max-height: 100px;
     }
 
-    /* Plant map fills available space */
+    .pedido-card-expanded {
+        padding: 6px 8px;
+    }
+
+    .pedido-card-header {
+        font-size: 0.75rem;
+    }
+
+    .operadores-list {
+        max-height: 80px;
+    }
+
+    /* ---- PLANT MAP MOBILE ---- */
     .plant-area {
-        min-height: 250px;
+        min-height: 300px;
+        flex: 1;
     }
 
     .plant-map-container {
-        min-height: 200px;
+        min-height: 250px;
     }
 
     .plant-toolbar {
         flex-wrap: wrap;
-        gap: 6px;
-        padding: 6px 10px;
+        gap: 4px;
+        padding: 6px 8px;
     }
 
     .toolbar-title {
-        font-size: 0.8rem;
-    }
-
-    .zoom-btn {
-        width: 28px;
-        height: 28px;
-        font-size: 0.7rem;
-    }
-
-    .zoom-level {
         font-size: 0.75rem;
     }
 
-    /* Modals nearly full screen */
+    .zoom-btn {
+        width: 26px;
+        height: 26px;
+        font-size: 0.65rem;
+    }
+
+    .zoom-level {
+        font-size: 0.7rem;
+        min-width: 32px;
+    }
+
+    /* ---- MODALS MOBILE ---- */
     .modal {
         width: 96%;
         max-width: none;
@@ -1811,20 +1843,21 @@ body {
         max-width: none;
     }
 
-    /* Plant legend compact */
     .plant-legend {
         flex-wrap: wrap;
-        gap: 8px;
-        padding: 6px 10px;
-        font-size: 0.7rem;
+        gap: 6px;
+        padding: 4px 8px;
+        font-size: 0.65rem;
     }
 
-    /* Estacion detalle compact */
+    .plant-legend .legend-item {
+        gap: 3px;
+    }
+
     .estacion-detalle {
         font-size: 0.85rem;
     }
 
-    /* Filter buttons compact */
     .pedidos-filter {
         gap: 4px;
     }
@@ -1834,7 +1867,39 @@ body {
         padding: 4px 8px;
     }
 
-    /* Asistencia modal table responsive */
+    /* ---- DETALLE ESTACIÓN MOBILE ---- */
+    .detalle-operador-item {
+        padding: 8px;
+    }
+
+    .detalle-op-actions .btn {
+        font-size: 0.65rem;
+        padding: 4px 6px;
+    }
+
+    .info-row label {
+        font-size: 0.7rem;
+    }
+
+    .info-row span {
+        font-size: 0.75rem;
+    }
+
+    /* ---- ALERTAS MOBILE ---- */
+    .alerta-item {
+        padding: 8px;
+        gap: 8px;
+    }
+
+    .alerta-mensaje {
+        font-size: 0.7rem;
+    }
+
+    .alerta-detalle {
+        font-size: 0.6rem;
+    }
+
+    /* ---- ASISTENCIA MOBILE ---- */
     .asistencia-table th,
     .asistencia-table td {
         padding: 6px 8px;

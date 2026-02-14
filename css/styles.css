@@ -2909,6 +2909,31 @@ html {
         margin-left: 0;
     }
 
+    .top-bar {
+        padding: 0 12px;
+        gap: 8px;
+    }
+
+    .search-box {
+        flex: 1;
+        max-width: none;
+    }
+
+    .search-box input {
+        padding: 8px 12px 8px 36px;
+        font-size: 0.85rem;
+    }
+
+    .top-bar-actions {
+        gap: 6px;
+    }
+
+    .top-bar-actions .btn-icon {
+        width: 34px;
+        height: 34px;
+        font-size: 0.85rem;
+    }
+
     .kpi-grid {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -2924,6 +2949,42 @@ html {
     .permisos-grid-admin {
         grid-template-columns: 1fr;
     }
+
+    /* Content area mobile padding */
+    .content-area {
+        padding: 15px;
+    }
+
+    .section-header {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+    }
+
+    .section-header h2 {
+        font-size: 1.1rem;
+    }
+
+    /* Tables responsive */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Dashboard header actions */
+    .dash-actions {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    /* Incentivos mobile */
+    .incentivos-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tiers-grid {
+        grid-template-columns: 1fr 1fr;
+    }
 }
 
 @media (max-width: 480px) {
@@ -2932,14 +2993,27 @@ html {
     }
 
     .top-bar {
-        padding: 0 10px;
+        padding: 0 8px;
+        gap: 6px;
     }
 
-    .search-box {
-        display: flex;
-        max-width: none;
-        flex: 1;
-        margin: 0 10px;
+    .search-box input {
+        padding: 7px 10px 7px 32px;
+        font-size: 0.8rem;
+    }
+
+    .content-area {
+        padding: 10px;
+    }
+
+    .tiers-grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* Table font size reduction */
+    table th, table td {
+        padding: 8px 6px;
+        font-size: 0.8rem;
     }
 }
 
