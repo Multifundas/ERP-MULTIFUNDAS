@@ -155,6 +155,8 @@ function renderCocoDashboard() {
     // Obtener estadisticas del dia
     const stats = calcularEstadisticasDia();
     const alertas = generarAlertasInteligentes();
+    const alertasAccionables = generarAlertasAccionables();
+    const cuellosBottella = detectarCuellosBotella();
     const areaFiltro = cocoState.dashboardAreaFiltro;
     const areas = getAreasDisponibles();
 
@@ -167,58 +169,62 @@ function renderCocoDashboard() {
 
     const pedidosUrgentes = getPedidosUrgentes();
 
+    // Calcular semáforo general
+    const semaforo = calcularSemaforoGeneral(stats, alertasAccionables);
+
     container.innerHTML = `
         <div class="coco-dashboard">
-            <!-- Header de bienvenida -->
-            <div class="coco-welcome">
-                <div class="welcome-content">
-                    <div class="welcome-avatar">
-                        <i class="fas fa-user-tie"></i>
-                    </div>
-                    <div class="welcome-text">
-                        <h1>${saludo}, <span class="coco-name">Coco</span> <span class="wave-emoji">👋</span></h1>
-                        <p class="welcome-date">${formatearFechaCompleta(new Date())}</p>
-                        <p class="welcome-summary">
-                            Tienes <strong>${stats.pedidosActivos}</strong> pedidos activos y
-                            <strong>${stats.operadorasActivas}</strong> operadoras trabajando.
-                            ${stats.eficienciaGeneral >= 90 ? '¡Excelente dia!' :
-                              stats.eficienciaGeneral >= 70 ? 'Vamos bien.' :
-                              'Hay areas de oportunidad.'}
-                        </p>
-                    </div>
+            <!-- SEMÁFORO GENERAL DE PLANTA -->
+            <div class="semaforo-general">
+                <div class="semaforo-light ${semaforo.color}">
+                    <i class="fas ${semaforo.icono}"></i>
                 </div>
-                <div class="welcome-quick-stats">
-                    <div class="quick-stat ${stats.eficienciaGeneral >= 90 ? 'excellent' : stats.eficienciaGeneral >= 70 ? 'good' : 'warning'}">
-                        <span class="quick-stat-value">${stats.eficienciaGeneral}%</span>
-                        <span class="quick-stat-label">Eficiencia</span>
+                <div class="semaforo-info">
+                    <div class="semaforo-titulo">${semaforo.titulo}</div>
+                    <div class="semaforo-subtitulo">${semaforo.subtitulo}</div>
+                </div>
+                <div class="semaforo-metricas">
+                    <div class="semaforo-metrica">
+                        <span class="semaforo-metrica-valor">${stats.piezasHoy.toLocaleString()}</span>
+                        <span class="semaforo-metrica-label">Piezas</span>
+                    </div>
+                    <div class="semaforo-metrica">
+                        <span class="semaforo-metrica-valor">${stats.operadorasActivas}/${stats.operadorasTotal}</span>
+                        <span class="semaforo-metrica-label">Operadoras</span>
+                    </div>
+                    <div class="semaforo-metrica">
+                        <span class="semaforo-metrica-valor">${stats.eficienciaGeneral}%</span>
+                        <span class="semaforo-metrica-label">Eficiencia</span>
+                    </div>
+                    <div class="semaforo-metrica">
+                        <span class="semaforo-metrica-valor">${stats.comparacionAyer >= 0 ? '+' : ''}${stats.comparacionAyer}%</span>
+                        <span class="semaforo-metrica-label">vs Ayer</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Alertas Inteligentes -->
-            ${alertas.length > 0 ? `
-                <div class="coco-alertas-section">
-                    <h3><i class="fas fa-bell"></i> Atención, Coco</h3>
-                    <div class="alertas-grid">
-                        ${alertas.map(alerta => `
-                            <div class="alerta-card ${alerta.tipo}">
-                                <div class="alerta-icon">
-                                    <i class="fas ${alerta.icono}"></i>
-                                </div>
-                                <div class="alerta-content">
-                                    <h4>${S(alerta.titulo)}</h4>
-                                    <p>${S(alerta.mensaje)}</p>
-                                </div>
-                                ${alerta.accion ? `
-                                    <button class="alerta-action" onclick="${S(alerta.accion)}">
-                                        ${S(alerta.accionTexto)}
-                                    </button>
-                                ` : ''}
+            <!-- ALERTAS ACCIONABLES — "Requiere tu atención" -->
+            ${alertasAccionables.length > 0 ? `
+                <div class="alertas-accionables">
+                    ${alertasAccionables.map(a => `
+                        <div class="alerta-accionable ${a.tipo}">
+                            <div class="alerta-accionable-icon">
+                                <i class="fas ${a.icono}"></i>
                             </div>
-                        `).join('')}
-                    </div>
+                            <div class="alerta-accionable-contenido">
+                                <div class="alerta-accionable-titulo">${a.titulo}</div>
+                                <div class="alerta-accionable-detalle">${a.detalle}</div>
+                            </div>
+                            <button class="alerta-accionable-btn" onclick="${a.accion}">
+                                ${a.botonTexto}
+                            </button>
+                        </div>
+                    `).join('')}
                 </div>
             ` : ''}
+
+            <!-- FLUJO ENTRE ÁREAS — Cuellos de botella -->
+            ${renderFlujoAreas(cuellosBottella)}
 
             <!-- Grid de metricas -->
             <div class="coco-metrics-grid">
@@ -361,7 +367,7 @@ function renderCocoDashboard() {
                         `}).join('') : `
                             <div class="no-urgentes">
                                 <i class="fas fa-check-circle"></i>
-                                <p>¡Excelente, Coco! No hay pedidos urgentes en riesgo.</p>
+                                <p>No hay pedidos urgentes en riesgo.</p>
                             </div>
                         `}
                     </div>
@@ -376,7 +382,7 @@ function renderCocoDashboard() {
                     </div>
                     <div class="ia-intro">
                         <h4>Recomendación del Asistente</h4>
-                        <p>Basado en el rendimiento histórico</p>
+                        <p>Basado en el rendimiento actual</p>
                     </div>
                 </div>
                 <div class="ia-quick-content">
@@ -619,6 +625,211 @@ function generarAlertasInteligentes() {
     } catch(e) {}
 
     return alertas;
+}
+
+// ========================================
+// SEMÁFORO GENERAL DE PLANTA
+// ========================================
+
+function calcularSemaforoGeneral(stats, alertasAccionables) {
+    const peligros = alertasAccionables.filter(a => a.tipo === 'danger').length;
+    const advertencias = alertasAccionables.filter(a => a.tipo === 'warning').length;
+    const tiemposMuertosActivos = Object.keys(supervisoraState.tiemposMuertos?.activos || {}).length;
+
+    // Condiciones para ROJO
+    if (peligros >= 2 || stats.eficienciaGeneral < 50 || stats.entregasEnRiesgo >= 2 || tiemposMuertosActivos >= 3) {
+        return {
+            color: 'rojo',
+            icono: 'fa-exclamation-triangle',
+            titulo: 'Atención Inmediata Requerida',
+            subtitulo: `${peligros} problema${peligros !== 1 ? 's' : ''} crítico${peligros !== 1 ? 's' : ''} detectado${peligros !== 1 ? 's' : ''}`
+        };
+    }
+
+    // Condiciones para AMARILLO
+    if (peligros >= 1 || advertencias >= 2 || stats.eficienciaGeneral < 70 || stats.entregasEnRiesgo >= 1 || tiemposMuertosActivos >= 1) {
+        return {
+            color: 'amarillo',
+            icono: 'fa-exclamation-circle',
+            titulo: 'Hay Situaciones por Atender',
+            subtitulo: `${advertencias + peligros} alerta${(advertencias + peligros) !== 1 ? 's' : ''} pendiente${(advertencias + peligros) !== 1 ? 's' : ''}`
+        };
+    }
+
+    // VERDE
+    return {
+        color: 'verde',
+        icono: 'fa-check-circle',
+        titulo: 'Producción en Buen Ritmo',
+        subtitulo: `Eficiencia al ${stats.eficienciaGeneral}% — todo en orden`
+    };
+}
+
+// ========================================
+// ALERTAS ACCIONABLES — "Requiere tu atención"
+// ========================================
+
+function generarAlertasAccionables() {
+    const alertas = [];
+    const maquinas = Object.values(supervisoraState.maquinas);
+    const pedidos = supervisoraState.pedidosHoy || [];
+    const operadores = supervisoraState.operadores || [];
+
+    // 1. Tiempos muertos activos > 15 minutos
+    const tmActivos = supervisoraState.tiemposMuertos?.activos || {};
+    Object.entries(tmActivos).forEach(([estacionId, tm]) => {
+        const durMin = Math.floor((Date.now() - new Date(tm.inicio).getTime()) / 60000);
+        if (durMin >= 15) {
+            alertas.push({
+                tipo: 'danger',
+                icono: 'fa-pause-circle',
+                titulo: `${estacionId} detenida hace ${durMin} min`,
+                detalle: `${tm.motivoNombre} — ${tm.operadores?.map(o => o.nombre.split(' ')[0]).join(', ') || 'Sin operador'}`,
+                accion: `mostrarTiempoMuertoActivo('${estacionId}')`,
+                botonTexto: 'Resolver'
+            });
+        }
+    });
+
+    // 2. Pedidos en riesgo de entrega
+    pedidos.forEach(p => {
+        if (esEntregaEnRiesgo(p)) {
+            const prog = calcularProgresoPedido(p);
+            const cliente = typeof db !== 'undefined' ? db.getCliente(p.clienteId) : null;
+            alertas.push({
+                tipo: 'danger',
+                icono: 'fa-fire',
+                titulo: `Pedido #${p.id} en riesgo de entrega`,
+                detalle: `${cliente?.nombreComercial || p.clienteNombre || 'Cliente'} — ${prog}% avance`,
+                accion: `showSection('planta'); setTimeout(() => { const el = document.querySelector('[data-pedido-id="${p.id}"]'); if(el) el.scrollIntoView({behavior:'smooth'}); }, 300)`,
+                botonTexto: 'Ver pedido'
+            });
+        }
+    });
+
+    // 3. Operadoras sin asignar cuando hay pedidos urgentes
+    const sinAsignar = operadores.filter(op =>
+        !maquinas.some(m => m.operadores && m.operadores.some(o => o.id === op.id))
+    );
+    const pedidosUrg = pedidos.filter(p => p.prioridad === 'alta' || p.prioridad === 'urgente');
+
+    if (sinAsignar.length > 0 && pedidosUrg.length > 0) {
+        alertas.push({
+            tipo: 'warning',
+            icono: 'fa-user-plus',
+            titulo: `${sinAsignar.length} operadora${sinAsignar.length > 1 ? 's' : ''} disponible${sinAsignar.length > 1 ? 's' : ''} sin asignar`,
+            detalle: `${sinAsignar.slice(0, 3).map(o => o.nombre.split(' ')[0]).join(', ')} — hay ${pedidosUrg.length} pedido${pedidosUrg.length > 1 ? 's' : ''} urgente${pedidosUrg.length > 1 ? 's' : ''}`,
+            accion: `showSection('planta')`,
+            botonTexto: 'Asignar'
+        });
+    }
+
+    // 4. Estaciones con operador pero sin proceso
+    const sinProceso = maquinas.filter(m =>
+        m.operadores && m.operadores.length > 0 && !m.procesoNombre
+    );
+    if (sinProceso.length > 0) {
+        alertas.push({
+            tipo: 'warning',
+            icono: 'fa-tasks',
+            titulo: `${sinProceso.length} estación${sinProceso.length > 1 ? 'es' : ''} sin proceso asignado`,
+            detalle: sinProceso.map(m => m.id).slice(0, 4).join(', '),
+            accion: `showSection('planta'); setTimeout(() => selectEstacion('${sinProceso[0].id}'), 300)`,
+            botonTexto: 'Asignar proceso'
+        });
+    }
+
+    // 5. Estaciones retrasadas
+    const retrasadas = maquinas.filter(m => m.estado === 'retrasado');
+    if (retrasadas.length > 0) {
+        alertas.push({
+            tipo: 'danger',
+            icono: 'fa-clock',
+            titulo: `${retrasadas.length} estación${retrasadas.length > 1 ? 'es' : ''} retrasada${retrasadas.length > 1 ? 's' : ''}`,
+            detalle: retrasadas.map(m => m.id).slice(0, 4).join(', '),
+            accion: `showSection('planta'); setTimeout(() => selectEstacion('${retrasadas[0].id}'), 300)`,
+            botonTexto: 'Revisar'
+        });
+    }
+
+    // Ordenar: danger primero, luego warning, luego info
+    const prioridad = { danger: 0, warning: 1, info: 2 };
+    alertas.sort((a, b) => (prioridad[a.tipo] || 2) - (prioridad[b.tipo] || 2));
+
+    return alertas.slice(0, 5); // Máximo 5 alertas accionables
+}
+
+// ========================================
+// CUELLOS DE BOTELLA — FLUJO ENTRE ÁREAS
+// ========================================
+
+function detectarCuellosBotella() {
+    const maquinas = Object.values(supervisoraState.maquinas);
+    const tiemposMuertosActivos = supervisoraState.tiemposMuertos?.activos || {};
+
+    // Definir áreas de producción en orden del flujo
+    const areasProduccion = [
+        { id: 'corte', nombre: 'Corte', icono: 'fa-cut', tipos: ['corte', 'mesa'] },
+        { id: 'serigrafia', nombre: 'Serigrafía', icono: 'fa-paint-brush', tipos: ['serigrafia', 'area'] },
+        { id: 'costura', nombre: 'Costura', icono: 'fa-tshirt', tipos: ['costura'] },
+        { id: 'calidad', nombre: 'Calidad', icono: 'fa-check-circle', tipos: ['calidad'] },
+        { id: 'empaque', nombre: 'Empaque', icono: 'fa-box', tipos: ['empaque'] }
+    ];
+
+    return areasProduccion.map(area => {
+        // Obtener estaciones de esta área
+        const estacionesArea = maquinas.filter(m => {
+            const tipo = (m.tipo || '').toLowerCase();
+            const id = (m.id || '').toLowerCase();
+            return area.tipos.some(t => tipo.includes(t) || id.startsWith(t.charAt(0)));
+        });
+
+        const total = estacionesArea.length;
+        const activas = estacionesArea.filter(m => m.estado === 'activo' || m.estado === 'adelantado').length;
+        const conParo = estacionesArea.filter(m => tiemposMuertosActivos[m.id]).length;
+        const piezas = estacionesArea.reduce((s, m) => s + (m.piezasHoy || 0), 0);
+
+        // Determinar estado del área
+        let estado = 'ok';
+        if (total === 0) estado = 'ok';
+        else if (conParo > 0 || (activas === 0 && total > 0)) estado = 'cuello';
+        else if (activas < total * 0.5) estado = 'lento';
+        else if (activas > 0) estado = 'activo';
+
+        return {
+            ...area,
+            total,
+            activas,
+            conParo,
+            piezas,
+            estado
+        };
+    });
+}
+
+function renderFlujoAreas(cuellos) {
+    // Solo mostrar si hay datos reales
+    const areasConEstaciones = cuellos.filter(c => c.total > 0);
+    if (areasConEstaciones.length === 0) return '';
+
+    return `
+        <div class="flujo-areas-container">
+            <div class="flujo-areas-titulo">
+                <i class="fas fa-stream"></i> Flujo de Producción
+            </div>
+            <div class="flujo-areas">
+                ${areasConEstaciones.map((area, idx) => `
+                    ${idx > 0 ? `<div class="flujo-flecha ${area.estado === 'cuello' ? 'congestionado' : area.estado === 'lento' ? 'lento' : ''}"><i class="fas fa-chevron-right"></i></div>` : ''}
+                    <div class="flujo-area-nodo ${area.estado}" onclick="filtrarMapaPorArea('${area.id}')" title="${area.nombre}: ${area.activas}/${area.total} activas, ${area.piezas} piezas">
+                        <div class="flujo-area-icon"><i class="fas ${area.icono}"></i></div>
+                        <div class="flujo-area-nombre">${area.nombre}</div>
+                        <div class="flujo-area-stat">${area.piezas} pzas</div>
+                        <div class="flujo-area-estaciones">${area.activas}/${area.total} activas</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
 }
 
 function getTopOperadoras(limite) {
@@ -3490,7 +3701,7 @@ function renderTiemposMuertos() {
                 </div>
             ` : ''}
 
-            <!-- Resumen del período -->
+            <!-- Resumen del período con análisis mejorado -->
             <div class="tm-resumen">
                 <div class="tm-stat-card">
                     <div class="tm-stat-icon"><i class="fas fa-hashtag"></i></div>
@@ -3512,6 +3723,49 @@ function renderTiemposMuertos() {
                     <div class="tm-stat-value">${activosArray.length}</div>
                     <div class="tm-stat-label">Activos ahora</div>
                 </div>
+            </div>
+
+            <!-- ANÁLISIS: Costo estimado y tendencia -->
+            <div class="tm-analisis-section">
+                <h3><i class="fas fa-chart-bar"></i> Análisis de Impacto</h3>
+                <div class="tm-analisis-grid">
+                    <div class="tm-analisis-card">
+                        <div class="tm-analisis-card-titulo">Piezas No Producidas (Est.)</div>
+                        <div class="tm-analisis-card-valor" style="color:#ef4444">~${estimarPiezasPerdidasTM(stats.tiempoTotal)}</div>
+                        <div class="tm-analisis-card-detalle">Basado en promedio de producción</div>
+                    </div>
+                    <div class="tm-analisis-card">
+                        <div class="tm-analisis-card-titulo">Estación Más Problemática</div>
+                        <div class="tm-analisis-card-valor">${obtenerEstacionMasProblematica(historial)}</div>
+                        <div class="tm-analisis-card-detalle">Mayor tiempo acumulado</div>
+                    </div>
+                    <div class="tm-analisis-card">
+                        <div class="tm-analisis-card-titulo">Tendencia vs Semana Anterior</div>
+                        <div class="tm-analisis-card-valor">${renderTendenciaTM(stats, tiemposMuertosFiltro)}</div>
+                    </div>
+                </div>
+
+                <!-- Top 3 causas -->
+                ${stats.porMotivo && stats.porMotivo.length > 0 ? `
+                <h4 style="margin:16px 0 10px;color:#8b9dc3;font-size:0.85rem"><i class="fas fa-list-ol"></i> Top Causas de Paro</h4>
+                <div class="tm-top-causas">
+                    ${stats.porMotivo.slice(0, 3).map((m, idx) => {
+                        const piezasPerdidas = estimarPiezasPerdidasTM(m.tiempoTotal);
+                        return `
+                        <div class="tm-top-causa-item">
+                            <div class="tm-top-causa-rank">${idx + 1}</div>
+                            <span class="tm-motivo-icon" style="background:${m.color}20;color:${m.color};width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                                <i class="fas ${m.icono}"></i>
+                            </span>
+                            <div class="tm-top-causa-info">
+                                <div class="tm-top-causa-nombre">${m.motivo}</div>
+                                <div class="tm-top-causa-stats">${m.cantidad} paros — ${m.tiempoTotal} min total</div>
+                            </div>
+                            <div class="tm-top-causa-piezas-perdidas">~${piezasPerdidas} pzas</div>
+                        </div>
+                    `}).join('')}
+                </div>
+                ` : ''}
             </div>
 
             <!-- Distribución por motivo -->
@@ -3592,4 +3846,52 @@ function renderTiemposMuertos() {
 function cambiarFiltroTM(filtro) {
     tiemposMuertosFiltro = filtro;
     renderTiemposMuertos();
+}
+
+// Estimar piezas perdidas basado en promedio de producción
+function estimarPiezasPerdidasTM(minutosParo) {
+    const maquinas = Object.values(supervisoraState.maquinas);
+    const piezasTotal = maquinas.reduce((s, m) => s + (m.piezasHoy || 0), 0);
+    const hora = new Date().getHours();
+    const horasTrabajadas = Math.max(1, hora - 8);
+    const piezasPorMinuto = piezasTotal / (horasTrabajadas * 60) || 0.5;
+    return Math.round(piezasPorMinuto * minutosParo);
+}
+
+// Obtener la estación con más tiempo muerto
+function obtenerEstacionMasProblematica(historial) {
+    if (!historial || historial.length === 0) return 'N/A';
+    const porEstacion = {};
+    historial.forEach(h => {
+        if (!porEstacion[h.estacionId]) porEstacion[h.estacionId] = 0;
+        porEstacion[h.estacionId] += h.duracionMinutos || 0;
+    });
+    const sorted = Object.entries(porEstacion).sort((a, b) => b[1] - a[1]);
+    return sorted.length > 0 ? `${sorted[0][0]} (${sorted[0][1]} min)` : 'N/A';
+}
+
+// Calcular tendencia de tiempos muertos
+function renderTendenciaTM(stats, filtro) {
+    // Comparar con período anterior (simplificado)
+    const historialPrevio = typeof getHistorialTiemposMuertos === 'function'
+        ? getHistorialTiemposMuertos('semana') : [];
+
+    const tiempoActual = stats.tiempoTotal || 0;
+
+    // Si no hay datos previos suficientes, mostrar estable
+    if (historialPrevio.length < 2) {
+        return '<span class="tm-tendencia estable"><i class="fas fa-minus"></i> Sin datos previos</span>';
+    }
+
+    // Estimar basado en cantidad de registros
+    const mitad = Math.floor(historialPrevio.length / 2);
+    const primeraMitad = historialPrevio.slice(0, mitad).reduce((s, h) => s + (h.duracionMinutos || 0), 0);
+    const segundaMitad = historialPrevio.slice(mitad).reduce((s, h) => s + (h.duracionMinutos || 0), 0);
+
+    if (segundaMitad < primeraMitad * 0.8) {
+        return '<span class="tm-tendencia mejorando"><i class="fas fa-arrow-down"></i> Mejorando</span>';
+    } else if (segundaMitad > primeraMitad * 1.2) {
+        return '<span class="tm-tendencia empeorando"><i class="fas fa-arrow-up"></i> Empeorando</span>';
+    }
+    return '<span class="tm-tendencia estable"><i class="fas fa-minus"></i> Estable</span>';
 }

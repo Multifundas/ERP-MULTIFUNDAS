@@ -1140,7 +1140,9 @@ function renderPedidosList() {
                             <span class="pedido-number">#${pedido.id}</span>
                             <span class="pedido-badge ${pedido.prioridad}">${pedido.prioridad}</span>
                             ${esListoEntrega ? '<span class="pedido-badge listo-entrega-badge"><i class="fas fa-check-circle"></i> Listo</span>' : ''}
+                            ${renderPedidoRiesgo(pedido, avancePedido)}
                         </div>
+                        ${renderPedidoCountdown(pedido)}
                         <div class="pedido-cliente-name">${S(clienteNombre)}</div>
                         ${articulosTexto ? `<div class="pedido-articulo-name"><i class="fas fa-box-open"></i> ${S(articulosTexto)}</div>` : ''}
                         ${pedido.notas ? `<div class="pedido-notas-preview"><i class="fas fa-sticky-note"></i> ${S(pedido.notas.substring(0, 80))}${pedido.notas.length > 80 ? '...' : ''}</div>` : ''}
@@ -1165,6 +1167,9 @@ function renderPedidosList() {
                     ${procesos.map(proceso => renderProcesoItem(proceso, pedido.id)).join('')}
 
                     <div class="pedido-acciones-cierre">
+                        <button class="btn-cerrar-pedido-manual" onclick="event.stopPropagation(); resaltarFlujoPedido(${pedido.id})" style="background:rgba(102,126,234,0.15);color:#667eea;border-color:rgba(102,126,234,0.3);">
+                            <i class="fas fa-route"></i> Ver en Mapa
+                        </button>
                         <button class="btn-cerrar-pedido-manual" onclick="event.stopPropagation(); abrirCierrePedidoManual(${pedido.id})">
                             <i class="fas fa-clipboard-check"></i> Cerrar Pedido
                         </button>
@@ -1357,6 +1362,46 @@ function renderProcesoItem(proceso, pedidoId) {
             ` : ''}
         </div>
     `;
+}
+
+// Countdown y riesgo para pedidos en sidebar
+function renderPedidoCountdown(pedido) {
+    if (!pedido.fechaEntrega) return '';
+    const ahora = new Date();
+    const entrega = new Date(pedido.fechaEntrega);
+    const diffMs = entrega - ahora;
+    const diffHoras = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDias = Math.floor(diffHoras / 24);
+
+    if (diffMs < 0) {
+        const retrasoH = Math.abs(diffHoras);
+        return `<div class="pedido-countdown critico"><i class="fas fa-exclamation-triangle"></i> Retrasado ${retrasoH > 24 ? Math.floor(retrasoH / 24) + 'd' : retrasoH + 'h'}</div>`;
+    }
+    if (diffHoras <= 24) {
+        return `<div class="pedido-countdown critico"><i class="fas fa-clock"></i> ${diffHoras}h restantes</div>`;
+    }
+    if (diffDias <= 3) {
+        return `<div class="pedido-countdown riesgo"><i class="fas fa-clock"></i> ${diffDias} día${diffDias > 1 ? 's' : ''} restante${diffDias > 1 ? 's' : ''}</div>`;
+    }
+    return `<div class="pedido-countdown ok"><i class="fas fa-calendar-check"></i> ${diffDias} días</div>`;
+}
+
+function renderPedidoRiesgo(pedido, avance) {
+    if (!pedido.fechaEntrega) return '';
+    const ahora = new Date();
+    const entrega = new Date(pedido.fechaEntrega);
+    const diffHoras = (entrega - ahora) / (1000 * 60 * 60);
+
+    if (diffHoras < 0) {
+        return '<span class="pedido-riesgo-badge retrasado"><i class="fas fa-times-circle"></i> Retrasado</span>';
+    }
+    if (diffHoras <= 48 && avance < 70) {
+        return '<span class="pedido-riesgo-badge en-riesgo"><i class="fas fa-exclamation-circle"></i> En riesgo</span>';
+    }
+    if (avance >= 80 || diffHoras > 72) {
+        return '<span class="pedido-riesgo-badge en-tiempo"><i class="fas fa-check"></i> En tiempo</span>';
+    }
+    return '';
 }
 
 // Verificar si las dependencias de un proceso están completadas
@@ -1825,16 +1870,24 @@ function renderOperadoresList() {
                 <span>En Desarrollo</span>
                 <span class="operadores-grupo-count">${enDesarrollo.length}</span>
             </div>`;
-        html += enDesarrollo.map(op => `
+        html += enDesarrollo.map(op => {
+            const rendimiento = obtenerRendimientoOperador(op.id, op.estacionId);
+            return `
             <div class="operador-card en-desarrollo">
                 <div class="operador-avatar trabajando">${getIniciales(op.nombre)}</div>
                 <div class="operador-info">
                     <span class="operador-nombre">${op.nombre}</span>
                     <span class="operador-estacion"><i class="fas fa-map-marker-alt"></i> ${op.estacionId}</span>
                     <span class="operador-proceso"><i class="fas fa-cog fa-spin"></i> ${op.procesoNombre}</span>
+                    ${rendimiento.piezas > 0 ? `
+                    <span class="operador-rendimiento">
+                        <i class="fas fa-chart-line ${rendimiento.nivel}"></i>
+                        ${rendimiento.piezas} pzas${rendimiento.piezasPorHora > 0 ? ` (${rendimiento.piezasPorHora}/h)` : ''}
+                    </span>` : ''}
+                    <div class="operador-carga-bar"><div class="operador-carga-fill ${rendimiento.cargaNivel}" style="width:${rendimiento.carga}%"></div></div>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
         html += '</div>';
     }
 
@@ -1853,21 +1906,25 @@ function renderOperadoresList() {
                     <span class="operador-nombre">${op.nombre}</span>
                     <span class="operador-estacion"><i class="fas fa-map-marker-alt"></i> ${op.estacionId}</span>
                     <span class="operador-sin-proceso"><i class="fas fa-hourglass-half"></i> Esperando proceso</span>
+                    ${obtenerHabilidadesHTML(op)}
                 </div>
             </div>
         `).join('');
         html += '</div>';
     }
 
-    // Inactivos (sin sesión)
+    // Inactivos (sin sesión) — con sugerencia de asignación si hay pedidos urgentes
     if (inactivos.length > 0) {
+        const hayUrgentes = supervisoraState.pedidosHoy.some(p => p.prioridad === 'alta' || p.prioridad === 'urgente');
         html += `<div class="operadores-grupo">
             <div class="operadores-grupo-header inactivos">
                 <i class="fas fa-user-slash"></i>
                 <span>Sin Sesión</span>
                 <span class="operadores-grupo-count">${inactivos.length}</span>
             </div>`;
-        html += inactivos.map(op => `
+        html += inactivos.map(op => {
+            const sugerencia = hayUrgentes ? obtenerSugerenciaAsignacion(op) : null;
+            return `
             <div class="operador-card inactivo"
                  draggable="true"
                  ondragstart="dragOperador(event, ${op.id})">
@@ -1875,13 +1932,87 @@ function renderOperadoresList() {
                 <div class="operador-info">
                     <span class="operador-nombre">${op.nombre}</span>
                     <span class="operador-sin-sesion"><i class="fas fa-sign-in-alt"></i> Sin sesión</span>
+                    ${obtenerHabilidadesHTML(op)}
+                    ${sugerencia ? `<div class="sugerencia-asignacion"><i class="fas fa-lightbulb"></i> ${sugerencia}</div>` : ''}
                 </div>
             </div>
-        `).join('');
+        `}).join('');
         html += '</div>';
     }
 
     container.innerHTML = html || '<p class="empty-text">No hay operadores</p>';
+}
+
+// Helper: Rendimiento del operador
+function obtenerRendimientoOperador(operadorId, estacionId) {
+    const maquina = supervisoraState.maquinas[estacionId];
+    const piezas = maquina?.piezasHoy || 0;
+    const hora = new Date().getHours();
+    const horasTrabajadas = Math.max(1, hora - 8); // Asumiendo inicio a las 8am
+    const piezasPorHora = Math.round(piezas / horasTrabajadas);
+
+    let nivel = 'bueno';
+    if (piezas === 0) nivel = 'bajo';
+    else if (piezasPorHora < 5) nivel = 'bajo';
+    else if (piezasPorHora < 15) nivel = 'regular';
+
+    // Carga de trabajo (basado en cola de procesos)
+    const cola = maquina?.colaProcesos?.length || 0;
+    const carga = Math.min(100, (cola + 1) * 25);
+    const cargaNivel = carga >= 75 ? 'alta' : carga >= 50 ? 'media' : 'baja';
+
+    return { piezas, piezasPorHora, nivel, carga, cargaNivel };
+}
+
+// Helper: Habilidades del operador (basado en su área y tipo)
+function obtenerHabilidadesHTML(op) {
+    const areas = [];
+    if (op.area) areas.push(op.area);
+    if (op.especialidad) areas.push(op.especialidad);
+
+    // Inferir habilidades del historial de asignaciones
+    if (areas.length === 0) {
+        try {
+            const liberaciones = JSON.parse(localStorage.getItem('supervisora_liberaciones') || '[]');
+            const areasHistorial = new Set();
+            liberaciones.filter(l => l.operadorId === op.id).forEach(l => {
+                if (l.procesoNombre) {
+                    const tipo = l.procesoNombre.toLowerCase();
+                    if (tipo.includes('costura')) areasHistorial.add('Costura');
+                    if (tipo.includes('corte')) areasHistorial.add('Corte');
+                    if (tipo.includes('empaque')) areasHistorial.add('Empaque');
+                    if (tipo.includes('calidad')) areasHistorial.add('Calidad');
+                }
+            });
+            areasHistorial.forEach(a => areas.push(a));
+        } catch (e) {}
+    }
+
+    if (areas.length === 0) return '';
+    return `<div class="operador-habilidades">${areas.slice(0, 3).map(a => `<span class="operador-habilidad-tag">${a}</span>`).join('')}</div>`;
+}
+
+// Helper: Sugerencia inteligente de asignación
+function obtenerSugerenciaAsignacion(op) {
+    // Buscar estaciones con operador pero sin proceso o estaciones vacías con proceso urgente
+    const estacionesSinOperador = Object.entries(supervisoraState.maquinas)
+        .filter(([id, m]) => (!m.operadores || m.operadores.length === 0) && m.procesoNombre)
+        .map(([id]) => id);
+
+    if (estacionesSinOperador.length > 0) {
+        return `Asignar a ${estacionesSinOperador[0]}`;
+    }
+
+    // Buscar estaciones sobrecargadas (muchos procesos en cola)
+    const estacionesCargadas = Object.entries(supervisoraState.maquinas)
+        .filter(([id, m]) => m.colaProcesos && m.colaProcesos.length >= 3)
+        .sort((a, b) => (b[1].colaProcesos?.length || 0) - (a[1].colaProcesos?.length || 0));
+
+    if (estacionesCargadas.length > 0) {
+        return `Apoyo en ${estacionesCargadas[0][0]} (${estacionesCargadas[0][1].colaProcesos.length} en cola)`;
+    }
+
+    return null;
 }
 
 function renderProcesosActivos() {
@@ -2155,7 +2286,7 @@ function showEstacionDetalle(estacionId) {
                     <button class="btn-liberar-sm" onclick="solicitarLiberacion('${estacionId}', ${op.id})" title="Liberar operador">
                         <i class="fas fa-user-clock"></i>
                     </button>
-                    <button class="btn-remove-sm" onclick="removeOperadorFromEstacion('${estacionId}', ${op.id})" title="Quitar operador">
+                    <button class="btn-remove-sm" onclick="solicitarRemoverOperador('${estacionId}', ${op.id})" title="Quitar operador">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -2434,11 +2565,17 @@ function modalAddOperador(estacionId) {
     openEstacionModal(estacionId);
 }
 
-// Quitar operador desde el modal
+// Quitar operador desde el modal — requiere captura de piezas si hay proceso activo
 function modalRemoveOperador(estacionId, operadorId) {
-    removeOperadorFromEstacion(estacionId, operadorId);
-    // Refrescar el modal
-    openEstacionModal(estacionId);
+    const maquina = supervisoraState.maquinas[estacionId];
+    if (maquina && maquina.procesoNombre) {
+        mostrarModalCapturaPiezasObligatoria(estacionId, operadorId, 'remover', () => {
+            openEstacionModal(estacionId);
+        });
+    } else {
+        removeOperadorFromEstacion(estacionId, operadorId);
+        openEstacionModal(estacionId);
+    }
 }
 
 function saveEstacionChanges(estacionId) {
@@ -2553,6 +2690,36 @@ function assignOperadorToEstacion(operadorId, estacionId) {
     if (maquina.operadores.some(op => op.id === operadorId)) {
         showToast(`${operador.nombre} ya está en ${estacionId}`, 'warning');
         return;
+    }
+
+    // Verificar si el operador está en otra estación CON proceso activo → pedir piezas primero
+    const estacionOrigen = Object.entries(supervisoraState.maquinas).find(([id, m]) =>
+        id !== estacionId && m.operadores && m.operadores.some(op => op.id === operadorId)
+    );
+
+    if (estacionOrigen) {
+        const [origenId, origenMaquina] = estacionOrigen;
+        if (origenMaquina.procesoNombre) {
+            // Hay proceso activo — pedir captura de piezas antes de mover
+            mostrarModalCapturaPiezasObligatoria(origenId, operadorId, 'reasignar', () => {
+                ejecutarAsignacionOperador(operadorId, estacionId);
+            });
+            return;
+        }
+    }
+
+    ejecutarAsignacionOperador(operadorId, estacionId);
+}
+
+function ejecutarAsignacionOperador(operadorId, estacionId) {
+    const operador = supervisoraState.operadores.find(o => o.id === operadorId);
+    if (!operador) return;
+
+    const maquina = supervisoraState.maquinas[estacionId];
+    if (!maquina) return;
+
+    if (!maquina.operadores) {
+        maquina.operadores = [];
     }
 
     // Quitar operador de OTRAS estaciones (un operador solo puede estar en una estación)
@@ -2974,6 +3141,125 @@ function applyZoom() {
 }
 
 // ========================================
+// FILTROS DEL MAPA DE PLANTA
+// ========================================
+
+var mapaFiltroActual = 'todos';
+
+function filtrarMapa(filtro) {
+    mapaFiltroActual = filtro;
+
+    // Actualizar botones activos
+    document.querySelectorAll('.filtro-mapa-btn').forEach(btn => btn.classList.remove('active'));
+    const btnActivo = document.querySelector(`.filtro-mapa-btn[onclick*="${filtro}"]`);
+    if (btnActivo) btnActivo.classList.add('active');
+
+    // Limpiar clases de filtro previas
+    document.querySelectorAll('.estacion-element').forEach(el => {
+        el.classList.remove('filtro-dimmed', 'heatmap-alta', 'heatmap-media', 'heatmap-baja', 'heatmap-inactiva', 'pedido-highlight');
+        el.removeAttribute('data-flujo-paso');
+    });
+
+    if (filtro === 'todos') return;
+
+    const maquinas = supervisoraState.maquinas;
+    const tiemposMuertosActivos = supervisoraState.tiemposMuertos?.activos || {};
+
+    Object.entries(maquinas).forEach(([id, m]) => {
+        const el = document.getElementById('estacion-' + id);
+        if (!el) return;
+
+        switch (filtro) {
+            case 'problemas':
+                // Mostrar solo estaciones con tiempos muertos, retrasadas o inactivas con operador
+                const tieneProblema = tiemposMuertosActivos[id] || m.estado === 'retrasado' ||
+                    (m.operadores?.length > 0 && !m.procesoNombre);
+                if (!tieneProblema) el.classList.add('filtro-dimmed');
+                break;
+
+            case 'urgentes':
+                // Mostrar solo estaciones trabajando en pedidos urgentes
+                const pedido = supervisoraState.pedidosHoy.find(p => p.id == m.pedidoId);
+                const esUrgente = pedido && (pedido.prioridad === 'alta' || pedido.prioridad === 'urgente');
+                if (!esUrgente) el.classList.add('filtro-dimmed');
+                break;
+
+            case 'heatmap':
+                // Color por productividad
+                if (!m.operadores || m.operadores.length === 0) {
+                    el.classList.add('heatmap-inactiva');
+                } else if (m.piezasHoy >= 50) {
+                    el.classList.add('heatmap-alta');
+                } else if (m.piezasHoy >= 20) {
+                    el.classList.add('heatmap-media');
+                } else {
+                    el.classList.add('heatmap-baja');
+                }
+                break;
+
+            case 'libres':
+                // Solo estaciones sin proceso o inactivas
+                const estaLibre = !m.procesoNombre || m.estado === 'inactivo';
+                if (!estaLibre) el.classList.add('filtro-dimmed');
+                break;
+        }
+    });
+}
+
+// Filtrar mapa por área (llamado desde flujo de áreas en dashboard)
+function filtrarMapaPorArea(areaId) {
+    showSection('planta');
+    setTimeout(() => {
+        const areaMap = {
+            'corte': ['corte', 'mesa', 'ac', 'df', 'b'],
+            'serigrafia': ['serigrafia', 's'],
+            'costura': ['costura', 'c'],
+            'calidad': ['calidad'],
+            'empaque': ['empaque', 'e', 'ec']
+        };
+        const prefijos = areaMap[areaId] || [];
+
+        document.querySelectorAll('.estacion-element').forEach(el => {
+            el.classList.remove('filtro-dimmed');
+            const estId = (el.id || '').replace('estacion-', '').toLowerCase();
+            const match = prefijos.some(p => estId.startsWith(p));
+            if (!match) el.classList.add('filtro-dimmed');
+        });
+
+        // Actualizar botón activo
+        document.querySelectorAll('.filtro-mapa-btn').forEach(btn => btn.classList.remove('active'));
+    }, 400);
+}
+
+// Resaltar flujo de un pedido específico en el mapa
+function resaltarFlujoPedido(pedidoId) {
+    // Limpiar filtros previos
+    filtrarMapa('todos');
+
+    let paso = 1;
+    const maquinas = supervisoraState.maquinas;
+
+    // Encontrar todas las estaciones trabajando en este pedido
+    Object.entries(maquinas).forEach(([id, m]) => {
+        const el = document.getElementById('estacion-' + id);
+        if (!el) return;
+
+        const trabajaEnPedido = m.pedidoId == pedidoId ||
+            (m.colaProcesos && m.colaProcesos.some(p => p.pedidoId == pedidoId));
+
+        if (trabajaEnPedido) {
+            el.classList.add('pedido-highlight');
+            el.setAttribute('data-flujo-paso', paso);
+            paso++;
+        } else {
+            el.classList.add('filtro-dimmed');
+        }
+    });
+
+    showToast(`Mostrando flujo del pedido #${pedidoId} (${paso - 1} estación${paso - 1 !== 1 ? 'es' : ''})`, 'info');
+}
+
+// ========================================
 // UTILIDADES
 // ========================================
 
@@ -3248,6 +3534,144 @@ function guardarRegistroLiberacion(registro) {
     // Guardar
     localStorage.setItem('supervisora_liberaciones', JSON.stringify(registros));
     DEBUG_MODE && console.log('Registro de liberación guardado:', registro);
+}
+
+// ========================================
+// CAPTURA OBLIGATORIA DE PIEZAS ANTES DE REASIGNACIÓN
+// ========================================
+
+// Solicitar remover operador — verifica si necesita captura de piezas
+function solicitarRemoverOperador(estacionId, operadorId) {
+    const maquina = supervisoraState.maquinas[estacionId];
+    if (!maquina) return;
+
+    if (maquina.procesoNombre) {
+        mostrarModalCapturaPiezasObligatoria(estacionId, operadorId, 'remover');
+    } else {
+        removeOperadorFromEstacion(estacionId, operadorId);
+    }
+}
+
+// Modal obligatorio de captura de piezas antes de mover/quitar operador
+function mostrarModalCapturaPiezasObligatoria(estacionId, operadorId, accion, callbackDespues) {
+    const maquina = supervisoraState.maquinas[estacionId];
+    if (!maquina) return;
+
+    const operador = maquina.operadores?.find(op => op.id === operadorId);
+    if (!operador) {
+        // El operador ya no está — ejecutar callback si existe
+        if (callbackDespues) callbackDespues();
+        return;
+    }
+
+    const accionTexto = accion === 'reasignar' ? 'Reasignar' : 'Quitar';
+    const accionIcono = accion === 'reasignar' ? 'fa-exchange-alt' : 'fa-user-minus';
+
+    const content = `
+        <div class="captura-obligatoria-form">
+            <div class="captura-obligatoria-aviso">
+                <i class="fas fa-exclamation-circle"></i>
+                <p>Antes de ${accion === 'reasignar' ? 'reasignar' : 'quitar'} a <strong>${operador.nombre}</strong>, debe registrar las piezas completadas en el proceso actual.</p>
+            </div>
+
+            <div class="captura-info-operador">
+                <div class="captura-op-avatar">${getIniciales(operador.nombre)}</div>
+                <div class="captura-op-detalles">
+                    <strong>${operador.nombre}</strong>
+                    <span class="text-muted">Estación: ${estacionId}</span>
+                    <span class="captura-proceso-actual">
+                        <i class="fas fa-cog"></i> ${maquina.procesoNombre}
+                        ${maquina.pedidoCodigo ? `<small>(${maquina.pedidoCodigo})</small>` : ''}
+                    </span>
+                </div>
+            </div>
+
+            <div class="captura-piezas-input-group">
+                <label><i class="fas fa-cubes"></i> Piezas completadas en este proceso <span class="required">*</span></label>
+                <div class="captura-piezas-row">
+                    <button class="btn-piezas-ajuste" onclick="ajustarPiezasCaptura(-10)">-10</button>
+                    <button class="btn-piezas-ajuste" onclick="ajustarPiezasCaptura(-1)">-1</button>
+                    <input type="number" id="capturaPiezasObligatoria" value="${maquina.piezasHoy || 0}" min="0" class="form-control captura-piezas-input" autofocus>
+                    <button class="btn-piezas-ajuste" onclick="ajustarPiezasCaptura(1)">+1</button>
+                    <button class="btn-piezas-ajuste" onclick="ajustarPiezasCaptura(10)">+10</button>
+                </div>
+                <span class="captura-piezas-hint">Registradas previamente: ${maquina.piezasHoy || 0} piezas</span>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-comment"></i> Observaciones (opcional)</label>
+                <textarea id="capturaObservaciones" class="form-control" rows="2" placeholder="Razón del movimiento..."></textarea>
+            </div>
+        </div>
+    `;
+
+    // Guardar callback para después de confirmar
+    window._capturaCallback = callbackDespues || null;
+    window._capturaAccion = accion;
+
+    const footer = `
+        <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmarCapturaPiezasObligatoria('${estacionId}', ${operadorId})">
+            <i class="fas ${accionIcono}"></i> Registrar y ${accionTexto}
+        </button>
+    `;
+
+    openModal(`Captura de Piezas — ${accionTexto} Operador`, content, footer);
+
+    // Auto-seleccionar el input
+    setTimeout(() => {
+        const input = document.getElementById('capturaPiezasObligatoria');
+        if (input) { input.select(); input.focus(); }
+    }, 200);
+}
+
+function ajustarPiezasCaptura(delta) {
+    const input = document.getElementById('capturaPiezasObligatoria');
+    if (!input) return;
+    const val = Math.max(0, (parseInt(input.value) || 0) + delta);
+    input.value = val;
+}
+
+function confirmarCapturaPiezasObligatoria(estacionId, operadorId) {
+    const piezasInput = document.getElementById('capturaPiezasObligatoria');
+    const observaciones = document.getElementById('capturaObservaciones')?.value || '';
+    const piezas = parseInt(piezasInput?.value) || 0;
+    const accion = window._capturaAccion || 'remover';
+
+    const maquina = supervisoraState.maquinas[estacionId];
+    if (!maquina) return;
+
+    const operador = maquina.operadores?.find(op => op.id === operadorId);
+
+    // Registrar la captura en historial
+    guardarRegistroLiberacion({
+        estacionId,
+        operadorId,
+        operadorNombre: operador?.nombre || 'Desconocido',
+        procesoId: maquina.procesoId,
+        procesoNombre: maquina.procesoNombre,
+        pedidoId: maquina.pedidoId,
+        piezasCompletadas: piezas,
+        observaciones: observaciones || `${accion === 'reasignar' ? 'Reasignación' : 'Remoción'} de operador`,
+        motivo: accion === 'reasignar' ? 'cambio_area' : 'reorganizacion',
+        fecha: new Date().toISOString()
+    });
+
+    // Actualizar piezas en la estación
+    maquina.piezasHoy = piezas;
+
+    // Remover el operador de la estación
+    removeOperadorFromEstacion(estacionId, operadorId);
+
+    closeModal();
+
+    showToast(`${operador?.nombre || 'Operador'}: ${piezas} piezas registradas antes de ${accion === 'reasignar' ? 'reasignación' : 'remoción'}`, 'success');
+
+    // Ejecutar callback (p.ej. completar la asignación a la nueva estación)
+    const callback = window._capturaCallback;
+    window._capturaCallback = null;
+    window._capturaAccion = null;
+    if (callback) callback();
 }
 
 // ========================================
@@ -7656,47 +8080,73 @@ function sincronizarOperadoresDesdeAdmin() {
 function mostrarModalEnviarMensaje(destinatarioId = 'todos') {
     const operadoras = JSON.parse(localStorage.getItem('operadoras_db') || '[]');
 
+    // Mensajes predefinidos operativos
+    const mensajesPredefinidos = [
+        { icono: 'fa-box-open', texto: 'Necesito material en la estación', categoria: 'Material' },
+        { icono: 'fa-truck-loading', texto: 'Recoger producto terminado', categoria: 'Logística' },
+        { icono: 'fa-bolt', texto: 'Por favor acelerar el ritmo de producción', categoria: 'Producción' },
+        { icono: 'fa-coffee', texto: 'Descanso en 10 minutos', categoria: 'Descanso' },
+        { icono: 'fa-tools', texto: 'Reportar máquina con problema', categoria: 'Máquina' },
+        { icono: 'fa-exchange-alt', texto: 'Cambio de proceso próximo, favor preparar', categoria: 'Proceso' },
+        { icono: 'fa-clipboard-list', texto: 'Reunión breve al terminar el turno', categoria: 'Reunión' },
+        { icono: 'fa-star', texto: 'Excelente trabajo, sigan así', categoria: 'Motivación' }
+    ];
+
+    // Historial reciente de mensajes enviados
+    const mensajesEnviados = JSON.parse(localStorage.getItem('mensajes_operadoras') || '[]');
+    const recientes = mensajesEnviados.slice(0, 3);
+
     const content = `
         <div class="enviar-mensaje-form">
             <div class="form-group">
-                <label>Destinatario</label>
+                <label><i class="fas fa-user"></i> Destinatario</label>
                 <select id="mensajeDestinatario" class="form-control">
-                    <option value="todos" ${destinatarioId === 'todos' ? 'selected' : ''}>
-                        📢 Todas las operadoras
-                    </option>
+                    <option value="todos" ${destinatarioId === 'todos' ? 'selected' : ''}>Todas las operadoras</option>
                     ${operadoras.map(op => `
-                        <option value="${op.id}" ${destinatarioId == op.id ? 'selected' : ''}>
-                            👤 ${op.nombre}
-                        </option>
+                        <option value="${op.id}" ${destinatarioId == op.id ? 'selected' : ''}>${op.nombre}</option>
                     `).join('')}
                 </select>
             </div>
+
             <div class="form-group">
-                <label>Mensaje</label>
-                <textarea id="mensajeTexto" class="form-control" rows="4"
-                          placeholder="Escribe tu mensaje..."></textarea>
-            </div>
-            <div class="mensajes-rapidos" style="margin-top: 12px;">
-                <label style="font-size: 12px; color: #888;">Mensajes rápidos:</label>
-                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;">
-                    <button type="button" class="btn btn-sm btn-outline"
-                            onclick="document.getElementById('mensajeTexto').value='Por favor acelerar el ritmo de producción'">
-                        ⚡ Acelerar
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline"
-                            onclick="document.getElementById('mensajeTexto').value='Descanso en 10 minutos'">
-                        ☕ Descanso
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline"
-                            onclick="document.getElementById('mensajeTexto').value='Reunión breve al terminar el turno'">
-                        📋 Reunión
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline"
-                            onclick="document.getElementById('mensajeTexto').value='¡Excelente trabajo! Sigan así'">
-                        👏 Felicitar
-                    </button>
+                <label><i class="fas fa-comment"></i> Mensajes Rápidos</label>
+                <div class="mensajes-rapidos-grid">
+                    ${mensajesPredefinidos.map(m => `
+                        <button type="button" class="mensaje-rapido-btn" onclick="document.getElementById('mensajeTexto').value='${m.texto}'">
+                            <i class="fas ${m.icono}"></i>
+                            <span>${m.categoria}</span>
+                        </button>
+                    `).join('')}
                 </div>
             </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-edit"></i> Mensaje</label>
+                <textarea id="mensajeTexto" class="form-control" rows="3"
+                          placeholder="Escribe tu mensaje o selecciona uno rápido arriba..."></textarea>
+            </div>
+
+            ${recientes.length > 0 ? `
+            <div class="form-group" style="margin-top:8px">
+                <label style="font-size:0.75rem;color:#64748b"><i class="fas fa-history"></i> Últimos mensajes enviados</label>
+                <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">
+                    ${recientes.map(m => {
+                        const hace = Math.floor((Date.now() - new Date(m.fecha).getTime()) / 60000);
+                        const leidoPor = m.leidoPor?.length || 0;
+                        const totalDest = m.destinatarioId === 'todos' ? operadoras.length : 1;
+                        return `
+                        <div style="display:flex;align-items:center;gap:8px;font-size:0.75rem;padding:4px 8px;background:rgba(0,0,0,0.1);border-radius:6px">
+                            <span style="flex:1;color:#8b9dc3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.texto}</span>
+                            <span class="msg-confirmacion-lectura ${leidoPor >= totalDest ? 'leido' : 'pendiente'}">
+                                <i class="fas ${leidoPor >= totalDest ? 'fa-check-double' : 'fa-clock'}"></i>
+                                ${leidoPor}/${totalDest}
+                            </span>
+                            <span style="color:#475569;white-space:nowrap">${hace < 60 ? hace + 'm' : Math.floor(hace / 60) + 'h'}</span>
+                        </div>
+                    `}).join('')}
+                </div>
+            </div>
+            ` : ''}
         </div>
     `;
 
@@ -7723,7 +8173,7 @@ function confirmarEnvioMensaje() {
         id: Date.now(),
         texto: texto,
         destinatarioId: destinatario,
-        remitente: 'Coco',
+        remitente: 'Supervisora',
         fecha: new Date().toISOString(),
         leido: false,
         leidoPor: []
@@ -7731,7 +8181,7 @@ function confirmarEnvioMensaje() {
     localStorage.setItem('mensajes_operadoras', JSON.stringify(mensajes.slice(0, 100)));
 
     closeModal();
-    showToast('Mensaje enviado a operadoras', 'success');
+    showToast('Mensaje enviado', 'success');
 }
 
 DEBUG_MODE && console.log('[SUPERVISORA] Funciones de integración con Operadora cargadas');

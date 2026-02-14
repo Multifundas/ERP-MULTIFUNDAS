@@ -160,6 +160,15 @@
                     </div>
                 </div>
 
+                <!-- Filtros rápidos del mapa -->
+                <div class="plant-filtros-bar" id="plantFiltrosBar">
+                    <button class="filtro-mapa-btn active" onclick="filtrarMapa('todos')">Todos</button>
+                    <button class="filtro-mapa-btn danger" onclick="filtrarMapa('problemas')"><i class="fas fa-exclamation-triangle"></i> Con Problemas</button>
+                    <button class="filtro-mapa-btn warning" onclick="filtrarMapa('urgentes')"><i class="fas fa-fire"></i> Pedidos Urgentes</button>
+                    <button class="filtro-mapa-btn" onclick="filtrarMapa('heatmap')"><i class="fas fa-temperature-high"></i> Heatmap</button>
+                    <button class="filtro-mapa-btn" onclick="filtrarMapa('libres')"><i class="fas fa-inbox"></i> Sin Proceso</button>
+                </div>
+
                 <div class="plant-map-container">
                     <div class="plant-map" id="plantMap">
                         <!-- Se carga desde el layout guardado -->
