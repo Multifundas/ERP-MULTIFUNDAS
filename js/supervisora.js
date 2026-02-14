@@ -1872,9 +1872,26 @@ function renderProcesosActivos() {
     `).join('');
 }
 
+// Alertas descartadas por la supervisora en esta sesión
+// Clave = "tipo:cantidad" para que reaparezca si la situación cambia
+function getAlertasDescartadas() {
+    try {
+        return JSON.parse(sessionStorage.getItem('sup_alertas_descartadas') || '{}');
+    } catch (e) { return {}; }
+}
+
+function descartarAlertaSup(alertaKey) {
+    var descartadas = getAlertasDescartadas();
+    descartadas[alertaKey] = true;
+    sessionStorage.setItem('sup_alertas_descartadas', JSON.stringify(descartadas));
+    renderAlertas();
+}
+window.descartarAlertaSup = descartarAlertaSup;
+
 function renderAlertas() {
     const container = document.getElementById('alertasList');
     const alertas = [];
+    const descartadas = getAlertasDescartadas();
 
     // 1. Estaciones con operador pero sin proceso asignado
     const sinProceso = Object.values(supervisoraState.maquinas).filter(m =>
@@ -1882,6 +1899,7 @@ function renderAlertas() {
     );
     if (sinProceso.length > 0) {
         alertas.push({
+            key: 'sin_proceso_' + sinProceso.length,
             tipo: 'warning',
             mensaje: `${sinProceso.length} estacion${sinProceso.length > 1 ? 'es' : ''} sin proceso`,
             icono: 'fa-exclamation-triangle',
@@ -1901,6 +1919,7 @@ function renderAlertas() {
     });
     if (procesosPendientes > 0) {
         alertas.push({
+            key: 'proc_sin_asignar_' + procesosPendientes,
             tipo: 'info',
             mensaje: `${procesosPendientes} proceso${procesosPendientes > 1 ? 's' : ''} sin asignar`,
             icono: 'fa-tasks'
@@ -1913,6 +1932,7 @@ function renderAlertas() {
     );
     if (urgentes.length > 0) {
         alertas.push({
+            key: 'urgentes_' + urgentes.length,
             tipo: 'danger',
             mensaje: `${urgentes.length} pedido${urgentes.length > 1 ? 's' : ''} urgente${urgentes.length > 1 ? 's' : ''}`,
             icono: 'fa-fire'
@@ -1923,6 +1943,7 @@ function renderAlertas() {
     const retrasadas = Object.values(supervisoraState.maquinas).filter(m => m.estado === 'retrasado');
     if (retrasadas.length > 0) {
         alertas.push({
+            key: 'retrasadas_' + retrasadas.length,
             tipo: 'danger',
             mensaje: `${retrasadas.length} estacion${retrasadas.length > 1 ? 'es' : ''} retrasada${retrasadas.length > 1 ? 's' : ''}`,
             icono: 'fa-clock',
@@ -1936,6 +1957,7 @@ function renderAlertas() {
     );
     if (operadoresDisponibles.length > 0) {
         alertas.push({
+            key: 'op_disponibles_' + operadoresDisponibles.length,
             tipo: 'info',
             mensaje: `${operadoresDisponibles.length} operador${operadoresDisponibles.length > 1 ? 'es' : ''} disponible${operadoresDisponibles.length > 1 ? 's' : ''}`,
             icono: 'fa-user-plus',
@@ -1947,13 +1969,17 @@ function renderAlertas() {
     const inactivas = Object.values(supervisoraState.maquinas).filter(m => m.estado === 'inactivo');
     if (inactivas.length > 3) {
         alertas.push({
+            key: 'inactivas_' + inactivas.length,
             tipo: 'warning',
             mensaje: `${inactivas.length} estaciones inactivas`,
             icono: 'fa-power-off'
         });
     }
 
-    if (alertas.length === 0) {
+    // Filtrar alertas descartadas por la supervisora
+    const alertasVisibles = alertas.filter(a => !descartadas[a.key]);
+
+    if (alertasVisibles.length === 0) {
         container.innerHTML = `
             <div class="empty-text success">
                 <i class="fas fa-check-circle"></i>
@@ -1962,13 +1988,16 @@ function renderAlertas() {
         return;
     }
 
-    container.innerHTML = alertas.map(a => `
+    container.innerHTML = alertasVisibles.map(a => `
         <div class="alerta-item ${a.tipo}">
             <i class="fas ${a.icono}"></i>
             <div class="alerta-content">
                 <span class="alerta-mensaje">${S(a.mensaje)}</span>
                 ${a.detalle ? `<span class="alerta-detalle">${S(a.detalle)}</span>` : ''}
             </div>
+            <button class="alerta-dismiss" onclick="descartarAlertaSup('${a.key}')" title="Descartar">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
     `).join('');
 }

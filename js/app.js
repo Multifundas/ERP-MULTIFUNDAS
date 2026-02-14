@@ -795,21 +795,19 @@ function aplicarPermisos() {
         'usuarios': 'gestionar_usuarios'
     };
 
-    // Ocultar items del sidebar según permisos
+    // Mostrar/ocultar items del sidebar según permisos
     document.querySelectorAll('.nav-item[data-section]').forEach(function(item) {
         var seccion = item.dataset.section;
         var permiso = seccionPermisos[seccion];
-        if (permiso && !tienePermiso(permiso)) {
-            item.style.display = 'none';
+        if (permiso) {
+            item.style.display = tienePermiso(permiso) ? '' : 'none';
         }
     });
 
     // Ocultar botones de exportación si no tiene permiso
-    if (!tienePermiso('exportar_datos')) {
-        document.querySelectorAll('[onclick*="exportar"], [onclick*="export"]').forEach(function(btn) {
-            btn.style.display = 'none';
-        });
-    }
+    document.querySelectorAll('[onclick*="exportar"], [onclick*="export"]').forEach(function(btn) {
+        btn.style.display = tienePermiso('exportar_datos') ? '' : 'none';
+    });
 }
 
 // ========================================

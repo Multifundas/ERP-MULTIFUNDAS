@@ -168,6 +168,10 @@
                     if (row.user_rol === requiredRole || row.user_rol === 'admin') {
                         setSession(row);
                         removeLoginScreen();
+                        // Re-aplicar permisos ahora que hay sesión activa
+                        if (typeof aplicarPermisos === 'function') {
+                            aplicarPermisos();
+                        }
                         return;
                     } else {
                         errorEl.textContent = 'No tienes permiso para acceder a este panel';

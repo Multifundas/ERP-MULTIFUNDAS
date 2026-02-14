@@ -1320,6 +1320,25 @@ body {
     color: #3b82f6;
 }
 
+/* Dismiss button */
+.alerta-dismiss {
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 0.65rem;
+    flex-shrink: 0;
+    border-radius: 4px;
+    transition: color 0.2s, background 0.2s;
+    align-self: center;
+}
+
+.alerta-dismiss:hover {
+    color: #e5e7eb;
+    background: rgba(255, 255, 255, 0.1);
+}
+
 /* Todo en orden */
 .empty-text.success {
     color: #10b981;
