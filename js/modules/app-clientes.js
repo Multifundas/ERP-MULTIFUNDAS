@@ -788,3 +788,46 @@ function editClienteEnhanced(id) {
 
 // Exportar clientes a Excel
 function exportClientesToExcel() {
+    const clientes = db.getClientes();
+
+    const tempTable = document.createElement('table');
+    tempTable.innerHTML = `
+        <thead>
+            <tr>
+                <th>Nombre Comercial</th>
+                <th>Razón Social</th>
+                <th>RFC</th>
+                <th>Tipo</th>
+                <th>Contacto</th>
+                <th>Email</th>
+                <th>Teléfono</th>
+                <th>Dirección</th>
+                <th>Portal</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${clientes.map(c => `
+                <tr>
+                    <td>${c.nombreComercial}</td>
+                    <td>${c.razonSocial}</td>
+                    <td>${c.rfc || ''}</td>
+                    <td>${c.tipo}</td>
+                    <td>${c.contacto}</td>
+                    <td>${c.email}</td>
+                    <td>${c.telefono || ''}</td>
+                    <td>${c.direccion || ''}</td>
+                    <td>${c.accesoPortal ? 'Sí' : 'No'}</td>
+                </tr>
+            `).join('')}
+        </tbody>
+    `;
+
+    tempTable.id = 'tempClientesTable';
+    document.body.appendChild(tempTable);
+    tempTable.style.display = 'none';
+
+    exportTableToExcel('tempClientesTable', 'clientes');
+
+    document.body.removeChild(tempTable);
+    showToast('Exportación completada');
+}
