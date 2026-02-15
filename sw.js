@@ -3,7 +3,7 @@
 // Network-first para archivos propios, cache-first para CDN
 // ========================================
 
-var CACHE_NAME = 'erp-multifundas-v20';
+var CACHE_NAME = 'erp-multifundas-v21';
 var STATIC_ASSETS = [
     '/',
     '/index.html',

@@ -2646,14 +2646,14 @@
     }
 
     .nav-tab {
-        padding: 5px 10px;
-        font-size: 0.72rem;
+        padding: 6px 12px;
+        font-size: 0.82rem;
         border-radius: 6px;
         flex-shrink: 0;
     }
 
     .nav-tab i {
-        font-size: 0.82rem;
+        font-size: 0.95rem;
     }
 
     .nav-tab span {

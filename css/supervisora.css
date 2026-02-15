@@ -1746,34 +1746,33 @@ body {
     .supervisora-header {
         flex-wrap: wrap;
         height: auto;
-        padding: 6px 8px;
-        gap: 4px;
+        padding: 8px 10px;
+        gap: 6px;
     }
 
     .header-left {
-        flex: 0 0 auto;
+        flex: 1 1 auto;
         min-width: 0;
-        max-width: 50%;
     }
 
     .header-left h1 {
-        font-size: 0.78rem;
+        font-size: 0.85rem;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
     .header-left .back-link {
-        font-size: 0.78rem;
+        font-size: 0.85rem;
         padding: 4px 6px;
     }
 
     .header-badge {
-        font-size: 0.5rem;
-        padding: 2px 5px;
+        font-size: 0.55rem;
+        padding: 2px 6px;
     }
 
-    /* Stats bar compact on mobile - force full width new row below header */
+    /* Stats bar - compact inline on mobile */
     .header-center {
         display: flex;
         flex-basis: 100%;
@@ -1782,61 +1781,55 @@ body {
 
     .stats-bar {
         justify-content: space-around;
-        gap: 4px;
-        padding: 4px 6px;
+        gap: 2px;
+        padding: 6px 8px;
         width: 100%;
         background: rgba(0, 0, 0, 0.3);
-        border-radius: 6px;
+        border-radius: 8px;
     }
 
     .stat-value {
-        font-size: 0.8rem;
+        font-size: 0.95rem;
+        font-weight: 700;
     }
 
     .stat-label {
-        font-size: 0.48rem;
+        font-size: 0.55rem;
         letter-spacing: 0;
+        text-transform: uppercase;
     }
 
+    /* Header right - only show essential buttons */
     .header-right {
         display: flex;
-        gap: 3px;
-        flex-wrap: wrap;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
+        gap: 4px;
+        flex-wrap: nowrap;
+        align-items: center;
     }
 
     .header-right .btn-icon {
-        width: 36px;
-        height: 36px;
-        font-size: 12px;
+        width: 34px;
+        height: 34px;
+        font-size: 13px;
         flex-shrink: 0;
     }
 
-    /* Hide text on header buttons - use font-size trick since text is not in spans */
-    .header-right .btn-outline,
-    .header-right .btn-inventario {
+    /* Hide non-essential buttons on mobile */
+    #btnModoTV,
+    .theme-toggle,
+    .header-right .btn-inventario,
+    .header-right a.btn-inventario {
+        display: none;
+    }
+
+    /* Keep sync indicator but smaller */
+    .sync-indicator {
         font-size: 0;
-        padding: 6px;
-        flex-shrink: 0;
-        gap: 0;
-        width: 36px;
-        height: 36px;
-        justify-content: center;
     }
-
-    .header-right .btn-outline i,
-    .header-right .btn-inventario i {
-        font-size: 11px;
+    .sync-indicator #syncDot {
+        font-size: 8px !important;
     }
-
-    .theme-toggle {
-        transform: scale(0.65);
-        flex-shrink: 0;
-    }
-
-    /* On mobile, hide less important header buttons */
-    #btnModoTV {
+    .sync-indicator #syncLabel {
         display: none;
     }
 
@@ -1858,10 +1851,30 @@ body {
     .sidebar-left,
     .sidebar-right {
         width: 100%;
-        max-height: 40vh;
-        overflow-y: auto;
+        max-height: none;
+        overflow-y: visible;
         flex-shrink: 0;
         flex-direction: column;
+        border-bottom: 2px solid #3d4a5c;
+    }
+
+    .sidebar-left .pedidos-list-expanded {
+        max-height: 35vh;
+        overflow-y: auto;
+    }
+
+    .sidebar-left .operadores-list {
+        max-height: 25vh;
+        overflow-y: auto;
+    }
+
+    .sidebar-right {
+        border-bottom: none;
+    }
+
+    .sidebar-right .estacion-detalle {
+        max-height: 30vh;
+        overflow-y: auto;
     }
 
     .sidebar-section {
@@ -1871,7 +1884,12 @@ body {
     }
 
     .sidebar-section h3 {
-        font-size: 0.72rem;
+        font-size: 0.8rem;
+        padding: 4px 0;
+        position: sticky;
+        top: 0;
+        background: #1a1f2e;
+        z-index: 2;
     }
 
     /* ---- NEW SECTIONS MOBILE ---- */
