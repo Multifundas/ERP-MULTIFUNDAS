@@ -2250,10 +2250,14 @@ body {
         overflow-y: visible;
         overflow-x: hidden;
         height: auto;
+        flex: none;
+        gap: 12px;
+        padding: 12px;
     }
 
     .panel-column {
         overflow: visible;
+        min-height: 0;
     }
 
     .modal {
@@ -2287,6 +2291,24 @@ body {
 
     .problemas-grid {
         grid-template-columns: repeat(3, 1fr);
+    }
+
+    .login-screen {
+        overflow-y: auto;
+        align-items: flex-start;
+        padding: 20px 20px 40px;
+    }
+
+    .login-container {
+        margin: auto;
+        max-height: none;
+    }
+
+    .btn-config {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1001;
     }
 }
 
@@ -8605,6 +8627,11 @@ body {
         flex: 1;
         padding: 12px 14px;
         font-size: 0.85rem;
+    }
+
+    /* Login screen less padding on small phones */
+    .login-screen {
+        padding: 10px 15px 30px;
     }
 
     /* Login container less padding */
