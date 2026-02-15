@@ -2235,9 +2235,30 @@ body {
 }
 
 @media (max-width: 768px) {
+    html, body {
+        overflow-y: auto;
+        height: auto;
+    }
+
+    .panel-operadora {
+        height: auto;
+        min-height: 100vh;
+    }
+
     .panel-main {
         grid-template-columns: 1fr;
+        overflow-y: visible;
+        overflow-x: hidden;
+        height: auto;
+    }
+
+    .panel-column {
+        overflow: visible;
+    }
+
+    .modal {
         overflow-y: auto;
+        max-height: 85vh;
     }
 
     .col-captura {
@@ -5788,6 +5809,11 @@ body {
     .historial-row-op {
         grid-template-columns: 50px 45px 1fr 80px;
         font-size: 11px;
+    }
+
+    .menu-extra-panel {
+        width: 85vw;
+        max-width: 280px;
     }
 }
 

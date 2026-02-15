@@ -2662,7 +2662,8 @@
 
     .coco-section {
         height: auto;
-        min-height: calc(100vh - 100px);
+        min-height: 0;
+        overflow-y: visible;
     }
 
     .coco-dashboard-container,
