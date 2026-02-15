@@ -1806,9 +1806,9 @@ body {
     }
 
     .header-right .btn-icon {
-        width: 26px;
-        height: 26px;
-        font-size: 10px;
+        width: 36px;
+        height: 36px;
+        font-size: 12px;
         flex-shrink: 0;
     }
 
@@ -1819,8 +1819,8 @@ body {
         padding: 6px;
         flex-shrink: 0;
         gap: 0;
-        width: 26px;
-        height: 26px;
+        width: 36px;
+        height: 36px;
         justify-content: center;
     }
 
@@ -1839,10 +1839,22 @@ body {
         display: none;
     }
 
+    /* ---- MAIN LAYOUT MOBILE ---- */
+    .supervisora-main {
+        overflow-y: auto;
+    }
+
+    /* ---- COCO-NAV MOBILE ---- */
+    .coco-nav {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+    }
+
     /* ---- SIDEBARS MOBILE ---- */
     .sidebar-left,
     .sidebar-right {
-        max-height: 150px;
+        max-height: 35vh;
         flex-direction: column;
     }
 
@@ -1941,7 +1953,8 @@ body {
     }
 
     .pedidos-list-expanded {
-        max-height: 100px;
+        max-height: 25vh;
+        overflow-y: auto;
     }
 
     .pedido-card-expanded {
@@ -1953,7 +1966,8 @@ body {
     }
 
     .operadores-list {
-        max-height: 80px;
+        max-height: 20vh;
+        overflow-y: auto;
     }
 
     /* ---- PLANT MAP MOBILE ---- */
@@ -2148,15 +2162,15 @@ body {
     }
 
     .header-right .btn-icon {
-        width: 24px;
-        height: 24px;
-        font-size: 9px;
+        width: 34px;
+        height: 34px;
+        font-size: 11px;
     }
 
     .header-right .btn-outline,
     .header-right .btn-inventario {
-        width: 24px;
-        height: 24px;
+        width: 34px;
+        height: 34px;
         padding: 4px;
     }
 
@@ -2173,15 +2187,17 @@ body {
     /* Sidebars minimal height */
     .sidebar-left,
     .sidebar-right {
-        max-height: 130px;
+        max-height: 30vh;
     }
 
     .pedidos-list-expanded {
-        max-height: 70px;
+        max-height: 22vh;
+        overflow-y: auto;
     }
 
     .operadores-list {
-        max-height: 50px;
+        max-height: 18vh;
+        overflow-y: auto;
     }
 
     /* Plant map compact */

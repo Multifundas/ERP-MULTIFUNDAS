@@ -3620,8 +3620,8 @@ body {
     }
 
     .btn-header {
-        width: 38px;
-        height: 38px;
+        width: 44px;
+        height: 44px;
         font-size: 16px;
     }
 
@@ -8592,14 +8592,33 @@ body {
         height: 140px;
     }
 
-    /* Header buttons tighter */
+    /* Header overflow protection */
+    .header-left {
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .user-details {
+        min-width: 0;
+    }
+
+    .user-name,
+    .user-station {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 120px;
+    }
+
+    /* Header buttons - maintain minimum touch target */
     .header-right {
-        gap: 6px;
+        gap: 4px;
+        flex-shrink: 0;
     }
 
     .btn-header {
-        width: 38px;
-        height: 38px;
+        width: 44px;
+        height: 44px;
     }
 
     /* Modal tighter padding */
@@ -8909,7 +8928,7 @@ body {
     right: 0;
     bottom: 0;
     background: rgba(0,0,0,0.3);
-    z-index: 999;
+    z-index: 1001;
 }
 
 .menu-extra-panel {
@@ -8920,7 +8939,7 @@ body {
     height: 100vh;
     background: white;
     box-shadow: -4px 0 20px rgba(0,0,0,0.15);
-    z-index: 1000;
+    z-index: 1002;
     transition: right 0.3s ease;
     display: flex;
     flex-direction: column;

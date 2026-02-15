@@ -372,6 +372,14 @@ function initNavigation() {
 }
 
 function navigateTo(section) {
+    // Cerrar sidebar en móvil al navegar
+    if (window.innerWidth <= 768) {
+        var sidebar = document.getElementById('sidebar');
+        var sidebarBackdrop = document.getElementById('sidebarBackdrop');
+        if (sidebar) sidebar.classList.remove('active');
+        if (sidebarBackdrop) sidebarBackdrop.classList.remove('active');
+    }
+
     // Actualizar nav
     document.querySelectorAll('.nav-item').forEach(item => {
         item.classList.remove('active');
@@ -816,16 +824,43 @@ function aplicarPermisos() {
 function initTopBar() {
     const menuToggle = document.getElementById('menuToggle');
     const sidebar = document.getElementById('sidebar');
+    const sidebarBackdrop = document.getElementById('sidebarBackdrop');
     const notificationsBtn = document.getElementById('notificationsBtn');
     const notificationsPanel = document.getElementById('notificationsPanel');
 
+    function closeSidebarMobile() {
+        sidebar.classList.remove('active');
+        if (sidebarBackdrop) sidebarBackdrop.classList.remove('active');
+    }
+
     menuToggle.addEventListener('click', () => {
         if (window.innerWidth <= 768) {
-            sidebar.classList.toggle('active');
+            var isOpen = sidebar.classList.toggle('active');
+            if (sidebarBackdrop) {
+                if (isOpen) {
+                    sidebarBackdrop.classList.add('active');
+                } else {
+                    sidebarBackdrop.classList.remove('active');
+                }
+            }
         } else {
             sidebar.classList.toggle('collapsed');
             app.sidebarCollapsed = sidebar.classList.contains('collapsed');
         }
+    });
+
+    // Cerrar sidebar al tocar backdrop
+    if (sidebarBackdrop) {
+        sidebarBackdrop.addEventListener('click', closeSidebarMobile);
+    }
+
+    // Auto-cerrar sidebar al navegar en móvil
+    document.querySelectorAll('.nav-item').forEach(function(item) {
+        item.addEventListener('click', function() {
+            if (window.innerWidth <= 768) {
+                closeSidebarMobile();
+            }
+        });
     });
 
     notificationsBtn.addEventListener('click', () => {
