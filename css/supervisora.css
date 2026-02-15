@@ -1671,10 +1671,10 @@ body {
     .sidebar-right {
         width: 100%;
         height: auto;
-        max-height: 200px;
+        max-height: none;
         border: none;
         border-bottom: 1px solid #2d3748;
-        overflow-y: auto;
+        overflow: visible;
     }
 
     .sidebar-left.expanded {
@@ -1687,10 +1687,22 @@ body {
 
     .sidebar-section {
         border-bottom: 1px solid #2d3748;
+        flex: none;
     }
 
     .sidebar-section:last-child {
+        flex: none;
         border-bottom: none;
+    }
+
+    .pedidos-list-expanded {
+        max-height: 45vh;
+        overflow-y: auto;
+    }
+
+    .operadores-list {
+        max-height: 30vh;
+        overflow-y: auto;
     }
 
     .header-center {
@@ -1850,46 +1862,69 @@ body {
     /* ---- SIDEBARS MOBILE ---- */
     .sidebar-left,
     .sidebar-right {
-        width: 100%;
-        max-height: none;
-        overflow-y: visible;
+        width: 100% !important;
+        max-height: none !important;
+        overflow: visible !important;
         flex-shrink: 0;
-        flex-direction: column;
+        border: none;
         border-bottom: 2px solid #3d4a5c;
-    }
-
-    .sidebar-left .pedidos-list-expanded {
-        max-height: 35vh;
-        overflow-y: auto;
-    }
-
-    .sidebar-left .operadores-list {
-        max-height: 25vh;
-        overflow-y: auto;
     }
 
     .sidebar-right {
         border-bottom: none;
     }
 
-    .sidebar-right .estacion-detalle {
-        max-height: 30vh;
-        overflow-y: auto;
-    }
-
+    /* Secciones dentro del sidebar: no flex-grow, tamaño natural */
     .sidebar-section {
         border-right: none;
         border-bottom: 1px solid #2d3748;
-        padding: 6px 8px;
+        padding: 8px 10px;
+        flex: none !important;
+        min-height: 0 !important;
+    }
+
+    .sidebar-section:last-child {
+        flex: none !important;
+        border-bottom: none;
     }
 
     .sidebar-section h3 {
-        font-size: 0.8rem;
-        padding: 4px 0;
-        position: sticky;
-        top: 0;
-        background: #1a1f2e;
-        z-index: 2;
+        font-size: 0.85rem;
+        padding: 6px 0;
+        margin-bottom: 6px;
+    }
+
+    /* Listas scrollables con altura controlada */
+    .pedidos-list-expanded {
+        max-height: 40vh !important;
+        overflow-y: auto !important;
+        padding-right: 4px;
+    }
+
+    .operadores-list {
+        max-height: 30vh !important;
+        overflow-y: auto !important;
+    }
+
+    .estacion-detalle {
+        max-height: 35vh;
+        overflow-y: auto;
+    }
+
+    /* Pedido cards más compactos en móvil */
+    .pedido-card-expanded {
+        padding: 8px 10px;
+    }
+
+    /* Filtros pedidos */
+    .pedidos-filter {
+        gap: 4px;
+        margin-bottom: 6px;
+    }
+
+    .filter-btn {
+        font-size: 0.72rem;
+        padding: 5px 10px;
     }
 
     /* ---- NEW SECTIONS MOBILE ---- */
@@ -1976,22 +2011,8 @@ body {
         font-size: 0.95rem;
     }
 
-    .pedidos-list-expanded {
-        max-height: 25vh;
-        overflow-y: auto;
-    }
-
-    .pedido-card-expanded {
-        padding: 6px 8px;
-    }
-
     .pedido-card-header {
         font-size: 0.75rem;
-    }
-
-    .operadores-list {
-        max-height: 20vh;
-        overflow-y: auto;
     }
 
     /* ---- PLANT MAP MOBILE ---- */
@@ -2090,14 +2111,7 @@ body {
         font-size: 0.85rem;
     }
 
-    .pedidos-filter {
-        gap: 4px;
-    }
-
-    .filter-btn {
-        font-size: 0.7rem;
-        padding: 4px 8px;
-    }
+    /* pedidos-filter y filter-btn ya definidos arriba en SIDEBARS MOBILE */
 
     /* ---- DETALLE ESTACIÓN MOBILE ---- */
     .detalle-operador-item {
@@ -2213,22 +2227,13 @@ body {
         display: none;
     }
 
-    /* Sidebars minimal height */
-    .sidebar-left,
-    .sidebar-right {
-        width: 100%;
-        max-height: 35vh;
-        overflow-y: auto;
-    }
-
+    /* Sidebars - listas más compactas en pantallas chicas */
     .pedidos-list-expanded {
-        max-height: 22vh;
-        overflow-y: auto;
+        max-height: 35vh !important;
     }
 
     .operadores-list {
-        max-height: 18vh;
-        overflow-y: auto;
+        max-height: 25vh !important;
     }
 
     /* Plant map compact */
