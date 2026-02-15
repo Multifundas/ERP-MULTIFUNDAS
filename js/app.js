@@ -1,8 +1,8 @@
 // ========================================
 // ERP MULTIFUNDAS - APLICACIÓN PRINCIPAL
 // ========================================
-DEBUG_MODE && console.log('[app.js] Iniciando carga del módulo...');
 var DEBUG_MODE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+DEBUG_MODE && console.log('[app.js] Iniciando carga del módulo...');
 
 // Estado de la aplicación
 const app = {
@@ -91,9 +91,9 @@ window.ADMIN = {
         DEBUG_MODE && console.log('Productos:', db.getProductos ? db.getProductos().length : 'N/A');
         DEBUG_MODE && console.log('Pedidos:', db.getPedidos ? db.getPedidos().length : 'N/A');
         DEBUG_MODE && console.log('Personal:', db.getPersonal ? db.getPersonal().length : 'N/A');
-        DEBUG_MODE && console.log('Asignaciones:', Object.keys(JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}')).length);
-        DEBUG_MODE && console.log('Historial producción:', JSON.parse(localStorage.getItem('historial_produccion') || '[]').length);
-        DEBUG_MODE && console.log('Notificaciones:', JSON.parse(localStorage.getItem('notificaciones_coco') || '[]').length);
+        DEBUG_MODE && console.log('Asignaciones:', Object.keys(safeLocalGet('asignaciones_estaciones', {})).length);
+        DEBUG_MODE && console.log('Historial producción:', safeLocalGet('historial_produccion', []).length);
+        DEBUG_MODE && console.log('Notificaciones:', safeLocalGet('notificaciones_coco', []).length);
     },
     sincronizar: () => {
         if (typeof ejecutarSincronizacionCompleta === 'function') {
@@ -937,6 +937,11 @@ function openModal(title, content, onConfirmOrFooter) {
     }
 
     overlay.classList.add('active');
+    // Focus trap para accesibilidad
+    var modal = overlay.querySelector('.modal');
+    if (modal && typeof A11y !== 'undefined') {
+        window._modalFocusCleanup = A11y.trapFocus(modal);
+    }
     DEBUG_MODE && console.log('[openModal] Modal activado');
 }
 
@@ -944,6 +949,10 @@ function closeModal() {
     const modalFooter = document.getElementById('modalFooter');
     if (modalFooter) {
         modalFooter.style.display = 'flex';
+    }
+    if (window._modalFocusCleanup) {
+        window._modalFocusCleanup();
+        window._modalFocusCleanup = null;
     }
     document.getElementById('modalOverlay').classList.remove('active');
 }

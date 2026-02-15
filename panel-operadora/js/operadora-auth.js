@@ -36,7 +36,7 @@ const _rateLimiter = {
     getKey: function(numEmpleado) { return 'rl_' + (numEmpleado || 'global'); },
     verificar: function(numEmpleado) {
         var key = this.getKey(numEmpleado);
-        var data = JSON.parse(localStorage.getItem(key) || '{}');
+        var data = safeJsonParse(localStorage.getItem(key), {});
         if (data.bloqueadoHasta && new Date().getTime() < data.bloqueadoHasta) {
             var restante = Math.ceil((data.bloqueadoHasta - new Date().getTime()) / 60000);
             return { bloqueado: true, minutosRestantes: restante };
@@ -49,7 +49,7 @@ const _rateLimiter = {
     },
     registrarFallo: function(numEmpleado) {
         var key = this.getKey(numEmpleado);
-        var data = JSON.parse(localStorage.getItem(key) || '{"intentos":0}');
+        var data = safeJsonParse(localStorage.getItem(key), {intentos:0});
         data.intentos = (data.intentos || 0) + 1;
         if (data.intentos >= this.maxIntentos) {
             data.bloqueadoHasta = new Date().getTime() + (this.bloqueoMinutos * 60000);
@@ -544,7 +544,7 @@ function formatearDuracionResumen(ms) {
 }
 
 function obtenerComparacionAyer() {
-    const historial = JSON.parse(localStorage.getItem('historial_turnos') || '[]');
+    const historial = safeLocalGet('historial_turnos', []);
     const operadoraId = authState.operadoraActual?.id;
 
     // Buscar turno de ayer
@@ -649,7 +649,7 @@ function confirmarCierreSesion() {
 
 function guardarTurnoEnHistorial() {
     try {
-        const historial = JSON.parse(localStorage.getItem('historial_turnos') || '[]');
+        const historial = safeLocalGet('historial_turnos', []);
 
         let stats = { eficiencia: 0, cumpliMeta: false };
         try {
@@ -755,26 +755,27 @@ function guardarSesion() {
     localStorage.setItem('sesion_operadora', JSON.stringify(sesion));
 
     // FASE 4.2: Verificar expiración cada 60 segundos
-    if (!window._sessionExpiryInterval) {
-        window._sessionExpiryInterval = setInterval(() => {
-            const sesionActual = localStorage.getItem('sesion_operadora');
-            if (!sesionActual) return;
-            try {
-                const s = JSON.parse(sesionActual);
-                const tiempoSesion = Date.now() - new Date(s.fecha).getTime();
-                const SESSION_EXPIRY_MS = 8 * 60 * 60 * 1000;
-                if (tiempoSesion > SESSION_EXPIRY_MS) {
-                    console.warn('[AUTH] Sesión expirada por inactividad');
-                    if (typeof mostrarToast === 'function') {
-                        mostrarToast('Sesión expirada. Por favor inicia sesión de nuevo.', 'warning');
-                    }
-                    setTimeout(() => {
-                        if (typeof cerrarSesion === 'function') cerrarSesion();
-                    }, 2000);
-                }
-            } catch (e) {}
-        }, 60000);
+    if (window._sessionExpiryInterval) {
+        clearInterval(window._sessionExpiryInterval);
     }
+    window._sessionExpiryInterval = setInterval(() => {
+        const sesionActual = localStorage.getItem('sesion_operadora');
+        if (!sesionActual) return;
+        try {
+            const s = JSON.parse(sesionActual);
+            const tiempoSesion = Date.now() - new Date(s.fecha).getTime();
+            const SESSION_EXPIRY_MS = 8 * 60 * 60 * 1000;
+            if (tiempoSesion > SESSION_EXPIRY_MS) {
+                console.warn('[AUTH] Sesión expirada por inactividad');
+                if (typeof mostrarToast === 'function') {
+                    mostrarToast('Sesión expirada. Por favor inicia sesión de nuevo.', 'warning');
+                }
+                setTimeout(() => {
+                    if (typeof cerrarSesion === 'function') cerrarSesion();
+                }, 2000);
+            }
+        } catch (e) {}
+    }, 60000);
 }
 
 // ========================================

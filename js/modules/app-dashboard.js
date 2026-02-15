@@ -348,9 +348,9 @@ function loadPlantMap() {
     const mapaData = db.getMapaPlantaData();
 
     // Obtener datos de asignaciones reales de localStorage
-    const asignacionesEstaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
-    const supervisoraMaquinas = JSON.parse(localStorage.getItem('supervisora_maquinas') || '{}');
+    const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
+    const supervisoraMaquinas = safeLocalGet('supervisora_maquinas', {});
 
     container.innerHTML = mapaData.map(area => {
         const posicionesHtml = area.posiciones.map(pos => {
@@ -1059,7 +1059,7 @@ function confirmarRenombrarEstacion(estacionIdActual, areaId) {
 
 function actualizarEstacionEnSincronizacion(idAnterior, idNuevo) {
     // Actualizar asignaciones_estaciones
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     if (asignaciones[idAnterior]) {
         asignaciones[idNuevo] = asignaciones[idAnterior];
         delete asignaciones[idAnterior];
@@ -1067,7 +1067,7 @@ function actualizarEstacionEnSincronizacion(idAnterior, idNuevo) {
     }
 
     // Actualizar estado_maquinas
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     if (estadoMaquinas[idAnterior]) {
         estadoMaquinas[idNuevo] = estadoMaquinas[idAnterior];
         delete estadoMaquinas[idAnterior];
@@ -1097,7 +1097,7 @@ function sincronizarEstacionesConPaneles() {
     localStorage.setItem('mapa_estaciones_planta', JSON.stringify(mapaEstaciones));
 
     // También actualizar estado_maquinas para supervisora
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     estaciones.forEach(est => {
         if (est.operadorId) {
             const operador = personal.find(p => p.id === est.operadorId);
@@ -1203,7 +1203,7 @@ function crearEstadoOperadorEnMapa(empleado, estacionId) {
     db.save();
 
     // También actualizar localStorage para sincronización inmediata
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     estadoMaquinas[estacionId] = {
         estacionId: estacionId,
         operadorId: empleado.id,
@@ -1228,7 +1228,7 @@ function eliminarEstadoOperadorDeMapa(estacionId) {
     }
 
     // Eliminar de localStorage
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     if (estadoMaquinas[estacionId]) {
         delete estadoMaquinas[estacionId];
         localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
@@ -2348,8 +2348,8 @@ function generarEtapasPedido(pedido, productos) {
     }
 
     // Leer datos sincronizados de localStorage
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
-    const historialProduccion = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
+    const historialProduccion = safeLocalGet('historial_produccion', []);
     const pedidoERP = pedidosERP.find(pe => pe.id == pedido.id);
 
     DEBUG_MODE && console.log('[generarEtapasPedido] Pedido:', pedido.id, 'pedidoERP:', pedidoERP ? 'encontrado' : 'no encontrado');

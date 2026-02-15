@@ -285,10 +285,10 @@ function loadReporteOperador() {
     const estaciones = db.getEstaciones();
 
     // Obtener datos reales de producción
-    const historialProduccion = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
-    const asignacionesEstaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    const historialProduccion = safeLocalGet('historial_produccion', []);
+    const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
 
     // Filtrar pedidos por periodo seleccionado
     const todosPedidos = filtrarPedidosActivos(db.getPedidos());

@@ -3816,7 +3816,7 @@ function exportarPersonalPDF() {
 
 // Exportar Asistencia a PDF
 function exportarAsistenciaPDF() {
-    var historial = JSON.parse(localStorage.getItem('historial_asistencia') || '[]');
+    var historial = safeLocalGet('historial_asistencia', []);
     var personal = db.getPersonal();
 
     var columnas = ['Fecha', 'Empleado', 'Tipo', 'Motivo'];

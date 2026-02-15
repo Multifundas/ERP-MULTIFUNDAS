@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('sync-update', (e) => {
             const key = e.detail?.key;
             if (key === 'historial_asignaciones_completadas' || key === 'estado_maquinas' || key === 'asignaciones_estaciones') {
-                console.log('[SUPERVISORA] sync-update recibido para:', key, '→ actualizando datos');
+                DEBUG_MODE && console.log('[SUPERVISORA] sync-update recibido para:', key, '→ actualizando datos');
                 actualizarDatosDeOperadoras();
             }
         });
@@ -365,8 +365,8 @@ function renderLayoutInSupervisora(layout) {
 
         // Obtener info de procesos simultáneos y estado de trabajo
         // (debe ir antes del bloque de operadores que usa estaTrabajando)
-        const asignacionesEstaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
-        const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+        const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
+        const estadoMaquinas = safeLocalGet('estado_maquinas', {});
         const asignacionEst = asignacionesEstaciones[element.id];
         const estadoMaquinaLS = estadoMaquinas[element.id];
 
@@ -527,6 +527,243 @@ function renderLayoutInSupervisora(layout) {
 
     // Auto-zoom para ajustar al viewport en móvil
     autoFitMapMobile(layout);
+}
+
+// ========================================
+// DIFF-BASED MAP UPDATE (avoids full DOM rebuild)
+// ========================================
+
+/**
+ * Actualiza las estaciones del mapa in-place sin reconstruir todo el DOM.
+ * Solo modifica los elementos internos que cambiaron (estado, operadores, piezas, proceso).
+ * Si la estructura del DOM no coincide con el layout (p.ej. layout cambió),
+ * hace fallback al render completo.
+ */
+function actualizarEstacionesEnMapa() {
+    const layout = supervisoraState.layout;
+    if (!layout || !layout.elements) return;
+
+    const container = document.getElementById('plantMap');
+    if (!container) return;
+
+    // Verificar que el DOM ya tiene estaciones renderizadas
+    const estaciones = layout.elements.filter(e => e.type !== 'area');
+
+    // Fallback: si no hay estaciones en el layout o el contenedor está vacío, render completo
+    if (estaciones.length === 0 || container.children.length === 0) {
+        renderLayoutInSupervisora(layout);
+        return;
+    }
+
+    // Verificar integridad: si alguna estación del layout no tiene su elemento DOM, render completo
+    for (let i = 0; i < estaciones.length; i++) {
+        if (!document.getElementById('estacion-' + estaciones[i].id)) {
+            DEBUG_MODE && console.log('[SUPERVISORA] Estructura DOM no coincide, render completo');
+            renderLayoutInSupervisora(layout);
+            return;
+        }
+    }
+
+    // Iconos por tipo (mismos que en renderLayoutInSupervisora)
+    const tipoIconos = {
+        'costura': 'fa-tshirt',
+        'mesa': 'fa-table',
+        'area': 'fa-vector-square',
+        'estacion': 'fa-desktop',
+        'corte': 'fa-cut',
+        'empaque': 'fa-box',
+        'calidad': 'fa-check-circle'
+    };
+
+    // Actualizar cada estación in-place
+    estaciones.forEach(element => {
+        // Asegurar que existe el estado
+        if (!supervisoraState.maquinas[element.id]) return;
+
+        const maquinaState = supervisoraState.maquinas[element.id];
+
+        // Migrar estructura antigua si es necesario
+        if (!maquinaState.operadores) {
+            maquinaState.operadores = [];
+            if (maquinaState.operadorId && maquinaState.operadorNombre) {
+                maquinaState.operadores.push({ id: maquinaState.operadorId, nombre: maquinaState.operadorNombre });
+            }
+        }
+
+        const el = document.getElementById('estacion-' + element.id);
+        if (!el) return;
+
+        const icono = tipoIconos[element.type] || 'fa-cog';
+
+        // --- Actualizar clases del elemento raíz ---
+        const oldEstado = el.getAttribute('data-estado');
+        const tiempoMuertoActivo = supervisoraState.tiemposMuertos.activos[element.id];
+
+        // Obtener info de procesos simultáneos y estado de trabajo
+        const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
+        const estadoMaquinas = safeLocalGet('estado_maquinas', {});
+        const asignacionEst = asignacionesEstaciones[element.id];
+        const estadoMaquinaLS = estadoMaquinas[element.id];
+
+        const modoSimultaneo = asignacionEst?.modoSimultaneo || estadoMaquinaLS?.modoSimultaneo;
+        const procesosSimultaneos = estadoMaquinaLS?.procesosSimultaneos || [];
+        const estaTrabajando = estadoMaquinaLS?.estado === 'trabajando' || estadoMaquinaLS?.procesoActivo;
+        const operadoresCount = maquinaState.operadores?.length || 0;
+
+        // Recalcular clase completa del elemento
+        let newClassName = `estacion-element ${element.type} ${maquinaState.estado}`;
+        if (operadoresCount > 1) newClassName += ' multi-operadores';
+        if (tiempoMuertoActivo) newClassName += ' tiene-tiempo-muerto';
+        if (el.className !== newClassName) {
+            el.className = newClassName;
+        }
+        if (oldEstado !== maquinaState.estado) {
+            el.setAttribute('data-estado', maquinaState.estado);
+        }
+
+        // --- Recalcular progreso ---
+        let progresoHTML = '';
+        if (maquinaState.pedidoId) {
+            const pedido = supervisoraState.pedidosHoy.find(p => p.id === maquinaState.pedidoId);
+            if (pedido) {
+                const prod = pedido.productos?.[0];
+                const cantidad = prod?.cantidad || pedido.cantidad || 100;
+                const completadas = prod?.completadas || maquinaState.piezasHoy || 0;
+                const progreso = Math.min(100, Math.round((completadas / cantidad) * 100));
+                progresoHTML = `
+                    <div class="estacion-progress-container">
+                        <div class="estacion-progress-bar" style="width: ${progreso}%"></div>
+                        <span class="estacion-progress-text">${progreso}%</span>
+                    </div>
+                `;
+            }
+        }
+
+        // --- Indicador de actividad ---
+        const activityIndicator = maquinaState.estado === 'activo' ?
+            '<div class="activity-pulse"></div>' : '';
+
+        // --- Tiempo muerto HTML ---
+        let tiempoMuertoHTML = '';
+        if (tiempoMuertoActivo) {
+            const inicio = new Date(tiempoMuertoActivo.inicio);
+            const ahora = new Date();
+            const duracionMin = Math.floor((ahora - inicio) / 60000);
+            tiempoMuertoHTML = `
+                <div class="estacion-tiempo-muerto" style="border-color: ${tiempoMuertoActivo.motivoColor}">
+                    <div class="tm-indicator" style="background: ${tiempoMuertoActivo.motivoColor}">
+                        <i class="fas ${tiempoMuertoActivo.motivoIcono}"></i>
+                    </div>
+                    <div class="tm-info">
+                        <span class="tm-motivo">${tiempoMuertoActivo.motivoNombre}</span>
+                        <span class="tm-tiempo">${duracionMin} min</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Operadores HTML ---
+        let operadoresHTML = '';
+        if (operadoresCount > 0) {
+            const estadoEst = estadoMaquinas[element.id];
+            const piezasRealizadas = estadoEst?.piezasHoy || maquinaState.piezasHoy || 0;
+            const pedidoAsignado = maquinaState.pedidoId ? supervisoraState.pedidosHoy.find(p => p.id === maquinaState.pedidoId) : null;
+            const cantidadObjetivo = pedidoAsignado?.productos?.[0]?.cantidad || pedidoAsignado?.cantidad || 0;
+            const avanceOp = cantidadObjetivo > 0 ? Math.min(100, Math.round((piezasRealizadas / cantidadObjetivo) * 100)) : 0;
+
+            let semaforo = 'gris';
+            if (cantidadObjetivo > 0 && piezasRealizadas > 0) {
+                const rendimiento = avanceOp;
+                if (rendimiento >= 85) semaforo = 'verde';
+                else if (rendimiento >= 70) semaforo = 'amarillo';
+                else semaforo = 'rojo';
+            } else if (maquinaState.estado === 'activo' || estaTrabajando) {
+                semaforo = 'amarillo';
+            }
+
+            operadoresHTML = maquinaState.operadores.map(op => `
+                <div class="operador-chip" data-operador-id="${op.id}" title="${S(op.nombre)} - ${avanceOp}%">
+                    <span class="operador-iniciales">${S(getIniciales(op.nombre))}</span>
+                    <span class="operador-semaforo ${semaforo}"></span>
+                    ${cantidadObjetivo > 0 ? `<div class="operador-mini-bar"><div class="operador-mini-fill" style="width:${avanceOp}%"></div></div>` : ''}
+                    <button class="remove-operador" onclick="event.stopPropagation(); removeOperadorFromEstacion('${S(element.id)}', ${op.id})" title="Quitar">&times;</button>
+                </div>
+            `).join('');
+        } else {
+            operadoresHTML = '<span class="sin-operador"><i class="fas fa-user-plus"></i></span>';
+        }
+
+        // --- Determinar estado de trabajo para colores ---
+        let claseTrabajoEstacion = '';
+        let iconoTrabajo = '';
+        if (maquinaState.procesoNombre || procesosSimultaneos.length > 0) {
+            if (estaTrabajando || maquinaState.piezasHoy > 0) {
+                claseTrabajoEstacion = 'trabajando-activo';
+                iconoTrabajo = '<i class="fas fa-check-circle estado-trabajo verde"></i>';
+            } else {
+                claseTrabajoEstacion = 'asignado-sin-iniciar';
+                iconoTrabajo = '<i class="fas fa-hourglass-half estado-trabajo naranja"></i>';
+            }
+        }
+
+        // --- Procesos HTML ---
+        let procesosHTML = '';
+        if (modoSimultaneo && procesosSimultaneos.length > 0) {
+            procesosHTML = `
+                <div class="estacion-proceso-new simultaneo">
+                    <i class="fas fa-layer-group"></i> ${procesosSimultaneos.length} simultáneos
+                    <span class="procesos-simultaneos-tooltip" title="${S(procesosSimultaneos.map(p => p.procesoNombre).join(', '))}">
+                        ${S(procesosSimultaneos.slice(0, 2).map(p => p.procesoNombre.substring(0, 10)).join(', '))}${procesosSimultaneos.length > 2 ? '...' : ''}
+                    </span>
+                    ${iconoTrabajo}
+                </div>
+            `;
+        } else if (maquinaState.procesoNombre) {
+            procesosHTML = `
+                <div class="estacion-proceso-new">
+                    <i class="fas fa-cog ${estaTrabajando ? 'fa-spin' : ''}"></i> ${S(maquinaState.procesoNombre)}
+                    ${maquinaState.colaProcesos && maquinaState.colaProcesos.length > 0 ?
+                        `<span class="cola-badge-mini" title="${S(maquinaState.colaProcesos.map(p => p.procesoNombre).join(' → '))}">+${maquinaState.colaProcesos.length}</span>`
+                    : ''}
+                    ${iconoTrabajo}
+                </div>
+            `;
+        }
+
+        // --- Actualizar innerHTML del elemento (preserva event listeners en el propio el) ---
+        el.innerHTML = `
+            ${tiempoMuertoHTML}
+            ${activityIndicator}
+            <div class="estacion-header-new">
+                <div class="estacion-icon">
+                    <i class="fas ${icono}"></i>
+                </div>
+                <div class="estacion-id-badge">${element.id}</div>
+                <div class="estacion-badges">
+                    ${operadoresCount > 0 ? `<span class="operadores-count-badge">${operadoresCount}</span>` : ''}
+                    <div class="estacion-estado-indicator ${maquinaState.estado}">
+                        <i class="fas ${getEstadoIcon(maquinaState.estado)}"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="estacion-body-new ${claseTrabajoEstacion}">
+                <div class="estacion-operadores">
+                    ${operadoresHTML}
+                </div>
+                ${procesosHTML}
+                ${maquinaState.piezasHoy > 0 ? `
+                    <div class="estacion-piezas-new">
+                        <i class="fas fa-cubes"></i> ${maquinaState.piezasHoy.toLocaleString()}
+                    </div>
+                ` : ''}
+            </div>
+            ${progresoHTML}
+            <div class="estacion-glow ${maquinaState.estado}"></div>
+        `;
+    });
+
+    // Actualizar estadísticas de zonas
+    updateZoneStats();
 }
 
 // Auto-ajustar zoom del mapa en pantallas pequeñas
@@ -1275,8 +1512,8 @@ function renderProcesoItem(proceso, pedidoId) {
     const cantidadAsignadas = estacionesAsignadas.length;
 
     // Obtener estado de máquinas y asignaciones para verificar procesos simultáneos
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
-    const asignacionesEstaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
+    const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
 
     // Verificar si alguna estación está trabajando activamente en este proceso
     // Un operador está "trabajando" si:
@@ -1476,7 +1713,7 @@ function verificarDependenciasProceso(proceso, pedido) {
     const productoId = proceso.productoId || pedido?.productos?.[0]?.productoId || pedido?.productoId;
 
     // VERIFICAR SI FUE DESBLOQUEADO MANUALMENTE POR LA SUPERVISORA
-    const procesosDesbloqueados = JSON.parse(localStorage.getItem('procesos_desbloqueados') || '{}');
+    const procesosDesbloqueados = safeLocalGet('procesos_desbloqueados', {});
     const keyDesbloqueo = `${pedido?.id || 0}-${proceso.id}`;
     if (procesosDesbloqueados[keyDesbloqueo]) {
         return { disponible: true, mensaje: '', desbloqueadoManual: true };
@@ -1738,7 +1975,7 @@ function usarInventarioProceso(procesoId, pedidoId, cantidadNecesaria) {
     proceso.fechaCompletado = new Date().toISOString();
 
     // Guardar en pedidos_erp para sincronizar con operadoras
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
     let pedidoERP = pedidosERP.find(p => p.id === pedidoId);
     if (!pedidoERP) {
         pedidoERP = {
@@ -1796,7 +2033,7 @@ function usarInventarioProceso(procesoId, pedidoId, cantidadNecesaria) {
  * Guarda registro de uso de inventario
  */
 function guardarRegistroUsoInventario(registro) {
-    const registros = JSON.parse(localStorage.getItem('supervisora_uso_inventario') || '[]');
+    const registros = safeLocalGet('supervisora_uso_inventario', []);
     registros.unshift(registro);
     localStorage.setItem('supervisora_uso_inventario', JSON.stringify(registros.slice(0, 500)));
     DEBUG_MODE && console.log('[SUPERVISORA] Registro de uso de inventario guardado:', registro);
@@ -1804,7 +2041,7 @@ function guardarRegistroUsoInventario(registro) {
 
 // Función para desbloquear un proceso manualmente
 function desbloquearProcesoManual(pedidoId, procesoId) {
-    const procesosDesbloqueados = JSON.parse(localStorage.getItem('procesos_desbloqueados') || '{}');
+    const procesosDesbloqueados = safeLocalGet('procesos_desbloqueados', {});
     const key = `${pedidoId}-${procesoId}`;
     procesosDesbloqueados[key] = {
         timestamp: Date.now(),
@@ -1824,7 +2061,7 @@ function desbloquearProcesoManual(pedidoId, procesoId) {
 
 // Función para bloquear un proceso (revertir desbloqueo)
 function bloquearProcesoManual(pedidoId, procesoId) {
-    const procesosDesbloqueados = JSON.parse(localStorage.getItem('procesos_desbloqueados') || '{}');
+    const procesosDesbloqueados = safeLocalGet('procesos_desbloqueados', {});
     const key = `${pedidoId}-${procesoId}`;
     delete procesosDesbloqueados[key];
     localStorage.setItem('procesos_desbloqueados', JSON.stringify(procesosDesbloqueados));
@@ -1937,9 +2174,9 @@ function renderOperadoresList() {
             <div class="operador-card en-desarrollo">
                 <div class="operador-avatar trabajando">${getIniciales(op.nombre)}</div>
                 <div class="operador-info">
-                    <span class="operador-nombre">${op.nombre}</span>
-                    <span class="operador-estacion"><i class="fas fa-map-marker-alt"></i> ${op.estacionId}</span>
-                    <span class="operador-proceso"><i class="fas fa-cog fa-spin"></i> ${op.procesoNombre}</span>
+                    <span class="operador-nombre">${S(op.nombre)}</span>
+                    <span class="operador-estacion"><i class="fas fa-map-marker-alt"></i> ${S(op.estacionId)}</span>
+                    <span class="operador-proceso"><i class="fas fa-cog fa-spin"></i> ${S(op.procesoNombre)}</span>
                     ${rendimiento.piezas > 0 ? `
                     <span class="operador-rendimiento">
                         <i class="fas fa-chart-line ${rendimiento.nivel}"></i>
@@ -1964,8 +2201,8 @@ function renderOperadoresList() {
             <div class="operador-card activo">
                 <div class="operador-avatar activo">${getIniciales(op.nombre)}</div>
                 <div class="operador-info">
-                    <span class="operador-nombre">${op.nombre}</span>
-                    <span class="operador-estacion"><i class="fas fa-map-marker-alt"></i> ${op.estacionId}</span>
+                    <span class="operador-nombre">${S(op.nombre)}</span>
+                    <span class="operador-estacion"><i class="fas fa-map-marker-alt"></i> ${S(op.estacionId)}</span>
                     <span class="operador-sin-proceso"><i class="fas fa-hourglass-half"></i> Esperando proceso</span>
                     ${obtenerHabilidadesHTML(op)}
                 </div>
@@ -1991,7 +2228,7 @@ function renderOperadoresList() {
                  ondragstart="dragOperador(event, ${op.id})">
                 <div class="operador-avatar inactivo">${getIniciales(op.nombre)}</div>
                 <div class="operador-info">
-                    <span class="operador-nombre">${op.nombre}</span>
+                    <span class="operador-nombre">${S(op.nombre)}</span>
                     <span class="operador-sin-sesion"><i class="fas fa-sign-in-alt"></i> Sin sesión</span>
                     ${obtenerHabilidadesHTML(op)}
                     ${sugerencia ? `<div class="sugerencia-asignacion"><i class="fas fa-lightbulb"></i> ${sugerencia}</div>` : ''}
@@ -2034,7 +2271,7 @@ function obtenerHabilidadesHTML(op) {
     // Inferir habilidades del historial de asignaciones
     if (areas.length === 0) {
         try {
-            const liberaciones = JSON.parse(localStorage.getItem('supervisora_liberaciones') || '[]');
+            const liberaciones = safeLocalGet('supervisora_liberaciones', []);
             const areasHistorial = new Set();
             liberaciones.filter(l => l.operadorId === op.id).forEach(l => {
                 if (l.procesoNombre) {
@@ -2099,7 +2336,7 @@ function renderProcesosActivos() {
 // Clave = "tipo:cantidad" para que reaparezca si la situación cambia
 function getAlertasDescartadas() {
     try {
-        return JSON.parse(localStorage.getItem('sup_alertas_descartadas') || '{}');
+        return safeLocalGet('sup_alertas_descartadas', {});
     } catch (e) { return {}; }
 }
 
@@ -2273,8 +2510,8 @@ function showEstacionDetalle(estacionId) {
     const operadoresCount = maquina.operadores?.length || 0;
 
     // Obtener información de estado real de la estación
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
-    const asignacionesEstaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
+    const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
     const estadoEstacion = estadoMaquinas[estacionId] || {};
     const asignacionEstacion = asignacionesEstaciones[estacionId] || {};
 
@@ -2311,11 +2548,11 @@ function showEstacionDetalle(estacionId) {
                 <div class="detalle-op-main">
                     <span class="detalle-op-avatar" style="border-color: ${colorEstado}">${getIniciales(op.nombre)}</span>
                     <div class="detalle-op-info">
-                        <span class="detalle-op-nombre">${op.nombre}</span>
+                        <span class="detalle-op-nombre">${S(op.nombre)}</span>
                         ${tieneProcesoActivo ? `
                             <span class="detalle-op-proceso ${estadoOperador}">
                                 <i class="fas ${estaTrabajandoEstacion ? 'fa-play-circle' : 'fa-hourglass-half'}"></i>
-                                ${procesoActualEstacion}
+                                ${S(procesoActualEstacion)}
                                 ${piezasHoyEstacion > 0 ? `<span class="piezas-mini">(${piezasHoyEstacion} pzas)</span>` : ''}
                             </span>
                         ` : '<span class="detalle-op-proceso sin-proceso"><i class="fas fa-pause-circle"></i> Sin proceso asignado</span>'}
@@ -2357,19 +2594,19 @@ function showEstacionDetalle(estacionId) {
 
     document.getElementById('estacionDetalle').innerHTML = `
         <div class="detalle-header">
-            <div class="detalle-id">${estacionId}</div>
-            <span class="estado-badge ${maquina.estado}">${maquina.estado}</span>
+            <div class="detalle-id">${S(estacionId)}</div>
+            <span class="estado-badge ${maquina.estado}">${S(maquina.estado)}</span>
         </div>
 
         <div class="detalle-info">
             <div class="info-row">
                 <label>Tipo:</label>
-                <span>${layoutElement?.type || maquina.tipo || 'N/A'}</span>
+                <span>${S(layoutElement?.type || maquina.tipo || 'N/A')}</span>
             </div>
             ${(() => {
                 // Obtener info de procesos simultáneos activos
-                const asignacionesEstaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
-                const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+                const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
+                const estadoMaquinas = safeLocalGet('estado_maquinas', {});
                 const asignacion = asignacionesEstaciones[estacionId];
                 const estadoMaquina = estadoMaquinas[estacionId];
 
@@ -2424,9 +2661,9 @@ function showEstacionDetalle(estacionId) {
                                     <div class="proceso-activo-info">
                                         <span class="proceso-nombre-badge">
                                             <i class="fas ${p.esSimultaneo ? 'fa-layer-group' : 'fa-cog fa-spin'}"></i>
-                                            ${p.procesoNombre}
+                                            ${S(p.procesoNombre)}
                                         </span>
-                                        ${p.pedidoCodigo ? `<span class="proceso-pedido-mini">${p.pedidoCodigo}</span>` : ''}
+                                        ${p.pedidoCodigo ? `<span class="proceso-pedido-mini">${S(p.pedidoCodigo)}</span>` : ''}
                                     </div>
                                     <div class="proceso-activo-actions">
                                         <button class="btn-completar-proceso" onclick="completarProcesoEstacion('${estacionId}', '${p.procesoId}')" title="Completar">
@@ -2453,8 +2690,8 @@ function showEstacionDetalle(estacionId) {
                                 <div class="cola-proceso-item">
                                     <span class="cola-proceso-num">${idx + 1}</span>
                                     <div class="cola-proceso-info">
-                                        <span class="cola-proceso-nombre">${p.procesoNombre}</span>
-                                        <span class="cola-proceso-pedido">${p.pedidoCodigo} - ${p.productoNombre || 'Producto'}</span>
+                                        <span class="cola-proceso-nombre">${S(p.procesoNombre)}</span>
+                                        <span class="cola-proceso-pedido">${S(p.pedidoCodigo)} - ${S(p.productoNombre || 'Producto')}</span>
                                     </div>
                                     <div class="cola-proceso-actions">
                                         <button class="btn-up-sm" onclick="moverProcesoEnCola('${estacionId}', ${idx}, -1)" title="Subir" ${idx === 0 ? 'disabled' : ''}>
@@ -2539,7 +2776,7 @@ function openEstacionModal(estacionId) {
         ? operadoresAsignados.map(op => `
             <div class="modal-operador-item">
                 <span class="modal-op-avatar">${getIniciales(op.nombre)}</span>
-                <span class="modal-op-nombre">${op.nombre}</span>
+                <span class="modal-op-nombre">${S(op.nombre)}</span>
                 <button type="button" class="btn-remove-sm" onclick="modalRemoveOperador('${estacionId}', ${op.id})">
                     <i class="fas fa-times"></i>
                 </button>
@@ -2562,7 +2799,7 @@ function openEstacionModal(estacionId) {
                     <select id="modalOperadorAdd">
                         <option value="">-- Seleccionar operador --</option>
                         ${operadoresDisponibles.map(op => `
-                            <option value="${op.id}">${op.nombre}</option>
+                            <option value="${op.id}">${S(op.nombre)}</option>
                         `).join('')}
                     </select>
                     <button type="button" class="btn btn-sm btn-primary" onclick="modalAddOperador('${estacionId}')">
@@ -3028,7 +3265,7 @@ function assignProcesoToEstacion(procesoId, pedidoId, estacionId) {
 
     // *** IMPORTANTE: Sincronizar con panel operadora ***
     // Guardar en asignaciones_estaciones para que la operadora lo vea
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
 
     // Si es el proceso activo, actualizar asignación principal
     if (maquina.procesoId === procesoId) {
@@ -3115,7 +3352,7 @@ function loadEstadoMaquinas() {
 function cargarAsignacionesExistentes() {
     try {
         // Cargar asignaciones_estaciones
-        const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+        const asignaciones = safeLocalGet('asignaciones_estaciones', {});
 
         for (const [estacionId, asignacion] of Object.entries(asignaciones)) {
             // Buscar la estación en supervisoraState.maquinas
@@ -3333,7 +3570,7 @@ function refreshData() {
     loadEstadoMaquinas();
 
     if (supervisoraState.layout) {
-        renderLayoutInSupervisora(supervisoraState.layout);
+        actualizarEstacionesEnMapa();
     }
 
     showToast('Datos actualizados', 'success');
@@ -3365,9 +3602,18 @@ function openModal(title, content, footer = '') {
     document.getElementById('modalBody').innerHTML = content;
     document.getElementById('modalFooter').innerHTML = footer;
     document.getElementById('modalOverlay').classList.add('active');
+    // Focus trap para accesibilidad
+    var modal = document.querySelector('.modal-overlay .modal');
+    if (modal && typeof A11y !== 'undefined') {
+        window._modalFocusCleanup = A11y.trapFocus(modal);
+    }
 }
 
 function closeModal() {
+    if (window._modalFocusCleanup) {
+        window._modalFocusCleanup();
+        window._modalFocusCleanup = null;
+    }
     document.getElementById('modalOverlay').classList.remove('active');
     // Limpiar clases especiales del modal
     const modal = document.querySelector('.modal-overlay .modal');
@@ -3397,7 +3643,7 @@ function verDetallePedido(pedidoId) {
     // Datos de pedido ERP (sincronizado)
     let pedidoERP = null;
     try {
-        const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+        const pedidosERP = safeLocalGet('pedidos_erp', []);
         pedidoERP = pedidosERP.find(pe => pe.id == pedidoId);
     } catch (e) {}
 
@@ -3793,7 +4039,7 @@ function liberarTodosOperadores(estacionId) {
                 <label>Operadores a liberar:</label>
                 <ul>
                     ${maquina.operadores.map(op => `
-                        <li><span class="mini-avatar">${getIniciales(op.nombre)}</span> ${op.nombre}</li>
+                        <li><span class="mini-avatar">${getIniciales(op.nombre)}</span> ${S(op.nombre)}</li>
                     `).join('')}
                 </ul>
             </div>
@@ -4440,7 +4686,7 @@ function marcarProcesoCompletado(procesoId, pedidoId) {
 
 // Agregar notificación para Coco (supervisora)
 function agregarNotificacionCoco(notif) {
-    const notificaciones = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notificaciones = safeLocalGet('notificaciones_coco', []);
     notificaciones.unshift({
         id: Date.now(),
         fecha: new Date().toISOString(),
@@ -4483,7 +4729,7 @@ function formatearFecha(fechaISO) {
 function cargarColaProcesos() {
     const saved = localStorage.getItem('cola_procesos_operadores');
     if (saved) {
-        supervisoraState.colaProcesosOperadores = JSON.parse(saved);
+        supervisoraState.colaProcesosOperadores = safeJsonParse(saved, {});
     }
 }
 
@@ -4659,7 +4905,7 @@ function quitarProcesoDeEstacion(estacionId) {
         maquina.pedidoId = null;
 
         // Limpiar de localStorage de asignaciones
-        const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+        const asignaciones = safeLocalGet('asignaciones_estaciones', {});
         if (asignaciones[estacionId]) {
             delete asignaciones[estacionId];
             localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
@@ -4778,7 +5024,7 @@ function completarProcesoEstacion(estacionId) {
         maquina.pedidoId = null;
 
         // Limpiar de localStorage de asignaciones
-        const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+        const asignaciones = safeLocalGet('asignaciones_estaciones', {});
         if (asignaciones[estacionId]) {
             delete asignaciones[estacionId];
             localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
@@ -4813,7 +5059,7 @@ function moverProcesoEnCola(estacionId, index, direccion) {
     saveEstadoMaquinas();
 
     // Actualizar asignaciones
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     if (asignaciones[estacionId]) {
         asignaciones[estacionId].colaProcesos = maquina.colaProcesos;
         localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
@@ -4834,7 +5080,7 @@ function quitarProcesoDeCola(estacionId, index) {
     saveEstadoMaquinas();
 
     // Actualizar asignaciones
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     if (asignaciones[estacionId]) {
         asignaciones[estacionId].colaProcesos = maquina.colaProcesos;
         localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
@@ -4849,7 +5095,7 @@ function quitarProcesoDeCola(estacionId, index) {
 
 // Actualizar asignación en localStorage para panel operadora
 function actualizarAsignacionEstacion(estacionId, procesoData) {
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
 
     asignaciones[estacionId] = {
         ...procesoData,
@@ -5281,10 +5527,10 @@ function cargarProcesosPedido(pedidoId) {
         <option value="">-- Seleccionar proceso (${procesosDisponibles.length}) --</option>
         ${procesosDisponibles.map(p => `
             <option value="${p.id}"
-                    data-nombre="${p.nombre}"
+                    data-nombre="${S(p.nombre)}"
                     data-tiempo="${p.tiempoEstandar || 60}"
-                    data-producto="${p.productoNombre || ''}">
-                ${p.orden ? `${p.orden}. ` : ''}${p.nombre}${p.productoNombre ? ` (${p.productoNombre})` : ''}
+                    data-producto="${S(p.productoNombre || '')}">
+                ${p.orden ? `${p.orden}. ` : ''}${S(p.nombre)}${p.productoNombre ? ` (${S(p.productoNombre)})` : ''}
             </option>
         `).join('')}
     `;
@@ -5374,7 +5620,7 @@ function initNotificaciones() {
 
     // Limpiar también notificaciones_coco antiguas (>24h)
     try {
-        const cocoNotifs = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+        const cocoNotifs = safeLocalGet('notificaciones_coco', []);
         const cocoAntes = cocoNotifs.length;
         const cocoLimpio = cocoNotifs.filter(n => {
             const fecha = new Date(n.fecha || n.timestamp).getTime();
@@ -5498,8 +5744,8 @@ function renderNotificaciones() {
                 <i class="fas ${getIconoNotificacion(notif.tipo)}"></i>
             </div>
             <div class="notif-content">
-                <div class="notif-titulo">${notif.titulo}</div>
-                <div class="notif-mensaje">${notif.mensaje}</div>
+                <div class="notif-titulo">${S(notif.titulo)}</div>
+                <div class="notif-mensaje">${S(notif.mensaje)}</div>
                 <div class="notif-tiempo">${formatearTiempoRelativo(notif.fecha)}</div>
             </div>
         </div>
@@ -5557,7 +5803,7 @@ function limpiarNotificaciones() {
 
 // Registro de notificaciones ya mostradas (para evitar duplicados por sesión y entre recargas)
 const notificacionesMostradas = new Set(
-    JSON.parse(localStorage.getItem('supervisora_notif_mostradas') || '[]')
+    safeLocalGet('supervisora_notif_mostradas', [])
 );
 
 function registrarNotifMostrada(clave) {
@@ -5611,7 +5857,7 @@ function verificarEventosNotificacion() {
                 if (piezas >= meta && !notificacionesMostradas.has(clave)) {
                     agregarNotificacion({
                         titulo: '¡Meta alcanzada!',
-                        mensaje: `${op.nombre} ha completado ${piezas} piezas hoy.`,
+                        mensaje: `${S(op.nombre)} ha completado ${piezas} piezas hoy.`,
                         tipo: 'success'
                     });
                     registrarNotifMostrada(clave);
@@ -5720,7 +5966,7 @@ function calcularPiezasCompletadasPedido(pedidoId) {
 
 function calcularVelocidadPromedioPedido(pedidoId) {
     // Obtener historial de producción del día
-    const historial = JSON.parse(localStorage.getItem('historial_produccion_hora') || '[]');
+    const historial = safeLocalGet('historial_produccion_hora', []);
     const hoy = new Date().toISOString().split('T')[0];
     const historicoHoy = historial.filter(h => h.fecha === hoy);
 
@@ -5753,7 +5999,7 @@ function calcularVelocidadPromedioPedido(pedidoId) {
 
 // Guardar producción cada hora para predicciones
 function guardarProduccionHora() {
-    const historial = JSON.parse(localStorage.getItem('historial_produccion_hora') || '[]');
+    const historial = safeLocalGet('historial_produccion_hora', []);
     const ahora = new Date();
 
     const piezasActuales = Object.values(supervisoraState.maquinas)
@@ -5793,9 +6039,9 @@ function realizarBackup() {
         maquinas: supervisoraState.maquinas,
         layout: supervisoraState.layout,
         colaProcesos: supervisoraState.colaProcesosOperadores,
-        historialProduccion: JSON.parse(localStorage.getItem('historial_produccion_hora') || '[]'),
-        historialLiberaciones: JSON.parse(localStorage.getItem('historial_liberaciones') || '[]'),
-        eventos: JSON.parse(localStorage.getItem('calendario_eventos') || '[]'),
+        historialProduccion: safeLocalGet('historial_produccion_hora', []),
+        historialLiberaciones: safeLocalGet('historial_liberaciones', []),
+        eventos: safeLocalGet('calendario_eventos', []),
         notificaciones: notificacionesState.notificaciones
     };
 
@@ -5955,7 +6201,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function cargarTiemposMuertos() {
     const guardado = localStorage.getItem('tiempos_muertos');
     if (guardado) {
-        const data = JSON.parse(guardado);
+        const data = safeJsonParse(guardado, {});
         supervisoraState.tiemposMuertos = {
             activos: data.activos || {},
             historial: data.historial || []
@@ -5981,7 +6227,7 @@ function abrirModalTiempoMuerto(estacionId) {
     }
 
     const operadoresHTML = maquina.operadores && maquina.operadores.length > 0
-        ? maquina.operadores.map(op => `<span class="mini-chip">${op.nombre}</span>`).join('')
+        ? maquina.operadores.map(op => `<span class="mini-chip">${S(op.nombre)}</span>`).join('')
         : '<span class="text-muted">Sin operadora asignada</span>';
 
     const content = `
@@ -6207,7 +6453,7 @@ function mostrarTiempoMuertoActivo(estacionId) {
                     <label>Operadora(s) afectada(s):</label>
                     <div class="operadores-chips">
                         ${tiempoMuerto.operadores.map(op => `
-                            <span class="op-chip">${op.nombre}</span>
+                            <span class="op-chip">${S(op.nombre)}</span>
                         `).join('')}
                     </div>
                 </div>
@@ -6392,7 +6638,7 @@ function exportarTiemposMuertosCSV() {
  */
 function asignarPedidoAEstacion(estacionId, pedidoId, procesoId = null, meta = 100) {
     // 1. Guardar en asignaciones_estaciones (clave que lee Operadora)
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
 
     asignaciones[estacionId] = {
         pedidoId: pedidoId,
@@ -6413,7 +6659,7 @@ function asignarPedidoAEstacion(estacionId, pedidoId, procesoId = null, meta = 1
     }
 
     // 3. Actualizar estado_maquinas
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     estadoMaquinas[estacionId] = {
         ...(estadoMaquinas[estacionId] || {}),
         estado: 'asignado',
@@ -6437,7 +6683,7 @@ function asignarPedidoAEstacion(estacionId, pedidoId, procesoId = null, meta = 1
  */
 function sincronizarPedidoParaOperadoras(pedidoId) {
     // Obtener pedidos activos actuales
-    let pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    let pedidosActivos = safeLocalGet('pedidos_activos', []);
 
     // Verificar si ya existe (actualizar si existe)
     const existeIndex = pedidosActivos.findIndex(p => p.id == pedidoId);
@@ -6553,12 +6799,12 @@ function sincronizarPedidoParaOperadoras(pedidoId) {
  */
 function liberarEstacionDePedido(estacionId) {
     // 1. Quitar de asignaciones
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     delete asignaciones[estacionId];
     localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
 
     // 2. Actualizar estado
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     if (estadoMaquinas[estacionId]) {
         estadoMaquinas[estacionId].estado = 'disponible';
         estadoMaquinas[estacionId].pedidoId = null;
@@ -6580,7 +6826,7 @@ function liberarEstacionDePedido(estacionId) {
  * Obtiene todas las asignaciones actuales
  */
 function obtenerAsignacionesActuales() {
-    return JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    return safeLocalGet('asignaciones_estaciones', {});
 }
 
 /**
@@ -6588,7 +6834,7 @@ function obtenerAsignacionesActuales() {
  */
 function mostrarModalAsignarPedido(estacionId) {
     // Obtener pedidos activos
-    let todosPedidos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    let todosPedidos = safeLocalGet('pedidos_activos', []);
 
     // También intentar desde db si está disponible
     if (typeof db !== 'undefined' && typeof db.getPedidos === 'function') {
@@ -6673,7 +6919,7 @@ function confirmarAsignacionPedido(estacionId) {
  * Muestra modal para enviar mensaje a operadoras
  */
 function mostrarModalEnviarMensaje(destinatarioId = 'todos') {
-    const operadoras = JSON.parse(localStorage.getItem('operadoras_db') || '[]');
+    const operadoras = safeLocalGet('operadoras_db', []);
 
     const content = `
         <div class="enviar-mensaje-form">
@@ -6685,7 +6931,7 @@ function mostrarModalEnviarMensaje(destinatarioId = 'todos') {
                     </option>
                     ${operadoras.map(op => `
                         <option value="${op.id}" ${destinatarioId == op.id ? 'selected' : ''}>
-                            👤 ${op.nombre}
+                            👤 ${S(op.nombre)}
                         </option>
                     `).join('')}
                 </select>
@@ -6746,7 +6992,7 @@ function confirmarEnvioMensaje() {
         enviarMensajeDeCocoAOperadoras(texto, destinatario);
     } else {
         // Implementación directa
-        const mensajes = JSON.parse(localStorage.getItem('mensajes_operadoras') || '[]');
+        const mensajes = safeLocalGet('mensajes_operadoras', []);
         mensajes.unshift({
             id: Date.now(),
             texto: texto,
@@ -6773,7 +7019,7 @@ function confirmarEnvioMensaje() {
  */
 function verificarNotificacionesDeOperadoras() {
     // Leer de la clave correcta (notificaciones_coco)
-    const notificaciones = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notificaciones = safeLocalGet('notificaciones_coco', []);
     const noLeidas = notificaciones.filter(n => !n.leida);
 
     if (noLeidas.length > 0) {
@@ -6816,7 +7062,7 @@ function verificarNotificacionesDeOperadoras() {
  * Marca una notificación de coco (operadora→supervisora) como leída
  */
 function marcarNotificacionCocoLeida(notifId) {
-    const notificaciones = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notificaciones = safeLocalGet('notificaciones_coco', []);
     const notif = notificaciones.find(n => n.id === notifId);
     if (notif) {
         notif.leida = true;
@@ -6889,9 +7135,9 @@ function mostrarModalCierrePedido(notif) {
     const pedidoId = notif.pedidoId;
 
     // Obtener información completa del pedido
-    const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
-    const historialCompletados = JSON.parse(localStorage.getItem('historial_asignaciones_completadas') || '[]');
+    const pedidosActivos = safeLocalGet('pedidos_activos', []);
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
+    const historialCompletados = safeLocalGet('historial_asignaciones_completadas', []);
 
     const pedido = pedidosActivos.find(p => p.id == pedidoId || p.pedidoId == pedidoId);
     const pedidoERP = pedidosERP.find(p => p.id == pedidoId);
@@ -7202,7 +7448,7 @@ function cancelarCierrePedido() {
  */
 function abrirCierrePedidoManual(pedidoId) {
     // Obtener información del pedido
-    const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    const pedidosActivos = safeLocalGet('pedidos_activos', []);
     const pedido = pedidosActivos.find(p => p.id == pedidoId);
 
     if (!pedido) {
@@ -7354,7 +7600,7 @@ function confirmarAjusteCantidad(procesoId, pedidoId, piezasAnteriores) {
     }
 
     // Buscar y actualizar el proceso en pedidos_activos
-    const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    const pedidosActivos = safeLocalGet('pedidos_activos', []);
     const pedido = pedidosActivos.find(p => p.id == pedidoId);
 
     if (pedido && pedido.procesos) {
@@ -7374,7 +7620,7 @@ function confirmarAjusteCantidad(procesoId, pedidoId, piezasAnteriores) {
     }
 
     // Actualizar también en pedidos_erp
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
     const pedidoERP = pedidosERP.find(p => p.id == pedidoId);
     if (pedidoERP && pedidoERP.procesos) {
         const procesoERP = pedidoERP.procesos.find(p => p.id == procesoId);
@@ -7385,7 +7631,7 @@ function confirmarAjusteCantidad(procesoId, pedidoId, piezasAnteriores) {
     }
 
     // Registrar en historial de ajustes
-    const historialAjustes = JSON.parse(localStorage.getItem('historial_ajustes_cantidad') || '[]');
+    const historialAjustes = safeLocalGet('historial_ajustes_cantidad', []);
     historialAjustes.unshift({
         id: Date.now(),
         fecha: new Date().toISOString(),
@@ -7501,7 +7747,7 @@ function guardarAjusteCierre(tipo, index, cantidadAnterior, pedidoId) {
 
         // Actualizar en localStorage
         if (pedidoId) {
-            const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+            const pedidosActivos = safeLocalGet('pedidos_activos', []);
             const pedido = pedidosActivos.find(p => p.id == pedidoId);
             if (pedido && pedido.productos && pedido.productos[index]) {
                 pedido.productos[index].cantidad = nuevaCantidad;
@@ -7525,7 +7771,7 @@ function guardarAjusteCierre(tipo, index, cantidadAnterior, pedidoId) {
         }
 
         // Actualizar historial de asignaciones completadas
-        const historial = JSON.parse(localStorage.getItem('historial_asignaciones_completadas') || '[]');
+        const historial = safeLocalGet('historial_asignaciones_completadas', []);
         if (historial[index]) {
             historial[index].piezasProducidas = nuevaCantidad;
             historial[index].ajusteEnCierre = {
@@ -7538,7 +7784,7 @@ function guardarAjusteCierre(tipo, index, cantidadAnterior, pedidoId) {
     }
 
     // Registrar en historial de ajustes
-    const historialAjustes = JSON.parse(localStorage.getItem('historial_ajustes_cantidad') || '[]');
+    const historialAjustes = safeLocalGet('historial_ajustes_cantidad', []);
     historialAjustes.unshift({
         id: Date.now(),
         fecha: new Date().toISOString(),
@@ -7571,7 +7817,7 @@ function confirmarCierrePedido(pedidoId) {
     const firmaBase64 = canvas ? canvas.toDataURL('image/png') : null;
 
     // Obtener datos del pedido
-    const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    const pedidosActivos = safeLocalGet('pedidos_activos', []);
     const pedidoIndex = pedidosActivos.findIndex(p => p.id == pedidoId || p.pedidoId == pedidoId);
     const pedido = pedidoIndex >= 0 ? pedidosActivos[pedidoIndex] : null;
 
@@ -7590,7 +7836,7 @@ function confirmarCierrePedido(pedidoId) {
     };
 
     // Guardar en historial de pedidos cerrados
-    const pedidosCerrados = JSON.parse(localStorage.getItem('pedidos_cerrados') || '[]');
+    const pedidosCerrados = safeLocalGet('pedidos_cerrados', []);
     pedidosCerrados.unshift(registroCierre);
     localStorage.setItem('pedidos_cerrados', JSON.stringify(pedidosCerrados));
 
@@ -7601,7 +7847,7 @@ function confirmarCierrePedido(pedidoId) {
     }
 
     // Actualizar pedidos_erp
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
     const pedidoERP = pedidosERP.find(p => p.id == pedidoId);
     if (pedidoERP) {
         pedidoERP.estado = 'cerrado';
@@ -7618,7 +7864,7 @@ function confirmarCierrePedido(pedidoId) {
     }
 
     // Notificar a administración (key local)
-    const notificacionesAdmin = JSON.parse(localStorage.getItem('notificaciones_admin') || '[]');
+    const notificacionesAdmin = safeLocalGet('notificaciones_admin', []);
     const notifData = {
         id: Date.now(),
         tipo: 'pedido_completado',
@@ -7633,7 +7879,7 @@ function confirmarCierrePedido(pedidoId) {
     localStorage.setItem('notificaciones_admin', JSON.stringify(notificacionesAdmin.slice(0, 200)));
 
     // También agregar a notificaciones_coco (sincronizada via realtime-sync)
-    const notificacionesCoco = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notificacionesCoco = safeLocalGet('notificaciones_coco', []);
     notificacionesCoco.unshift(notifData);
     localStorage.setItem('notificaciones_coco', JSON.stringify(notificacionesCoco.slice(0, 200)));
 
@@ -7663,7 +7909,7 @@ function confirmarCierrePedido(pedidoId) {
  * Obtiene la producción del día desde historial_produccion
  */
 function obtenerProduccionOperadorasHoy() {
-    const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const historial = safeLocalGet('historial_produccion', []);
     const hoy = new Date().toISOString().split('T')[0];
 
     return historial.filter(h => h.fecha && h.fecha.startsWith(hoy));
@@ -7776,7 +8022,7 @@ function actualizarDatosDeOperadoras() {
     sincronizarOperadoresDesdeAdmin();
 
     // 1. Leer producción del día
-    const produccion = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const produccion = safeLocalGet('historial_produccion', []);
     const hoy = new Date().toISOString().split('T')[0];
     const produccionHoy = produccion.filter(p => p.fecha?.startsWith(hoy));
 
@@ -7796,7 +8042,7 @@ function actualizarDatosDeOperadoras() {
     });
 
     // 2. Leer estado de máquinas actualizado por operadoras
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     Object.entries(estadoMaquinas).forEach(([estacionId, estado]) => {
         if (supervisoraState.maquinas[estacionId]) {
             // IMPORTANTE: Si el operador terminó su proceso (estado = disponible, procesoActivo = false)
@@ -7884,9 +8130,9 @@ function actualizarDatosDeOperadoras() {
         // Actualizar lista de pedidos (menú lateral)
         renderPedidosList();
 
-        // Actualizar mapa de planta
+        // Actualizar mapa de planta (diff-based, sin reconstruir DOM)
         if (supervisoraState.layout) {
-            renderLayoutInSupervisora(supervisoraState.layout);
+            actualizarEstacionesEnMapa();
         }
     }
 }
@@ -7900,7 +8146,7 @@ function verificarProcesosCompletados() {
     let asignacionesModificadas = false;
 
     // 1. Verificar asignaciones activas con estado completado
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     const asignacionesAEliminar = [];
 
     Object.entries(asignaciones).forEach(([estacionId, asignacion]) => {
@@ -7947,7 +8193,7 @@ function verificarProcesosCompletados() {
     }
 
     // 2. Verificar historial de asignaciones completadas (nuevas)
-    const historialCompletadas = JSON.parse(localStorage.getItem('historial_asignaciones_completadas') || '[]');
+    const historialCompletadas = safeLocalGet('historial_asignaciones_completadas', []);
     let historialModificado = false;
 
     historialCompletadas.forEach(asignacion => {
@@ -7995,7 +8241,7 @@ function verificarProcesosCompletados() {
     }
 
     // 3. Sincronizar estado de procesos desde pedidos_erp (fuente de verdad del operador)
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
     pedidosERP.forEach(pedidoERP => {
         const pedido = supervisoraState.pedidosHoy.find(p => p.id == pedidoERP.id);
         if (pedido && pedido.procesos && pedidoERP.procesos) {
@@ -8054,7 +8300,7 @@ function verificarProcesosCompletados() {
                             DEBUG_MODE && console.log('[SUPERVISORA] Estación', estacionId, 'limpiada desde pedidos_erp');
 
                             // También eliminar de asignaciones_estaciones
-                            const asignacionesActuales = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+                            const asignacionesActuales = safeLocalGet('asignaciones_estaciones', {});
                             if (asignacionesActuales[estacionId]) {
                                 delete asignacionesActuales[estacionId];
                                 localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignacionesActuales));
@@ -8083,7 +8329,7 @@ function verificarProcesosCompletados() {
     });
 
     // 3.5 También leer del historial de producción del día como fuente adicional
-    const historialProduccion = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const historialProduccion = safeLocalGet('historial_produccion', []);
     const hoy = new Date().toISOString().split('T')[0];
     const produccionHoy = historialProduccion.filter(h => h.fecha?.startsWith(hoy));
 
@@ -8248,8 +8494,8 @@ function verificarAsignacionAutomaticaCalidadEmpaque() {
     DEBUG_MODE && console.log('[SUPERVISORA] Estaciones Calidad/Empaque encontradas:', estacionesCalidadEmpaque);
 
     // Buscar pedidos que tienen el último proceso de costura en ejecución
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
-    const asignacionesMulti = JSON.parse(localStorage.getItem('asignaciones_multi_pedido') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
+    const asignacionesMulti = safeLocalGet('asignaciones_multi_pedido', {});
 
     supervisoraState.pedidosHoy.forEach(pedido => {
         if (!pedido.procesos || pedido.procesos.length === 0) return;
@@ -8363,10 +8609,10 @@ setTimeout(actualizarDatosDeOperadoras, 2000);
  */
 function sincronizarOperadoresDesdeAdmin() {
     // Leer mapa de estaciones desde Admin
-    const mapaEstaciones = JSON.parse(localStorage.getItem('mapa_estaciones_planta') || '{}');
+    const mapaEstaciones = safeLocalGet('mapa_estaciones_planta', {});
 
     // Leer estado de máquinas
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
 
     // Para cada estación en el mapa
     Object.entries(mapaEstaciones).forEach(([estacionId, estacion]) => {
@@ -8446,7 +8692,7 @@ function sincronizarOperadoresDesdeAdmin() {
  * Muestra modal para enviar mensaje a operadoras
  */
 function mostrarModalEnviarMensaje(destinatarioId = 'todos') {
-    const operadoras = JSON.parse(localStorage.getItem('operadoras_db') || '[]');
+    const operadoras = safeLocalGet('operadoras_db', []);
 
     // Mensajes predefinidos operativos
     const mensajesPredefinidos = [
@@ -8461,7 +8707,7 @@ function mostrarModalEnviarMensaje(destinatarioId = 'todos') {
     ];
 
     // Historial reciente de mensajes enviados
-    const mensajesEnviados = JSON.parse(localStorage.getItem('mensajes_operadoras') || '[]');
+    const mensajesEnviados = safeLocalGet('mensajes_operadoras', []);
     const recientes = mensajesEnviados.slice(0, 3);
 
     const content = `
@@ -8471,7 +8717,7 @@ function mostrarModalEnviarMensaje(destinatarioId = 'todos') {
                 <select id="mensajeDestinatario" class="form-control">
                     <option value="todos" ${destinatarioId === 'todos' ? 'selected' : ''}>Todas las operadoras</option>
                     ${operadoras.map(op => `
-                        <option value="${op.id}" ${destinatarioId == op.id ? 'selected' : ''}>${op.nombre}</option>
+                        <option value="${op.id}" ${destinatarioId == op.id ? 'selected' : ''}>${S(op.nombre)}</option>
                     `).join('')}
                 </select>
             </div>
@@ -8536,7 +8782,7 @@ function confirmarEnvioMensaje() {
     }
 
     // Guardar mensaje
-    const mensajes = JSON.parse(localStorage.getItem('mensajes_operadoras') || '[]');
+    const mensajes = safeLocalGet('mensajes_operadoras', []);
     mensajes.unshift({
         id: Date.now(),
         texto: texto,
@@ -8616,7 +8862,7 @@ function showInventarioGeneralSupervisora() {
             <!-- Búsqueda -->
             <div class="inv-search-box">
                 <i class="fas fa-search"></i>
-                <input type="text" id="buscarInvSup" placeholder="Buscar producto o pieza..." onkeyup="filtrarInventarioSup()">
+                <input type="text" id="buscarInvSup" placeholder="Buscar producto o pieza..." onkeyup="debouncedFiltrarInventarioSup()">
             </div>
 
             <!-- Lista de productos -->
@@ -8960,6 +9206,9 @@ function toggleInvProductoSup(productoId) {
     }
 }
 
+// Debounced version of filtrarInventarioSup for search input
+var debouncedFiltrarInventarioSup = typeof debounce === 'function' ? debounce(filtrarInventarioSup, 300) : filtrarInventarioSup;
+
 // Filtrar inventario
 function filtrarInventarioSup() {
     const busqueda = document.getElementById('buscarInvSup')?.value?.toLowerCase() || '';
@@ -9125,7 +9374,7 @@ function asignarCorteInventario(piezaId, productoId) {
     // Obtener estaciones disponibles con operadores asignados
     const estaciones = typeof db !== 'undefined' ? db.getEstaciones() : [];
     const personal = typeof db !== 'undefined' ? db.getPersonal() : [];
-    const asignacionesActuales = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignacionesActuales = safeLocalGet('asignaciones_estaciones', {});
 
     // Filtrar estaciones que tienen operador y no tienen trabajo asignado o están disponibles
     const estacionesDisponibles = estaciones.filter(est => {
@@ -9395,7 +9644,7 @@ function confirmarAsignarCorte(piezaId, productoId) {
     const procesoId = `CORTE-INV-${piezaId}-${Date.now()}`;
 
     // 1. Guardar en asignaciones_estaciones
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     asignaciones[estacionId] = {
         pedidoId: pedidoInventarioId,
         procesoId: procesoId,
@@ -9414,7 +9663,7 @@ function confirmarAsignarCorte(piezaId, productoId) {
     localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
 
     // 2. Actualizar estado_maquinas
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     estadoMaquinas[estacionId] = {
         ...(estadoMaquinas[estacionId] || {}),
         estado: 'asignado',
@@ -9427,7 +9676,7 @@ function confirmarAsignarCorte(piezaId, productoId) {
     localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
 
     // 3. Crear pedido virtual en pedidos_activos para que operadora lo vea
-    let pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    let pedidosActivos = safeLocalGet('pedidos_activos', []);
 
     // Remover si ya existe
     pedidosActivos = pedidosActivos.filter(p => p.id !== pedidoInventarioId);
@@ -9464,7 +9713,7 @@ function confirmarAsignarCorte(piezaId, productoId) {
     localStorage.setItem('pedidos_activos', JSON.stringify(pedidosActivos));
 
     // 4. Guardar en historial de cortes de inventario
-    const historialCortes = JSON.parse(localStorage.getItem('historial_cortes_inventario') || '[]');
+    const historialCortes = safeLocalGet('historial_cortes_inventario', []);
     historialCortes.unshift({
         id: Date.now(),
         piezaId: piezaId,
@@ -9550,7 +9799,7 @@ function abrirModalAsistencia() {
         <tr class="asistencia-row" data-operador-id="${op.id}">
             <td class="asistencia-nombre">
                 <div class="asistencia-avatar">${getIniciales(op.nombre)}</div>
-                <span>${op.nombre}</span>
+                <span>${S(op.nombre)}</span>
             </td>
             <td class="asistencia-tipo-cell">
                 <div class="asistencia-tipo-group">
@@ -9756,3 +10005,15 @@ window.abrirModalAsistencia = abrirModalAsistencia;
 window.setTipoAsistencia = setTipoAsistencia;
 window.marcarTodosAsistencia = marcarTodosAsistencia;
 window.guardarAsistencia = guardarAsistencia;
+
+// Loading state helper
+function mostrarLoadingState(containerId, mensaje) {
+    var container = document.getElementById(containerId);
+    if (!container) return null;
+    var overlay = document.createElement('div');
+    overlay.className = 'loading-overlay';
+    overlay.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> ' + S(mensaje || 'Cargando...') + '</div>';
+    container.style.position = 'relative';
+    container.appendChild(overlay);
+    return function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); };
+}

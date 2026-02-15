@@ -1860,9 +1860,9 @@ function showPosicionDetalle(estacionId) {
 // Genera la sección de procesos asignados a un operador
 function generarSeccionProcesosAsignados(operadorId, pedidos, productos, procesos, clientes) {
     // Obtener asignaciones desde múltiples fuentes en localStorage
-    const asignacionesEstaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
-    const supervisoraMaquinas = JSON.parse(localStorage.getItem('supervisora_maquinas') || '{}');
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
+    const supervisoraMaquinas = safeLocalGet('supervisora_maquinas', {});
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
 
     // Buscar la estación del operador
     const estaciones = db.getEstaciones() || [];
@@ -2081,8 +2081,8 @@ function generarSeccionProcesosAsignados(operadorId, pedidos, productos, proceso
 
     // 4. IMPORTANTE: Sincronizar piezas desde pedidos_erp (fuente de verdad del operador)
     // El operador guarda las piezas en pedidos_erp, así que debemos leerlas de ahí
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
-    const historialProduccion = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
+    const historialProduccion = safeLocalGet('historial_produccion', []);
 
     asignacionesOperador.forEach(asig => {
         DEBUG_MODE && console.log('[generarSeccionProcesosAsignados] Procesando asignación:', asig.procesoNombre, 'procesoId:', asig.procesoId, 'pedidoId:', asig.pedidoId);

@@ -901,7 +901,7 @@ function getTopOperadoras(limite) {
 
 function calcularEficienciaOperadora(operadorId) {
     const historial = getHistorialProduccion();
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
 
     // Buscar registros del operador
     const registros = historial.filter(h => h.operadoraId == operadorId || h.operadorId == operadorId);
@@ -1057,7 +1057,7 @@ function calcularPremioDashboard(eficiencia, operadoraId) {
     if (!tier) return 0;
     var premioBase = getConfigIncentivosDashboard().premioBaseDefault;
     // Buscar premio individual
-    var operadorasDB = JSON.parse(localStorage.getItem('operadoras_db') || '[]');
+    var operadorasDB = safeLocalGet('operadoras_db', []);
     var op = operadorasDB.find(function(o) { return o.id == operadoraId; });
     if (op && op.premioProduccion > 0) premioBase = op.premioProduccion;
     return Math.round(premioBase * tier.multiplicador);
@@ -1088,10 +1088,10 @@ function renderSeccionIncentivosEquipo(stats, topOperadoras) {
     // Incentivo de la supervisora
     var metaEquipo = config.metaEquipoSupervisora || 90;
     var multiplicadorSup = config.multiplicadorSupervisora || 1.0;
-    var supervisoraData = JSON.parse(localStorage.getItem('supervisora_sesion') || '{}');
+    var supervisoraData = safeLocalGet('supervisora_sesion', {});
     var premioBaseSup = 0;
     // Buscar premio de la supervisora en personal
-    var operadorasDB = JSON.parse(localStorage.getItem('operadoras_db') || '[]');
+    var operadorasDB = safeLocalGet('operadoras_db', []);
     var supData = operadorasDB.find(function(o) { return o.rol === 'supervisora' || o.rol === 'supervisor'; });
     if (supData && supData.premioProduccion > 0) {
         premioBaseSup = supData.premioProduccion;
@@ -1539,7 +1539,7 @@ function getEventosCalendario(anio, mes) {
     });
 
     // Cargar eventos guardados (ausencias, mantenimiento, etc)
-    const eventosGuardados = JSON.parse(localStorage.getItem('calendario_eventos') || '[]');
+    const eventosGuardados = safeLocalGet('calendario_eventos', []);
     eventos.push(...eventosGuardados.filter(e => {
         if (e.fechaInicio && e.fechaFin) {
             var ini = new Date(e.fechaInicio);
@@ -1766,7 +1766,7 @@ function guardarEvento() {
     };
 
     // Guardar en localStorage
-    const eventos = JSON.parse(localStorage.getItem('calendario_eventos') || '[]');
+    const eventos = safeLocalGet('calendario_eventos', []);
     eventos.push(evento);
     localStorage.setItem('calendario_eventos', JSON.stringify(eventos));
 
@@ -1776,7 +1776,7 @@ function guardarEvento() {
 }
 
 function eliminarEvento(eventoId) {
-    const eventos = JSON.parse(localStorage.getItem('calendario_eventos') || '[]');
+    const eventos = safeLocalGet('calendario_eventos', []);
     const nuevosEventos = eventos.filter(e => e.id !== eventoId);
     localStorage.setItem('calendario_eventos', JSON.stringify(nuevosEventos));
 
@@ -2264,8 +2264,8 @@ function verDetalleCliente(clienteId) {
 // Reporte por Procesos
 function renderReporteProcesos() {
     const historial = getHistorialProduccion();
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
 
     // Agrupar por proceso
     const procesosMap = {};
@@ -2388,7 +2388,7 @@ function renderReporteProductos() {
     const productos = typeof db !== 'undefined' ? db.getProductos() : [];
     const clientes = typeof db !== 'undefined' ? db.getClientes() : [];
     const historial = getHistorialProduccion();
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
 
     // Agrupar producción por producto
     const productosMap = {};
@@ -2520,7 +2520,7 @@ function renderReporteProductos() {
 // Reporte por Pedidos
 function renderReportePedidos() {
     const pedidos = typeof db !== 'undefined' ? db.getPedidos() : [];
-    const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    const pedidosActivos = safeLocalGet('pedidos_activos', []);
     const clientes = typeof db !== 'undefined' ? db.getClientes() : [];
     const historial = getHistorialProduccion();
 
@@ -2636,7 +2636,7 @@ function renderReportePedidos() {
 // Ver detalle de pedido
 function verDetallePedido(pedidoId) {
     const pedidos = typeof db !== 'undefined' ? db.getPedidos() : [];
-    const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    const pedidosActivos = safeLocalGet('pedidos_activos', []);
     const pedido = pedidos.find(p => p.id === pedidoId) || pedidosActivos.find(p => p.id === pedidoId);
 
     if (!pedido) return;
@@ -2730,8 +2730,8 @@ function getReporteOperadoras() {
     }
 
     // Obtener datos de estado_maquinas y asignaciones para piezas actuales
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     const estaciones = typeof db !== 'undefined' ? db.getEstaciones() : [];
 
     const operadoras = [];
@@ -2820,7 +2820,7 @@ function calcularTendenciaOperadora(operadorId) {
 
 function calcularTotalPiezas(periodo) {
     const maquinas = Object.values(supervisoraState.maquinas || {});
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     const historial = getHistorialProduccion();
 
     // Piezas de hoy desde estado_maquinas (más actualizado)
@@ -2948,14 +2948,14 @@ function verDetalleOperadora(operadorId) {
     );
 
     // Obtener datos de estado_maquinas para info en tiempo real
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
 
     // Obtener productos, pedidos y clientes para referencias
     const productos = typeof db !== 'undefined' ? db.getProductos() : [];
     const pedidos = typeof db !== 'undefined' ? db.getPedidos() : [];
     const clientes = typeof db !== 'undefined' ? db.getClientes() : [];
-    const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    const pedidosActivos = safeLocalGet('pedidos_activos', []);
     const todosPedidos = [...pedidos, ...pedidosActivos];
 
     // Buscar estación actual del operador
@@ -3532,12 +3532,12 @@ function getProgresoRegistros() {
 }
 
 function getProgresoHistorial() {
-    const liberaciones = JSON.parse(localStorage.getItem('supervisora_liberaciones') || '[]');
+    const liberaciones = safeLocalGet('supervisora_liberaciones', []);
     return Math.min(100, Math.round((liberaciones.length / 30) * 100));
 }
 
 function getHistorialProduccion() {
-    return JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    return safeLocalGet('historial_produccion', []);
 }
 
 function guardarRegistroProduccion(registro) {
@@ -3554,7 +3554,7 @@ function guardarRegistroProduccion(registro) {
 }
 
 function getHistorialRecomendaciones() {
-    return JSON.parse(localStorage.getItem('historial_recomendaciones') || '[]');
+    return safeLocalGet('historial_recomendaciones', []);
 }
 
 function aplicarRecomendacion(recId) {
@@ -3870,7 +3870,7 @@ function generarRespuestaIAEnhanced(pregunta) {
     if (preguntaLower.includes('como vamos') || preguntaLower.includes('cómo vamos') || preguntaLower.includes('resumen') || preguntaLower.includes('status')) {
         const alertas = verificarAlertasEntrega();
         const anomalias = detectarAnomalias();
-        const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+        const historial = safeLocalGet('historial_produccion', []);
         const hoyStr = new Date().toISOString().split('T')[0];
         const produccionHoy = historial.filter(h => h.fecha?.startsWith(hoyStr));
         const totalHoy = produccionHoy.reduce((s, h) => s + (h.cantidad || 0), 0);
@@ -3891,10 +3891,10 @@ function generarRespuestaIAEnhanced(pregunta) {
     }
 
     // Buscar por nombre de operadora
-    const personal = JSON.parse(localStorage.getItem('erp_multifundas_db') || '{}').personal || [];
+    const personal = safeLocalGet('erp_multifundas_db', {}).personal || [];
     for (const persona of personal) {
         if (persona.nombre && preguntaLower.includes(persona.nombre.toLowerCase().split(' ')[0])) {
-            const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+            const historial = safeLocalGet('historial_produccion', []);
             const hoyStr = new Date().toISOString().split('T')[0];
             const registros = historial.filter(h =>
                 h.operadoraId == persona.id && h.fecha?.startsWith(hoyStr)

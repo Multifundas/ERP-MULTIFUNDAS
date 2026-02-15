@@ -346,7 +346,34 @@ function initPanelOperadora() {
     // Verificar si es primer uso (mostrar tutorial)
     verificarPrimerUso();
 
+    // Indicador de conexión
+    crearIndicadorConexion();
+
     DEBUG_MODE && console.log('Panel inicializado correctamente');
+}
+
+function crearIndicadorConexion() {
+    var indicator = document.createElement('div');
+    indicator.id = 'conexionIndicator';
+    indicator.className = 'conexion-indicator ' + (navigator.onLine ? 'online' : 'offline');
+    indicator.innerHTML = '<i class="fas ' + (navigator.onLine ? 'fa-wifi' : 'fa-wifi-slash') + '"></i> ' + (navigator.onLine ? 'En línea' : 'Sin conexión');
+    document.body.appendChild(indicator);
+
+    window.addEventListener('online', function() {
+        indicator.className = 'conexion-indicator online';
+        indicator.innerHTML = '<i class="fas fa-wifi"></i> En línea';
+        setTimeout(function() { indicator.classList.add('fade'); }, 3000);
+    });
+
+    window.addEventListener('offline', function() {
+        indicator.className = 'conexion-indicator offline';
+        indicator.innerHTML = '<i class="fas fa-wifi-slash"></i> Sin conexión';
+        indicator.classList.remove('fade');
+    });
+
+    if (navigator.onLine) {
+        setTimeout(function() { indicator.classList.add('fade'); }, 5000);
+    }
 }
 
 /**
@@ -359,7 +386,7 @@ function verificarNuevaAsignacion() {
         return;
     }
 
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
 
     // Buscar asignación de forma flexible
     let miAsignacion = asignaciones[CONFIG_ESTACION.id];
@@ -467,7 +494,7 @@ function sincronizarDatosAlInicio() {
     }
 
     // Mostrar estado actual de asignaciones
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     DEBUG_MODE && console.log('[OPERADORA] Estado de asignaciones:', Object.keys(asignaciones).length, 'estaciones asignadas');
 }
 
@@ -481,7 +508,7 @@ function cargarDatosGuardados() {
     const guardado = localStorage.getItem(key);
 
     if (guardado) {
-        const datos = JSON.parse(guardado);
+        const datos = safeJsonParse(guardado, {});
         const todasCapturas = datos.capturas || [];
 
         // Filtrar solo las capturas del proceso actual (si hay uno asignado)
@@ -546,7 +573,7 @@ function guardarDatos() {
 
 function cargarPedidoAsignado() {
     // 1. Buscar asignación para esta estación
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
 
     DEBUG_MODE && console.log('[OPERADORA] === DIAGNÓSTICO DE ASIGNACIÓN ===');
     DEBUG_MODE && console.log('[OPERADORA] CONFIG_ESTACION.id:', CONFIG_ESTACION.id);
@@ -590,7 +617,7 @@ function cargarPedidoAsignado() {
     let pedido = null;
 
     // Fuente 1: pedidos_activos (sincronizado desde admin)
-    const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+    const pedidosActivos = safeLocalGet('pedidos_activos', []);
     DEBUG_MODE && console.log('[OPERADORA] pedidos_activos disponibles:', pedidosActivos.length, 'pedidos');
     DEBUG_MODE && console.log('[OPERADORA] IDs en pedidos_activos:', pedidosActivos.map(p => `${p.id} (${typeof p.id})`));
     DEBUG_MODE && console.log('[OPERADORA] Buscando pedidoId:', pedidoIdBuscado, '(tipo:', typeof pedidoIdBuscado + ')');
@@ -600,7 +627,7 @@ function cargarPedidoAsignado() {
 
     // Fuente 2: pedidos_dia (legacy)
     if (!pedido) {
-        const pedidosDia = JSON.parse(localStorage.getItem('pedidos_dia') || '[]');
+        const pedidosDia = safeLocalGet('pedidos_dia', []);
         DEBUG_MODE && console.log('[OPERADORA] pedidos_dia disponibles:', pedidosDia.length, 'pedidos');
         pedido = pedidosDia.find(p => p.id == pedidoIdBuscado);
     }
@@ -655,7 +682,7 @@ function cargarPedidoAsignado() {
         DEBUG_MODE && console.log('[OPERADORA] Restaurando proceso suspendido:', datos.piezasCapturadas, 'piezas,', formatearTiempo(datos.tiempoAcumulado || 0));
 
         // Limpiar flag de reanudación de la asignación
-        const asignTemp = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+        const asignTemp = safeLocalGet('asignaciones_estaciones', {});
         if (asignTemp[estacionIdUsada]) {
             delete asignTemp[estacionIdUsada].esReanudacion;
             delete asignTemp[estacionIdUsada].datosSuspendidos;
@@ -842,7 +869,7 @@ function mostrarSinPedido() {
     }
 
     // Log para debug
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     DEBUG_MODE && console.log('[OPERADORA] Sin pedido - asignaciones actuales:', Object.keys(asignaciones));
     DEBUG_MODE && console.log('[OPERADORA] Esta estación (', CONFIG_ESTACION.id, ') tiene asignación:',
         asignaciones[CONFIG_ESTACION.id] ? 'SÍ' : 'NO');
@@ -870,7 +897,7 @@ function refrescarAsignacion() {
             DEBUG_MODE && console.log('[OPERADORA] === INFO PARA DIAGNÓSTICO ===');
             DEBUG_MODE && console.log('Estación configurada:', CONFIG_ESTACION.id);
 
-            const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+            const asignaciones = safeLocalGet('asignaciones_estaciones', {});
             DEBUG_MODE && console.log('Asignaciones existentes:', Object.keys(asignaciones));
 
             if (Object.keys(asignaciones).length > 0) {
@@ -966,7 +993,7 @@ function verificarProcesoBloqueado(proceso, procesoActual, colaProcesos) {
     // Buscar el producto en la base de datos para obtener la rutaProcesos original
     let rutaProcesos = [];
     try {
-        const dbData = JSON.parse(localStorage.getItem('erp_multifundas_db') || '{}');
+        const dbData = safeLocalGet('erp_multifundas_db', {});
         const productos = dbData.productos || [];
 
         // Buscar por productoId o por nombre del producto en el proceso
@@ -1020,7 +1047,7 @@ function verificarProcesoBloqueado(proceso, procesoActual, colaProcesos) {
     // verificar si los procesos anteriores en la ruta están completados
     if (ordenEnRuta > ordenActualEnRuta && ordenActualEnRuta > 0) {
         // Buscar en pedidos_erp el estado de los procesos anteriores
-        const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+        const pedidosERP = safeLocalGet('pedidos_erp', []);
         const pedidoERP = pedidosERP.find(p => p.id == pedidoId || p.pedidoId == pedidoId);
 
         // Obtener los procesos completados
@@ -1328,7 +1355,7 @@ function toggleModoSimultaneo() {
     }
 
     // Re-renderizar
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     const miAsignacion = asignaciones[CONFIG_ESTACION.id];
     renderizarColaProcesosOperadora(miAsignacion);
 
@@ -1353,7 +1380,7 @@ function toggleProcesoSimultaneo(procesoId, procesoNombre, pedidoId, productoId)
         DEBUG_MODE && console.log('[OPERADORA] Proceso removido de simultáneos:', procesoNombre);
     } else {
         // Antes de agregar, verificar si el proceso está bloqueado
-        const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+        const asignaciones = safeLocalGet('asignaciones_estaciones', {});
         const miAsignacion = asignaciones[CONFIG_ESTACION.id];
         const colaProcesos = miAsignacion?.colaProcesos || [];
 
@@ -1406,7 +1433,7 @@ function toggleProcesoSimultaneo(procesoId, procesoNombre, pedidoId, productoId)
     registrarProcesosSimultaneosEnERP();
 
     // Re-renderizar
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     const miAsignacion = asignaciones[CONFIG_ESTACION.id];
     renderizarColaProcesosOperadora(miAsignacion);
 
@@ -1422,7 +1449,7 @@ function toggleProcesoSimultaneo(procesoId, procesoNombre, pedidoId, productoId)
 function registrarProcesosSimultaneosEnERP() {
     if (operadoraState.procesosSimultaneos.length === 0) return;
 
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
     let huboCambios = false;
 
     operadoraState.procesosSimultaneos.forEach(proc => {
@@ -1567,7 +1594,7 @@ function cargarConfiguracionSimultaneos() {
 
                 // Re-renderizar si hay procesos
                 if (operadoraState.procesosSimultaneos.length > 0) {
-                    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+                    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
                     const miAsignacion = asignaciones[CONFIG_ESTACION.id];
                     if (miAsignacion) {
                         renderizarColaProcesosOperadora(miAsignacion);
@@ -1589,7 +1616,7 @@ function sincronizarProcesosSimultaneos() {
     const estacionId = CONFIG_ESTACION.id;
 
     // 1. Actualizar estado_maquinas con los procesos simultáneos
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
 
     if (!estadoMaquinas[estacionId]) {
         estadoMaquinas[estacionId] = {};
@@ -1619,7 +1646,7 @@ function sincronizarProcesosSimultaneos() {
     localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
 
     // 2. Actualizar asignaciones_estaciones para marcar procesos como trabajándose
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
 
     if (asignaciones[estacionId]) {
         asignaciones[estacionId].modoSimultaneo = operadoraState.modoSimultaneo;
@@ -1767,7 +1794,7 @@ function capturarPiezas() {
 
 function sincronizarConSupervisora(captura) {
     // Guardar en historial_produccion (clave unificada)
-    const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const historial = safeLocalGet('historial_produccion', []);
 
     const registro = {
         id: Date.now(),
@@ -1796,7 +1823,7 @@ function sincronizarConSupervisora(captura) {
     const procesoNombre = operadoraState.procesoActual?.procesoNombre || operadoraState.procesoActual?.nombre;
 
     if (pedidoId) {
-        const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+        const pedidosERP = safeLocalGet('pedidos_erp', []);
         // Usar == para comparación flexible (string/number)
         let pedidoIndex = pedidosERP.findIndex(p => p.id == pedidoId);
 
@@ -1864,7 +1891,7 @@ function sincronizarConSupervisora(captura) {
     }
 
     // También actualizar estado de la máquina en tiempo real
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     estadoMaquinas[CONFIG_ESTACION.id] = {
         ...(estadoMaquinas[CONFIG_ESTACION.id] || {}),
         estado: 'trabajando',
@@ -1978,12 +2005,12 @@ function obtenerOtrasOperadorasEnProceso() {
 
     try {
         // Buscar en asignaciones_estaciones
-        const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+        const asignaciones = safeLocalGet('asignaciones_estaciones', {});
         // Buscar en estado_maquinas (fuente principal de piezas en tiempo real)
-        const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+        const estadoMaquinas = safeLocalGet('estado_maquinas', {});
 
         // Obtener personal para los nombres
-        const dbData = JSON.parse(localStorage.getItem('erp_multifundas_db') || '{}');
+        const dbData = safeLocalGet('erp_multifundas_db', {});
         const personal = dbData.personal || [];
 
         // Normalizar nombre de proceso para comparación
@@ -2040,7 +2067,7 @@ function obtenerOtrasOperadorasEnProceso() {
                     piezasCapturadas = estadoMaquina.piezasHoy || 0;
                 } else {
                     // Si no coincide, buscar en historial_produccion
-                    const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+                    const historial = safeLocalGet('historial_produccion', []);
                     const registrosOperadora = historial.filter(h =>
                         h.pedidoId == miPedidoId &&
                         (h.procesoNombre || '').toLowerCase().trim() === miProcesoNombreLower &&
@@ -2083,7 +2110,7 @@ function obtenerTotalPiezasProceso() {
     if (!pedidoId) return operadoraState.piezasCapturadas;
 
     try {
-        const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+        const pedidosERP = safeLocalGet('pedidos_erp', []);
         const pedido = pedidosERP.find(p => p.id == pedidoId);
         if (!pedido || !pedido.procesos) return operadoraState.piezasCapturadas;
 
@@ -2289,7 +2316,7 @@ function enviarProblema(tipoId) {
 }
 
 function notificarSupervisora(problema) {
-    const notificaciones = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notificaciones = safeLocalGet('notificaciones_coco', []);
     notificaciones.unshift({
         id: Date.now(),
         tipo: 'problema_operadora',
@@ -2304,7 +2331,7 @@ function notificarSupervisora(problema) {
 
     // También agregar a tiempos muertos si es problema de máquina
     if (problema.tipo === 'maquina') {
-        const tiemposMuertos = JSON.parse(localStorage.getItem('tiempos_muertos') || '{"activos":{},"historial":[]}');
+        const tiemposMuertos = safeLocalGet('tiempos_muertos', {activos:{},historial:[]});
         tiemposMuertos.activos[problema.estacionId] = {
             id: problema.id,
             estacionId: problema.estacionId,
@@ -2355,7 +2382,7 @@ function llamarCoco() {
 function confirmarLlamadaCoco() {
     const motivo = document.getElementById('motivoLlamada')?.value || 'Necesita ayuda';
 
-    const notificaciones = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notificaciones = safeLocalGet('notificaciones_coco', []);
     notificaciones.unshift({
         id: Date.now(),
         tipo: 'llamada_operadora',
@@ -2410,7 +2437,7 @@ function confirmarDescanso(minutos) {
         inicio: new Date().toISOString()
     };
 
-    const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const historial = safeLocalGet('historial_produccion', []);
     historial.unshift(descanso);
     localStorage.setItem('historial_produccion', JSON.stringify(historial));
 
@@ -2552,7 +2579,7 @@ function guardarDatosTurno() {
         eficiencia: calcularEficiencia()
     };
 
-    const turnos = JSON.parse(localStorage.getItem('historial_turnos') || '[]');
+    const turnos = safeLocalGet('historial_turnos', []);
     turnos.unshift(resumen);
     localStorage.setItem('historial_turnos', JSON.stringify(turnos.slice(0, 100)));
 }
@@ -2602,7 +2629,7 @@ function iniciarProceso() {
     iniciarMonitoreoDesempeno();
 
     // *** Notificar inicio a supervisora ***
-    const estadoMaquinasInicio = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinasInicio = safeLocalGet('estado_maquinas', {});
     estadoMaquinasInicio[CONFIG_ESTACION.id] = {
         estado: 'trabajando',
         operadoraId: authState.operadoraActual?.id,
@@ -2786,7 +2813,7 @@ function suspenderProceso() {
     };
 
     // Guardar en asignaciones_estaciones como proceso suspendido en cola
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     let estacionIdUsada = CONFIG_ESTACION.id;
     if (!asignaciones[CONFIG_ESTACION.id]) {
         const miIdN = CONFIG_ESTACION.id.toLowerCase().replace(/[-_\s]/g, '');
@@ -2834,7 +2861,7 @@ function suspenderProceso() {
     }
 
     // Actualizar estado de la máquina
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     estadoMaquinas[CONFIG_ESTACION.id] = {
         ...(estadoMaquinas[CONFIG_ESTACION.id] || {}),
         estado: 'suspendido',
@@ -2846,7 +2873,7 @@ function suspenderProceso() {
     localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
 
     // Notificar a supervisora
-    const notificaciones = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notificaciones = safeLocalGet('notificaciones_coco', []);
     notificaciones.unshift({
         id: Date.now(),
         tipo: 'proceso_suspendido',
@@ -2891,12 +2918,12 @@ function suspenderProceso() {
     mostrarToast('Proceso suspendido. Progreso guardado.', 'info');
 
     // Verificar si hay un siguiente proceso asignado o mostrar selector de suspendidos
-    const asignacionesActualizadas = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignacionesActualizadas = safeLocalGet('asignaciones_estaciones', {});
     if (asignacionesActualizadas[estacionIdUsada]) {
         cargarPedidoAsignado();
     } else {
         // Revisar si hay procesos suspendidos para mostrar selector
-        const colaSuspendidos = JSON.parse(localStorage.getItem(`cola_suspendidos_${CONFIG_ESTACION.id}`) || '[]');
+        const colaSuspendidos = safeLocalGet('cola_suspendidos_' + CONFIG_ESTACION.id, []);
         if (colaSuspendidos.length > 0) {
             mostrarSelectorProcesosSuspendidos(colaSuspendidos);
         } else {
@@ -2957,10 +2984,10 @@ function mostrarSelectorProcesosSuspendidos(colaSuspendidos) {
 function reanudarProcesoDeCola(index) {
     cerrarModal();
 
-    const colaSuspendidos = JSON.parse(localStorage.getItem(`cola_suspendidos_${CONFIG_ESTACION.id}`) || '[]');
+    const colaSuspendidos = safeLocalGet('cola_suspendidos_' + CONFIG_ESTACION.id, []);
 
     // También buscar en asignaciones_estaciones.colaProcesos
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     let estacionIdUsada = CONFIG_ESTACION.id;
     if (!asignaciones[CONFIG_ESTACION.id]) {
         const miIdN = CONFIG_ESTACION.id.toLowerCase().replace(/[-_\s]/g, '');
@@ -3135,7 +3162,7 @@ function finalizarProcesoAutomatico() {
     // === SINCRONIZACIÓN CON SUPERVISORA ===
 
     // 1. Actualizar avance del proceso en pedidos_erp
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
     const pedidoIndex = pedidosERP.findIndex(p => p.id == pedidoId);
     if (pedidoIndex >= 0) {
         const pedido = pedidosERP[pedidoIndex];
@@ -3155,7 +3182,7 @@ function finalizarProcesoAutomatico() {
                 pedido.fechaCompletado = new Date().toISOString();
                 DEBUG_MODE && console.log('[OPERADORA] Todos los procesos completados (auto) → pedido completado:', pedidoId);
 
-                const pedidosActivosAuto = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+                const pedidosActivosAuto = safeLocalGet('pedidos_activos', []);
                 const paIdxAuto = pedidosActivosAuto.findIndex(p => p.id == pedidoId);
                 if (paIdxAuto >= 0) {
                     pedidosActivosAuto[paIdxAuto].estado = 'completado';
@@ -3168,7 +3195,7 @@ function finalizarProcesoAutomatico() {
     }
 
     // 2. Liberar asignación
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     let haySiguienteProceso = false;
     let estacionIdEncontrada = CONFIG_ESTACION.id;
 
@@ -3197,7 +3224,7 @@ function finalizarProcesoAutomatico() {
             finalizadoAutomaticamente: true
         };
 
-        const historialAsignaciones = JSON.parse(localStorage.getItem('historial_asignaciones_completadas') || '[]');
+        const historialAsignaciones = safeLocalGet('historial_asignaciones_completadas', []);
         historialAsignaciones.unshift(asignacionCompletada);
         localStorage.setItem('historial_asignaciones_completadas', JSON.stringify(historialAsignaciones.slice(0, 100)));
 
@@ -3229,7 +3256,7 @@ function finalizarProcesoAutomatico() {
         DEBUG_MODE && console.log('[OPERADORA] Agregando', piezasProducidas, 'piezas al inventario');
 
         try {
-            const dbData = JSON.parse(localStorage.getItem('erp_multifundas_db') || '{}');
+            const dbData = safeLocalGet('erp_multifundas_db', {});
             if (dbData.inventarioPiezas) {
                 const piezaIndex = dbData.inventarioPiezas.findIndex(p => p.id == asignacionOriginalAuto.piezaInventarioId);
                 if (piezaIndex >= 0) {
@@ -3261,7 +3288,7 @@ function finalizarProcesoAutomatico() {
         }
 
         // Actualizar historial de cortes
-        const historialCortes = JSON.parse(localStorage.getItem('historial_cortes_inventario') || '[]');
+        const historialCortes = safeLocalGet('historial_cortes_inventario', []);
         const corteIndex = historialCortes.findIndex(c => c.pedidoVirtualId == pedidoId);
         if (corteIndex >= 0) {
             historialCortes[corteIndex].estado = 'completado';
@@ -3271,14 +3298,14 @@ function finalizarProcesoAutomatico() {
         }
 
         // Limpiar pedido virtual
-        let pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+        let pedidosActivos = safeLocalGet('pedidos_activos', []);
         pedidosActivos = pedidosActivos.filter(p => p.id !== pedidoId);
         localStorage.setItem('pedidos_activos', JSON.stringify(pedidosActivos));
     }
 
     // 3. Notificar a supervisora
     const esCorteInvAuto = asignacionOriginalAuto?.esCorteInventario;
-    const notificacionesCoco = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notificacionesCoco = safeLocalGet('notificaciones_coco', []);
     notificacionesCoco.unshift({
         id: Date.now(),
         tipo: esCorteInvAuto ? 'corte_inventario_completado' : 'proceso_completado_automatico',
@@ -3296,7 +3323,7 @@ function finalizarProcesoAutomatico() {
     localStorage.setItem('notificaciones_coco', JSON.stringify(notificacionesCoco.slice(0, 100)));
 
     // 4. Actualizar estado de la máquina a disponible
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     const idsALimpiar = [CONFIG_ESTACION.id];
     if (estacionIdEncontrada !== CONFIG_ESTACION.id) {
         idsALimpiar.push(estacionIdEncontrada);
@@ -3437,7 +3464,7 @@ function finalizarProceso() {
     const piezasProducidas = operadoraState.piezasCapturadas;
 
     // 1. Actualizar avance del proceso en el pedido (para supervisora)
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
     // Usar == para comparación flexible (string/number)
     const pedidoIndex = pedidosERP.findIndex(p => p.id == pedidoId);
     if (pedidoIndex >= 0) {
@@ -3465,7 +3492,7 @@ function finalizarProceso() {
             DEBUG_MODE && console.log('[OPERADORA] Todos los procesos completados → pedido marcado como completado:', pedidoId);
 
             // También actualizar en pedidos_activos
-            const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+            const pedidosActivos = safeLocalGet('pedidos_activos', []);
             const paIdx = pedidosActivos.findIndex(p => p.id == pedidoId);
             if (paIdx >= 0) {
                 pedidosActivos[paIdx].estado = 'completado';
@@ -3479,7 +3506,7 @@ function finalizarProceso() {
     }
 
     // 2. Guardar historial de asignación completada (para que supervisora lo lea)
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     let haySiguienteProceso = false;
 
     DEBUG_MODE && console.log('[OPERADORA] === ELIMINANDO ASIGNACIÓN ===');
@@ -3515,7 +3542,7 @@ function finalizarProceso() {
         };
 
         // Guardar en historial de asignaciones completadas (para supervisora)
-        const historialAsignaciones = JSON.parse(localStorage.getItem('historial_asignaciones_completadas') || '[]');
+        const historialAsignaciones = safeLocalGet('historial_asignaciones_completadas', []);
         historialAsignaciones.unshift(asignacionCompletada);
         localStorage.setItem('historial_asignaciones_completadas', JSON.stringify(historialAsignaciones.slice(0, 100)));
 
@@ -3546,7 +3573,7 @@ function finalizarProceso() {
     }
 
     // 2.5 VERIFICAR SI ES CORTE DE INVENTARIO - Agregar piezas al inventario
-    const asignacionOriginal = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}')[estacionIdEncontrada] ||
+    const asignacionOriginal = safeLocalGet('asignaciones_estaciones', {})[estacionIdEncontrada] ||
                                asignacionCompletada || {};
 
     if (asignacionOriginal?.esCorteInventario && asignacionOriginal?.piezaInventarioId && piezasProducidas > 0) {
@@ -3555,7 +3582,7 @@ function finalizarProceso() {
 
         // Agregar las piezas producidas al inventario
         try {
-            const dbData = JSON.parse(localStorage.getItem('erp_multifundas_db') || '{}');
+            const dbData = safeLocalGet('erp_multifundas_db', {});
             if (dbData.inventarioPiezas) {
                 const piezaIndex = dbData.inventarioPiezas.findIndex(p => p.id == asignacionOriginal.piezaInventarioId);
                 if (piezaIndex >= 0) {
@@ -3592,7 +3619,7 @@ function finalizarProceso() {
         }
 
         // Actualizar historial de cortes de inventario
-        const historialCortes = JSON.parse(localStorage.getItem('historial_cortes_inventario') || '[]');
+        const historialCortes = safeLocalGet('historial_cortes_inventario', []);
         const corteIndex = historialCortes.findIndex(c => c.pedidoVirtualId == pedidoId);
         if (corteIndex >= 0) {
             historialCortes[corteIndex].estado = 'completado';
@@ -3602,13 +3629,13 @@ function finalizarProceso() {
         }
 
         // Limpiar el pedido virtual de pedidos_activos
-        let pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+        let pedidosActivos = safeLocalGet('pedidos_activos', []);
         pedidosActivos = pedidosActivos.filter(p => p.id !== pedidoId);
         localStorage.setItem('pedidos_activos', JSON.stringify(pedidosActivos));
     }
 
     // 3. Notificar a supervisora que proceso terminó
-    const notificacionesCoco = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notificacionesCoco = safeLocalGet('notificaciones_coco', []);
     const esCorteInv = asignacionOriginal?.esCorteInventario;
     notificacionesCoco.unshift({
         id: Date.now(),
@@ -3630,7 +3657,7 @@ function finalizarProceso() {
     localStorage.setItem('notificaciones_coco', JSON.stringify(notificacionesCoco.slice(0, 100)));
 
     // 4. Actualizar estado de la máquina a disponible y SIN proceso
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     // Limpiar tanto el ID de CONFIG como el ID encontrado (por si son diferentes)
     const idsALimpiar = [CONFIG_ESTACION.id];
     if (estacionIdEncontrada !== CONFIG_ESTACION.id) {
@@ -3657,7 +3684,7 @@ function finalizarProceso() {
     localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
 
     // 5. También guardar en historial que lee supervisora
-    const historialSup = JSON.parse(localStorage.getItem('supervisora_historial_procesos') || '[]');
+    const historialSup = safeLocalGet('supervisora_historial_procesos', []);
     historialSup.unshift({
         ...resumenProceso,
         tipo: 'proceso_completado'
@@ -4033,7 +4060,7 @@ function finalizarProcesoConMetros(metrosUtilizados) {
     const piezasProducidas = operadoraState.piezasCapturadas;
 
     // 1. Actualizar avance del proceso en el pedido
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
     const pedidoIndex = pedidosERP.findIndex(p => p.id == pedidoId);
     if (pedidoIndex >= 0) {
         const pedido = pedidosERP[pedidoIndex];
@@ -4055,7 +4082,7 @@ function finalizarProcesoConMetros(metrosUtilizados) {
     }
 
     // 2. Manejar asignaciones
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     let haySiguienteProceso = false;
     let estacionIdEncontrada = CONFIG_ESTACION.id;
 
@@ -4085,7 +4112,7 @@ function finalizarProcesoConMetros(metrosUtilizados) {
             metrosPorPieza: resumenProceso.metrosPorPieza
         };
 
-        const historialAsignaciones = JSON.parse(localStorage.getItem('historial_asignaciones_completadas') || '[]');
+        const historialAsignaciones = safeLocalGet('historial_asignaciones_completadas', []);
         historialAsignaciones.unshift(asignacionCompletada);
         localStorage.setItem('historial_asignaciones_completadas', JSON.stringify(historialAsignaciones.slice(0, 100)));
 
@@ -4108,7 +4135,7 @@ function finalizarProcesoConMetros(metrosUtilizados) {
     }
 
     // 3. Notificar a supervisora
-    const notificacionesCoco = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notificacionesCoco = safeLocalGet('notificaciones_coco', []);
     notificacionesCoco.unshift({
         id: Date.now(),
         tipo: 'proceso_completado',
@@ -4128,7 +4155,7 @@ function finalizarProcesoConMetros(metrosUtilizados) {
     localStorage.setItem('notificaciones_coco', JSON.stringify(notificacionesCoco.slice(0, 100)));
 
     // 4. Actualizar estado_maquinas
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     Object.keys(estadoMaquinas).forEach(estId => {
         if (estId.toLowerCase().replace(/[-_\s]/g, '') === CONFIG_ESTACION.id.toLowerCase().replace(/[-_\s]/g, '')) {
             estadoMaquinas[estId] = {
@@ -4149,7 +4176,7 @@ function finalizarProcesoConMetros(metrosUtilizados) {
     localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
 
     // 5. Guardar en historial de supervisora
-    const historialSup = JSON.parse(localStorage.getItem('supervisora_historial_procesos') || '[]');
+    const historialSup = safeLocalGet('supervisora_historial_procesos', []);
     historialSup.unshift({
         ...resumenProceso,
         tipo: 'proceso_completado'
@@ -4201,7 +4228,7 @@ function finalizarProcesoConMetros(metrosUtilizados) {
 
 function guardarConsumoMaterial(resumenProceso) {
     // Guardar en historial de consumo de material
-    const historialConsumo = JSON.parse(localStorage.getItem('historial_consumo_material') || '[]');
+    const historialConsumo = safeLocalGet('historial_consumo_material', []);
 
     historialConsumo.unshift({
         id: Date.now(),
@@ -4360,7 +4387,7 @@ function detenerContadorPausa() {
 }
 
 function notificarPausaACoco(motivo) {
-    const notificaciones = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notificaciones = safeLocalGet('notificaciones_coco', []);
     notificaciones.unshift({
         id: Date.now(),
         tipo: 'pausa_operadora',
@@ -4380,7 +4407,7 @@ function notificarPausaACoco(motivo) {
 
     // Si es problema de máquina o sin material, crear tiempo muerto
     if (motivo.id === 'maquina' || motivo.id === 'sin_material') {
-        const tiemposMuertos = JSON.parse(localStorage.getItem('tiempos_muertos') || '{"activos":{},"historial":[]}');
+        const tiemposMuertos = safeLocalGet('tiempos_muertos', {activos:{},historial:[]});
         tiemposMuertos.activos[CONFIG_ESTACION.id] = {
             id: Date.now(),
             estacionId: CONFIG_ESTACION.id,
@@ -4396,7 +4423,7 @@ function notificarPausaACoco(motivo) {
 }
 
 function registrarEventoProceso(tipo, descripcion) {
-    const eventos = JSON.parse(localStorage.getItem('eventos_proceso') || '[]');
+    const eventos = safeLocalGet('eventos_proceso', []);
     eventos.unshift({
         id: Date.now(),
         tipo: tipo,
@@ -4493,7 +4520,7 @@ function restaurarEstadoTemporizador() {
 }
 
 function guardarResumenProceso(resumen) {
-    const historial = JSON.parse(localStorage.getItem('historial_procesos') || '[]');
+    const historial = safeLocalGet('historial_procesos', []);
     historial.unshift(resumen);
     localStorage.setItem('historial_procesos', JSON.stringify(historial.slice(0, 200)));
 }
@@ -4593,7 +4620,7 @@ function verificarConexion() {
 }
 
 function agregarAColaOffline(tipo, datos) {
-    const cola = JSON.parse(localStorage.getItem('cola_offline') || '{"capturas":[],"problemas":[],"eventos":[]}');
+    const cola = safeLocalGet('cola_offline', {capturas:[],problemas:[],eventos:[]});
     cola[tipo].push({
         ...datos,
         timestamp: new Date().toISOString()
@@ -4617,7 +4644,7 @@ function sincronizarColaOffline() {
     _syncRetryCount = 0;
     clearTimeout(_syncRetryTimer);
 
-    const cola = JSON.parse(localStorage.getItem('cola_offline') || '{"capturas":[],"problemas":[],"eventos":[]}');
+    const cola = safeLocalGet('cola_offline', {capturas:[],problemas:[],eventos:[]});
     var totalPendientes = (cola.capturas || []).length + (cola.problemas || []).length;
 
     // Sincronizar capturas
@@ -4647,7 +4674,7 @@ function sincronizarColaOffline() {
 function actualizarIndicadorConexion() {
     const indicador = document.getElementById('conexionIndicador');
     if (indicador) {
-        const cola = JSON.parse(localStorage.getItem('cola_offline') || '{"capturas":[],"problemas":[],"eventos":[]}');
+        const cola = safeLocalGet('cola_offline', {capturas:[],problemas:[],eventos:[]});
         const pendientes = (cola.capturas || []).length + (cola.problemas || []).length + (cola.eventos || []).length;
 
         if (verificarConexion()) {
@@ -4779,7 +4806,7 @@ function mostrarHistorialDias() {
 }
 
 function obtenerHistorialDias() {
-    const historial = JSON.parse(localStorage.getItem('historial_turnos') || '[]');
+    const historial = safeLocalGet('historial_turnos', []);
     const operadoraId = authState.operadoraActual?.id;
 
     // Obtener últimos 7 días
@@ -4861,11 +4888,11 @@ function mostrarMisReportes() {
     const operadoraNombre = authState.operadoraActual?.nombre || 'Operador';
 
     // Obtener historial de producción del operador
-    const historialProduccion = JSON.parse(localStorage.getItem('historial_produccion') || '[]')
+    const historialProduccion = safeLocalGet('historial_produccion', [])
         .filter(h => h.operadoraId == operadoraId || h.operadorId == operadoraId);
 
     // Obtener productos y clientes
-    const dbData = JSON.parse(localStorage.getItem('multifundas_erp_data') || '{}');
+    const dbData = safeLocalGet('multifundas_erp_data', {});
     const productos = dbData.productos || [];
     const clientes = dbData.clientes || [];
     const pedidos = dbData.pedidos || [];
@@ -5171,9 +5198,9 @@ function mostrarRankingPersonal() {
 }
 
 function obtenerRankingOperadoras() {
-    const produccionHoy = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const produccionHoy = safeLocalGet('historial_produccion', []);
     const hoy = new Date().toISOString().split('T')[0];
-    const operadorasDB = JSON.parse(localStorage.getItem('operadoras_db') || '[]');
+    const operadorasDB = safeLocalGet('operadoras_db', []);
 
     const porOperadora = {};
 
@@ -5207,7 +5234,7 @@ function obtenerRankingOperadoras() {
 function verificarMensajesCoco() {
     if (!authState.operadoraActual?.id) return;
 
-    const mensajes = JSON.parse(localStorage.getItem('mensajes_operadoras') || '[]');
+    const mensajes = safeLocalGet('mensajes_operadoras', []);
     const miId = authState.operadoraActual.id;
 
     // Filtrar mensajes no leídos para mí
@@ -5254,7 +5281,7 @@ function cerrarMensajeCoco() {
 }
 
 function marcarMensajeLeido(mensajeId) {
-    const mensajes = JSON.parse(localStorage.getItem('mensajes_operadoras') || '[]');
+    const mensajes = safeLocalGet('mensajes_operadoras', []);
     // Buscar con comparación flexible (== en vez de ===)
     const mensaje = mensajes.find(m => m.id == mensajeId);
     if (mensaje && authState.operadoraActual?.id) {
@@ -5535,7 +5562,7 @@ function obtenerEstadisticasMotivacion() {
     const hoy = new Date().toISOString().split('T')[0];
 
     // Obtener badges ganados
-    const badgesGanados = JSON.parse(localStorage.getItem(`badges_${operadoraId}`) || '[]');
+    const badgesGanados = safeLocalGet('badges_' + operadoraId, []);
 
     // Calcular racha
     const racha = calcularRacha();
@@ -5567,7 +5594,7 @@ function obtenerEstadisticasMotivacion() {
 
 function calcularRacha() {
     const operadoraId = authState.operadoraActual?.id;
-    const turnos = JSON.parse(localStorage.getItem('historial_turnos') || '[]');
+    const turnos = safeLocalGet('historial_turnos', []);
     const misTurnos = turnos.filter(t => t.operadoraId === operadoraId);
 
     if (misTurnos.length === 0) return 0;
@@ -5599,7 +5626,7 @@ function calcularRacha() {
 function verificarNuevosBadges() {
     const stats = obtenerEstadisticasMotivacion();
     const operadoraId = authState.operadoraActual?.id;
-    const badgesGanados = JSON.parse(localStorage.getItem(`badges_${operadoraId}`) || '[]');
+    const badgesGanados = safeLocalGet('badges_' + operadoraId, []);
 
     let nuevosBadges = [];
 
@@ -6168,7 +6195,7 @@ function toggleDetallesProceso(procesoId) {
 function obtenerInfoPedidoProceso(asignacion) {
     // Intentar obtener información del pedido desde varias fuentes
     const pedidoActual = operadoraState.pedidoActual;
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
 
     // Si tenemos pedido en el state
     if (pedidoActual) {
@@ -6276,7 +6303,7 @@ function cargarPedidosMultiples() {
     let misPedidos = [];
 
     // 1. Buscar en asignaciones_multi_pedido (automáticas de supervisora)
-    const asignacionesMulti = JSON.parse(localStorage.getItem('asignaciones_multi_pedido') || '{}');
+    const asignacionesMulti = safeLocalGet('asignaciones_multi_pedido', {});
     let pedidosMulti = asignacionesMulti[CONFIG_ESTACION.id];
 
     if (!pedidosMulti) {
@@ -6297,7 +6324,7 @@ function cargarPedidosMultiples() {
     }
 
     // 2. También buscar en asignaciones_estaciones (asignación manual desde supervisora)
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     let miAsignacion = asignaciones[CONFIG_ESTACION.id];
 
     if (!miAsignacion) {
@@ -6344,7 +6371,7 @@ function cargarPedidosMultiples() {
     }
 
     // Cargar pedidos activos, fusionando con estado guardado localmente
-    const estadoLocal = JSON.parse(localStorage.getItem('multi_pedidos_estado_local') || '{}');
+    const estadoLocal = safeLocalGet('multi_pedidos_estado_local', {});
 
     operadoraState.pedidosActivos = misPedidos.map(p => {
         // Verificar si hay estado local guardado para este pedido
@@ -6384,7 +6411,7 @@ function verificarNuevosPedidosMulti() {
     const pedidosActualesPedidoIds = operadoraState.pedidosActivos.map(p => p.pedidoId);
 
     // 1. Buscar en asignaciones_multi_pedido
-    const asignacionesMulti = JSON.parse(localStorage.getItem('asignaciones_multi_pedido') || '{}');
+    const asignacionesMulti = safeLocalGet('asignaciones_multi_pedido', {});
     let misPedidosMulti = asignacionesMulti[CONFIG_ESTACION.id];
 
     if (!misPedidosMulti) {
@@ -6409,7 +6436,7 @@ function verificarNuevosPedidosMulti() {
     }
 
     // 2. Buscar en asignaciones_estaciones (asignación manual)
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     let miAsignacion = asignaciones[CONFIG_ESTACION.id];
 
     if (!miAsignacion) {
@@ -6719,14 +6746,14 @@ function formatearTiempoOperador(operador) {
 function cargarListaOperadores() {
     try {
         // Intentar cargar desde supervisoraState primero
-        const supervisoraData = JSON.parse(localStorage.getItem('supervisora_state') || '{}');
+        const supervisoraData = safeLocalGet('supervisora_state', {});
         if (supervisoraData.operadores && supervisoraData.operadores.length > 0) {
             operadoraState.listaOperadoresDisponibles = supervisoraData.operadores;
             return;
         }
 
         // Intentar cargar desde personal
-        const personal = JSON.parse(localStorage.getItem('personal') || '[]');
+        const personal = safeLocalGet('personal', []);
         const operadores = personal.filter(p => p.rol === 'operador' && p.activo !== false);
         if (operadores.length > 0) {
             operadoraState.listaOperadoresDisponibles = operadores;
@@ -7007,8 +7034,8 @@ function mostrarDetallePedido(pedidoId) {
     if (!pedido) return;
 
     // Buscar información completa en múltiples fuentes
-    const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
-    const productosDB = JSON.parse(localStorage.getItem('productos') || '[]');
+    const pedidosActivos = safeLocalGet('pedidos_activos', []);
+    const productosDB = safeLocalGet('productos', []);
 
     // Buscar el pedido completo por diferentes campos
     const idBuscar = pedido.pedidoId || pedido.id;
@@ -7441,7 +7468,7 @@ function capturarCustomMulti() {
  */
 function sincronizarCapturaMulti(captura, pedido) {
     // Guardar en historial_produccion
-    const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const historial = safeLocalGet('historial_produccion', []);
     historial.unshift({
         ...captura,
         cliente: pedido.cliente,
@@ -7450,7 +7477,7 @@ function sincronizarCapturaMulti(captura, pedido) {
     localStorage.setItem('historial_produccion', JSON.stringify(historial.slice(0, 1000)));
 
     // Actualizar pedidos_erp
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
     const pedidoIndex = pedidosERP.findIndex(p => p.id == pedido.pedidoId);
     if (pedidoIndex >= 0 && pedidosERP[pedidoIndex].procesos) {
         const proceso = pedidosERP[pedidoIndex].procesos.find(
@@ -7546,7 +7573,7 @@ function completarFinalizacionMulti(pedidoId, tiempoTotal) {
     };
 
     // Guardar en historial
-    const historialCompletados = JSON.parse(localStorage.getItem('historial_asignaciones_completadas') || '[]');
+    const historialCompletados = safeLocalGet('historial_asignaciones_completadas', []);
     historialCompletados.unshift(resumen);
     localStorage.setItem('historial_asignaciones_completadas', JSON.stringify(historialCompletados.slice(0, 500)));
 
@@ -7554,7 +7581,7 @@ function completarFinalizacionMulti(pedidoId, tiempoTotal) {
     const esEmpaque = esEstacionEmpaque() || (pedido.procesoNombre || '').toLowerCase().includes('empaque');
 
     // Notificar a supervisora
-    const notificaciones = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notificaciones = safeLocalGet('notificaciones_coco', []);
 
     if (esEmpaque) {
         // EMPAQUE ES EL ÚLTIMO PROCESO - Notificación especial de pedido listo para entrega
@@ -7578,7 +7605,7 @@ function completarFinalizacionMulti(pedidoId, tiempoTotal) {
         });
 
         // También notificar a administración directamente
-        const notificacionesAdmin = JSON.parse(localStorage.getItem('notificaciones_admin') || '[]');
+        const notificacionesAdmin = safeLocalGet('notificaciones_admin', []);
         notificacionesAdmin.unshift({
             id: Date.now(),
             tipo: 'pedido_listo_entrega',
@@ -7600,7 +7627,7 @@ function completarFinalizacionMulti(pedidoId, tiempoTotal) {
         localStorage.setItem('notificaciones_admin', JSON.stringify(notificacionesAdmin.slice(0, 200)));
 
         // Marcar pedido como listo para entrega en pedidos_activos
-        const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+        const pedidosActivos = safeLocalGet('pedidos_activos', []);
         const pedidoActivo = pedidosActivos.find(p => p.id == pedido.pedidoId || p.pedidoId == pedido.pedidoId);
         if (pedidoActivo) {
             pedidoActivo.estado = 'listo_entrega';
@@ -7610,7 +7637,7 @@ function completarFinalizacionMulti(pedidoId, tiempoTotal) {
         }
 
         // Registrar en pedidos_erp también
-        const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+        const pedidosERP = safeLocalGet('pedidos_erp', []);
         const pedidoERP = pedidosERP.find(p => p.id == pedido.pedidoId);
         if (pedidoERP) {
             pedidoERP.estado = 'listo_entrega';
@@ -7699,7 +7726,7 @@ function guardarEstadoPedidosMulti() {
     localStorage.setItem('multi_pedidos_estado_local', JSON.stringify(estadoLocal));
 
     // 2. Actualizar asignaciones_multi_pedido para que supervisora vea el progreso
-    const asignacionesMulti = JSON.parse(localStorage.getItem('asignaciones_multi_pedido') || '{}');
+    const asignacionesMulti = safeLocalGet('asignaciones_multi_pedido', {});
 
     // Buscar mi estación
     let estacionKey = CONFIG_ESTACION.id;
@@ -7738,7 +7765,7 @@ function guardarEstadoPedidosMulti() {
     localStorage.setItem('asignaciones_multi_pedido', JSON.stringify(asignacionesMulti));
 
     // 3. También mantener compatibilidad con asignaciones_estaciones
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     asignaciones[estacionKey] = {
         ...asignaciones[estacionKey],
         modoMultiPedido: true,
@@ -8148,7 +8175,7 @@ function generarEtiqueta() {
     };
 
     // Guardar registro de etiquetas generadas
-    const registroEtiquetas = JSON.parse(localStorage.getItem('etiquetas_generadas') || '[]');
+    const registroEtiquetas = safeLocalGet('etiquetas_generadas', []);
     registroEtiquetas.unshift({
         id: Date.now(),
         fecha: new Date().toISOString(),
@@ -8354,7 +8381,7 @@ function generarEtiquetasPersonalizadas() {
     };
 
     // Guardar registro de etiquetas con detalle de cajas
-    const registroEtiquetas = JSON.parse(localStorage.getItem('etiquetas_generadas') || '[]');
+    const registroEtiquetas = safeLocalGet('etiquetas_generadas', []);
     registroEtiquetas.unshift({
         id: Date.now(),
         fecha: new Date().toISOString(),
@@ -8388,14 +8415,14 @@ function desasignarEstacionEmpaque() {
     const estacionId = CONFIG_ESTACION.id;
 
     // 1. Limpiar asignaciones_estaciones
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     if (asignaciones[estacionId]) {
         delete asignaciones[estacionId];
         localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
     }
 
     // 2. Limpiar estado_maquinas
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     if (estadoMaquinas[estacionId]) {
         estadoMaquinas[estacionId] = {
             estado: 'disponible',
@@ -8409,7 +8436,7 @@ function desasignarEstacionEmpaque() {
     }
 
     // 3. Limpiar asignaciones_multi_pedido para esta estación
-    const asignacionesMulti = JSON.parse(localStorage.getItem('asignaciones_multi_pedido') || '{}');
+    const asignacionesMulti = safeLocalGet('asignaciones_multi_pedido', {});
     if (asignacionesMulti[estacionId]) {
         delete asignacionesMulti[estacionId];
         localStorage.setItem('asignaciones_multi_pedido', JSON.stringify(asignacionesMulti));
@@ -8427,7 +8454,7 @@ function mostrarHistorialEtiquetas() {
 
     if (!modalOverlay || !modalBody) return;
 
-    const registroEtiquetas = JSON.parse(localStorage.getItem('etiquetas_generadas') || '[]');
+    const registroEtiquetas = safeLocalGet('etiquetas_generadas', []);
     const estacionId = CONFIG_ESTACION.id;
 
     // Filtrar etiquetas de esta estación (últimas 50)
@@ -8507,7 +8534,7 @@ function volverAModalEtiqueta() {
  * Reimprime una etiqueta del historial
  */
 function reimprimirEtiqueta(etiquetaId) {
-    const registroEtiquetas = JSON.parse(localStorage.getItem('etiquetas_generadas') || '[]');
+    const registroEtiquetas = safeLocalGet('etiquetas_generadas', []);
     const etiqueta = registroEtiquetas.find(e => e.id === etiquetaId);
 
     if (!etiqueta) {
@@ -8661,7 +8688,7 @@ function getPremioBase() {
         return operadora.premioProduccion;
     }
     // Fallback: buscar en personal de localStorage
-    const personal = JSON.parse(localStorage.getItem('erp_personal') || '[]');
+    const personal = safeLocalGet('erp_personal', []);
     const empleado = personal.find(p => p.id === operadora?.id || p.numEmpleado === operadora?.numEmpleado);
     if (empleado && empleado.premioProduccion > 0) {
         return empleado.premioProduccion;
@@ -8841,7 +8868,7 @@ function guardarPremioDelDia(eficiencia, premioGanado, tierNombre) {
     const hoy = new Date();
     const semanaKey = 'premios_' + operadoraId + '_' + getWeekKey(hoy);
 
-    const premiosSemanales = JSON.parse(localStorage.getItem(semanaKey) || '[]');
+    const premiosSemanales = safeLocalGet(semanaKey, []);
 
     const fechaHoy = hoy.toISOString().split('T')[0];
     const existente = premiosSemanales.findIndex(p => p.fecha === fechaHoy);
@@ -8888,7 +8915,7 @@ function mostrarMisGanancias() {
 
     const hoy = new Date();
     const semanaKey = 'premios_' + operadoraId + '_' + getWeekKey(hoy);
-    const premiosSemanales = JSON.parse(localStorage.getItem(semanaKey) || '[]');
+    const premiosSemanales = safeLocalGet(semanaKey, []);
 
     // Calcular totales
     const totalSemana = premiosSemanales.reduce((sum, p) => sum + (p.premio || 0), 0);
@@ -9258,7 +9285,7 @@ function deshacerCaptura(capturaId) {
     captura.fechaDeshecha = new Date().toISOString();
 
     // Actualizar localStorage - restar piezas del historial
-    const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const historial = safeLocalGet('historial_produccion', []);
     const regIdx = historial.findIndex(h =>
         h.estacionId === CONFIG_ESTACION.id &&
         h.cantidad === captura.cantidad &&
@@ -9273,7 +9300,7 @@ function deshacerCaptura(capturaId) {
     const pedidoId = operadoraState.pedidoActual?.id;
     const procesoId = captura.procesoId || operadoraState.procesoActual?.procesoId;
     if (pedidoId) {
-        const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+        const pedidosERP = safeLocalGet('pedidos_erp', []);
         const pedidoIndex = pedidosERP.findIndex(p => p.id == pedidoId);
         if (pedidoIndex >= 0 && pedidosERP[pedidoIndex].procesos) {
             const procIdx = pedidosERP[pedidoIndex].procesos.findIndex(p => p.id == procesoId);

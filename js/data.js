@@ -195,24 +195,24 @@ class Database {
 
             // Migrar estructuras faltantes sin perder datos existentes
             if (!data.areasPlanta) {
-                console.log('Migrando: agregando areasPlanta...');
+                DEBUG_MODE && console.log('Migrando: agregando areasPlanta...');
                 data.areasPlanta = initialData.areasPlanta;
                 needsSave = true;
             }
             if (!data.estaciones) {
-                console.log('Migrando: agregando estaciones...');
+                DEBUG_MODE && console.log('Migrando: agregando estaciones...');
                 data.estaciones = initialData.estaciones;
                 needsSave = true;
             }
             if (!data.estadoOperadores) {
-                console.log('Migrando: agregando estadoOperadores...');
+                DEBUG_MODE && console.log('Migrando: agregando estadoOperadores...');
                 data.estadoOperadores = initialData.estadoOperadores;
                 needsSave = true;
             }
 
             // Migrar estructura de personal (horarios)
             if (data.personal && data.personal[0] && !data.personal[0].horaEntrada) {
-                console.log('Migrando: agregando horarios a personal...');
+                DEBUG_MODE && console.log('Migrando: agregando horarios a personal...');
                 data.personal = data.personal.map((p, i) => ({
                     ...p,
                     horaEntrada: initialData.personal[i]?.horaEntrada || '07:00',
@@ -223,7 +223,7 @@ class Database {
 
             // Migrar estructura de productos (rutaProcesos)
             if (data.productos && data.productos[0] && !data.productos[0].rutaProcesos) {
-                console.log('Migrando: agregando rutaProcesos a productos...');
+                DEBUG_MODE && console.log('Migrando: agregando rutaProcesos a productos...');
                 data.productos = data.productos.map((p, i) => ({
                     ...p,
                     rutaProcesos: initialData.productos[i]?.rutaProcesos || [],
@@ -235,26 +235,26 @@ class Database {
 
             // Migrar notificaciones
             if (!data.notificaciones || !Array.isArray(data.notificaciones)) {
-                console.log('Migrando: agregando notificaciones...');
+                DEBUG_MODE && console.log('Migrando: agregando notificaciones...');
                 data.notificaciones = initialData.notificaciones || [];
                 needsSave = true;
             }
 
             // Migrar familias y subfamilias
             if (!data.familias) {
-                console.log('Migrando: agregando familias...');
+                DEBUG_MODE && console.log('Migrando: agregando familias...');
                 data.familias = initialData.familias;
                 needsSave = true;
             }
             if (!data.subfamilias) {
-                console.log('Migrando: agregando subfamilias...');
+                DEBUG_MODE && console.log('Migrando: agregando subfamilias...');
                 data.subfamilias = initialData.subfamilias;
                 needsSave = true;
             }
 
             // Migrar articulosFrecuentes en clientes
             if (data.clientes && data.clientes[0] && !data.clientes[0].articulosFrecuentes) {
-                console.log('Migrando: agregando articulosFrecuentes a clientes...');
+                DEBUG_MODE && console.log('Migrando: agregando articulosFrecuentes a clientes...');
                 data.clientes = data.clientes.map((c, i) => ({
                     ...c,
                     articulosFrecuentes: initialData.clientes[i]?.articulosFrecuentes || []
@@ -265,7 +265,7 @@ class Database {
             // Migrar avanceProcesos en pedidos
             if (data.pedidos && data.pedidos[0] && data.pedidos[0].productos &&
                 data.pedidos[0].productos[0] && !data.pedidos[0].productos[0].avanceProcesos) {
-                console.log('Migrando: agregando avanceProcesos a pedidos...');
+                DEBUG_MODE && console.log('Migrando: agregando avanceProcesos a pedidos...');
                 data.pedidos = data.pedidos.map(pedido => ({
                     ...pedido,
                     productos: pedido.productos.map(prod => ({
@@ -528,7 +528,7 @@ class Database {
         if (index !== -1) {
             this.data.personal[index] = { ...this.data.personal[index], ...updates };
             this.save();
-            console.log('Empleado actualizado:', id, updates);
+            DEBUG_MODE && console.log('Empleado actualizado:', id, updates);
             return this.data.personal[index];
         }
         console.warn('Empleado no encontrado:', id);
@@ -657,7 +657,7 @@ class Database {
         if (index !== -1) {
             this.data.estaciones[index].operadorId = operadorId;
             this.save();
-            console.log(`Estacion ${estacionId} asignada a operador ${operadorId}`);
+            DEBUG_MODE && console.log(`Estacion ${estacionId} asignada a operador ${operadorId}`);
             this.addAuditoria('Asignación de estación', `Operador ${operadorId} asignado a estación ${estacionId}`, 'estacion', estacionId);
             return this.data.estaciones[index];
         }
@@ -707,7 +707,7 @@ class Database {
         if (!this.data.estaciones) this.data.estaciones = [];
         this.data.estaciones.push(estacion);
         this.save();
-        console.log('Estación agregada:', estacion.id, '- Total estaciones:', this.data.estaciones.length);
+        DEBUG_MODE && console.log('Estación agregada:', estacion.id, '- Total estaciones:', this.data.estaciones.length);
         this.addAuditoria('Nueva estación', `Estación "${estacion.nombre}" creada en área ${estacion.areaPlantaId}`, 'estacion', estacion.id);
         return estacion;
     }
@@ -738,7 +738,7 @@ class Database {
     // ======== HISTORIAL DE PRODUCCIÓN ========
     getHistorialProduccion() {
         // Obtener del localStorage donde se guarda el historial
-        const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+        const historial = safeLocalGet('historial_produccion', []);
         return historial;
     }
 
@@ -1515,11 +1515,11 @@ let db;
 let dbReady;
 
 if (typeof USE_SUPABASE !== 'undefined' && USE_SUPABASE && typeof SupabaseDatabase !== 'undefined') {
-    console.log('[DB] Usando Supabase como backend');
+    DEBUG_MODE && console.log('[DB] Usando Supabase como backend');
     db = new SupabaseDatabase();
     dbReady = db.ready;
 } else {
-    console.log('[DB] Usando localStorage como backend');
+    DEBUG_MODE && console.log('[DB] Usando localStorage como backend');
     db = new Database();
     dbReady = Promise.resolve();
 }
@@ -1556,7 +1556,7 @@ function sincronizarOperadorasParaLogin() {
         }));
 
     localStorage.setItem('operadoras_db', JSON.stringify(operadoras));
-    console.log('[SYNC] operadoras_db actualizado:', operadoras.length, 'usuarios');
+    DEBUG_MODE && console.log('[SYNC] operadoras_db actualizado:', operadoras.length, 'usuarios');
     return operadoras;
 }
 
@@ -1654,7 +1654,7 @@ function sincronizarPedidosParaOperadoras() {
 
     // IMPORTANTE: También sincronizar a pedidos_erp para las operadoras
     // Solo actualizar pedidos que no existen o que tienen menos procesos
-    const pedidosERPExistentes = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    const pedidosERPExistentes = safeLocalGet('pedidos_erp', []);
 
     activos.forEach(pedidoActivo => {
         const existenteIdx = pedidosERPExistentes.findIndex(pe => pe.id == pedidoActivo.id);
@@ -1662,14 +1662,14 @@ function sincronizarPedidosParaOperadoras() {
         if (existenteIdx === -1) {
             // No existe, agregar
             pedidosERPExistentes.push(pedidoActivo);
-            console.log('[SYNC] Pedido agregado a pedidos_erp:', pedidoActivo.id);
+            DEBUG_MODE && console.log('[SYNC] Pedido agregado a pedidos_erp:', pedidoActivo.id);
         } else {
             // Existe, solo actualizar si el existente no tiene procesos o tiene menos
             const existente = pedidosERPExistentes[existenteIdx];
             if (!existente.procesos || existente.procesos.length === 0) {
                 // No tiene procesos, reemplazar pero conservar piezas si las hay
                 pedidosERPExistentes[existenteIdx] = pedidoActivo;
-                console.log('[SYNC] Pedido actualizado en pedidos_erp (sin procesos previos):', pedidoActivo.id);
+                DEBUG_MODE && console.log('[SYNC] Pedido actualizado en pedidos_erp (sin procesos previos):', pedidoActivo.id);
             } else {
                 // Tiene procesos, solo sincronizar los que faltan y preservar piezas
                 pedidoActivo.procesos.forEach(procNuevo => {
@@ -1685,8 +1685,8 @@ function sincronizarPedidosParaOperadoras() {
     });
 
     localStorage.setItem('pedidos_erp', JSON.stringify(pedidosERPExistentes));
-    console.log('[SYNC] pedidos_activos actualizado:', activos.length, 'pedidos');
-    console.log('[SYNC] pedidos_erp sincronizado:', pedidosERPExistentes.length, 'pedidos');
+    DEBUG_MODE && console.log('[SYNC] pedidos_activos actualizado:', activos.length, 'pedidos');
+    DEBUG_MODE && console.log('[SYNC] pedidos_erp sincronizado:', pedidosERPExistentes.length, 'pedidos');
 
     return activos;
 }
@@ -1703,14 +1703,14 @@ function obtenerNombreClienteSync(clienteId) {
  * USAR: Desde Supervisora para ver alertas
  */
 function obtenerNotificacionesDeOperadoras() {
-    return JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    return safeLocalGet('notificaciones_coco', []);
 }
 
 /**
  * Marca una notificación como leída
  */
 function marcarNotificacionComoLeida(notifId) {
-    const notifs = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    const notifs = safeLocalGet('notificaciones_coco', []);
     const notif = notifs.find(n => n.id === notifId);
     if (notif) {
         notif.leida = true;
@@ -1725,7 +1725,7 @@ function marcarNotificacionComoLeida(notifId) {
  * @param {string|number} destinatarioId - 'todos' o ID específico de operadora
  */
 function enviarMensajeDeCocoAOperadoras(mensaje, destinatarioId = 'todos') {
-    const mensajes = JSON.parse(localStorage.getItem('mensajes_operadoras') || '[]');
+    const mensajes = safeLocalGet('mensajes_operadoras', []);
 
     const nuevoMensaje = {
         id: Date.now(),
@@ -1743,7 +1743,7 @@ function enviarMensajeDeCocoAOperadoras(mensaje, destinatarioId = 'todos') {
     const mensajesRecortados = mensajes.slice(0, 100);
 
     localStorage.setItem('mensajes_operadoras', JSON.stringify(mensajesRecortados));
-    console.log('[SYNC] Mensaje enviado a operadoras');
+    DEBUG_MODE && console.log('[SYNC] Mensaje enviado a operadoras');
     return nuevoMensaje;
 }
 
@@ -1752,7 +1752,7 @@ function enviarMensajeDeCocoAOperadoras(mensaje, destinatarioId = 'todos') {
  * USAR: Desde Supervisora para ver avance
  */
 function obtenerProduccionDelDia() {
-    const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const historial = safeLocalGet('historial_produccion', []);
     const hoy = new Date().toISOString().split('T')[0];
 
     return historial.filter(h => h.fecha && h.fecha.startsWith(hoy));
@@ -1762,7 +1762,7 @@ function obtenerProduccionDelDia() {
  * Obtiene los tiempos muertos activos y del día
  */
 function obtenerTiemposMuertos() {
-    return JSON.parse(localStorage.getItem('tiempos_muertos') || '{"activos":{},"historial":[]}');
+    return safeLocalGet('tiempos_muertos', {activos:{},historial:[]});
 }
 
 /**
@@ -1773,7 +1773,7 @@ function obtenerTiemposMuertos() {
  * @param {number} meta - Meta de piezas para esta asignación
  */
 function asignarPedidoAEstacion(estacionId, pedidoId, procesoId = null, meta = 100) {
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
 
     asignaciones[estacionId] = {
         pedidoId: pedidoId,
@@ -1784,7 +1784,7 @@ function asignarPedidoAEstacion(estacionId, pedidoId, procesoId = null, meta = 1
     };
 
     localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
-    console.log('[SYNC] Pedido', pedidoId, 'asignado a estación', estacionId);
+    DEBUG_MODE && console.log('[SYNC] Pedido', pedidoId, 'asignado a estación', estacionId);
     return asignaciones[estacionId];
 }
 
@@ -1792,25 +1792,25 @@ function asignarPedidoAEstacion(estacionId, pedidoId, procesoId = null, meta = 1
  * Libera una estación de su pedido asignado
  */
 function liberarEstacionDePedido(estacionId) {
-    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
     delete asignaciones[estacionId];
     localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
 
-    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     if (estadoMaquinas[estacionId]) {
         estadoMaquinas[estacionId].estado = 'disponible';
         estadoMaquinas[estacionId].pedidoId = null;
     }
     localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
 
-    console.log('[SYNC] Estación', estacionId, 'liberada');
+    DEBUG_MODE && console.log('[SYNC] Estación', estacionId, 'liberada');
 }
 
 /**
  * Obtiene todas las asignaciones actuales
  */
 function obtenerAsignacionesActuales() {
-    return JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    return safeLocalGet('asignaciones_estaciones', {});
 }
 
 /**
@@ -1818,10 +1818,10 @@ function obtenerAsignacionesActuales() {
  * LLAMAR: Al iniciar la aplicación admin
  */
 function ejecutarSincronizacionCompleta() {
-    console.log('[SYNC] Iniciando sincronización completa...');
+    DEBUG_MODE && console.log('[SYNC] Iniciando sincronización completa...');
     sincronizarOperadorasParaLogin();
     sincronizarPedidosParaOperadoras();
-    console.log('[SYNC] Sincronización completa terminada');
+    DEBUG_MODE && console.log('[SYNC] Sincronización completa terminada');
 }
 
 // Exponer funciones globalmente
@@ -1837,7 +1837,7 @@ window.liberarEstacionDePedido = liberarEstacionDePedido;
 window.obtenerAsignacionesActuales = obtenerAsignacionesActuales;
 window.ejecutarSincronizacionCompleta = ejecutarSincronizacionCompleta;
 
-console.log('[SYNC] Funciones de sincronización entre paneles cargadas');
+DEBUG_MODE && console.log('[SYNC] Funciones de sincronización entre paneles cargadas');
 
 // ========================================
 // FUNCIÓN DE LIMPIEZA TOTAL
@@ -1856,7 +1856,7 @@ function limpiarTodosLosDatos() {
         return false;
     }
 
-    console.log('🧹 Iniciando limpieza total...');
+    DEBUG_MODE && console.log('Iniciando limpieza total...');
 
     // 1. Crear base de datos vacía pero con estructura completa
     // Usamos la estructura de initialData pero con arrays vacíos
@@ -2000,7 +2000,7 @@ function limpiarTodosLosDatos() {
 
     clavesALimpiar.forEach(clave => {
         localStorage.removeItem(clave);
-        console.log(`  ✓ Eliminado: ${clave}`);
+        DEBUG_MODE && console.log(`  Eliminado: ${clave}`);
     });
 
     // 3. Limpiar claves de temporizadores de estaciones
@@ -2010,7 +2010,7 @@ function limpiarTodosLosDatos() {
             clave.startsWith('backup_') ||
             clave.startsWith('operadora_')) {
             localStorage.removeItem(clave);
-            console.log(`  ✓ Eliminado: ${clave}`);
+            DEBUG_MODE && console.log(`  Eliminado: ${clave}`);
         }
     });
 
@@ -2024,9 +2024,8 @@ function limpiarTodosLosDatos() {
         }
     }
 
-    console.log('✅ Limpieza completada');
-    console.log('');
-    console.log('📋 Siguiente paso: Crear datos frescos en el Panel Admin');
+    DEBUG_MODE && console.log('Limpieza completada');
+    DEBUG_MODE && console.log('Siguiente paso: Crear datos frescos en el Panel Admin');
 
     alert('✅ Todos los datos han sido eliminados.\n\nRecarga la página (F5) para comenzar con datos frescos.');
 
@@ -2060,18 +2059,18 @@ function limpiarDatosProduccion() {
 
     clavesProduccion.forEach(clave => {
         localStorage.removeItem(clave);
-        console.log(`  ✓ Eliminado: ${clave}`);
+        DEBUG_MODE && console.log(`  Eliminado: ${clave}`);
     });
 
     // Limpiar temporizadores
     Object.keys(localStorage).forEach(clave => {
         if (clave.startsWith('temporizador_')) {
             localStorage.removeItem(clave);
-            console.log(`  ✓ Eliminado: ${clave}`);
+            DEBUG_MODE && console.log(`  Eliminado: ${clave}`);
         }
     });
 
-    console.log('✅ Datos de producción eliminados');
+    DEBUG_MODE && console.log('Datos de produccion eliminados');
     alert('✅ Datos de producción eliminados.\n\nLos catálogos se mantienen.');
 
     // Recargar la página
@@ -2086,7 +2085,7 @@ function limpiarNotificacionesObsoletas() {
     if (typeof db !== 'undefined' && db.data) {
         db.data.notificaciones = [];
         db.save();
-        console.log('✅ Notificaciones limpiadas');
+        DEBUG_MODE && console.log('Notificaciones limpiadas');
     }
 }
 
@@ -2095,9 +2094,7 @@ window.limpiarTodosLosDatos = limpiarTodosLosDatos;
 window.limpiarDatosProduccion = limpiarDatosProduccion;
 window.limpiarNotificacionesObsoletas = limpiarNotificacionesObsoletas;
 
-console.log('🧹 Funciones de limpieza disponibles:');
-console.log('   - limpiarTodosLosDatos() : Borra TODO');
-console.log('   - limpiarDatosProduccion() : Solo producción');
+DEBUG_MODE && console.log('Funciones de limpieza disponibles: limpiarTodosLosDatos(), limpiarDatosProduccion()');
 
 // Limpiar automáticamente notificaciones obsoletas al cargar
 setTimeout(() => {
@@ -2115,7 +2112,7 @@ setTimeout(() => {
         });
 
         if (notificacionesValidas.length !== db.data.notificaciones.length) {
-            console.log(`🧹 Limpiando ${db.data.notificaciones.length - notificacionesValidas.length} notificaciones obsoletas`);
+            DEBUG_MODE && console.log(`Limpiando ${db.data.notificaciones.length - notificacionesValidas.length} notificaciones obsoletas`);
             db.data.notificaciones = notificacionesValidas;
             db.save();
         }

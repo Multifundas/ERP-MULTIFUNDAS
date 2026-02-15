@@ -513,8 +513,8 @@ function viewPedido(id) {
     DEBUG_MODE && console.log('[viewPedido] Catálogo productos:', productos.length, 'procesos:', procesos.length);
 
     // Leer datos sincronizados de localStorage
-    const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
-    const historialProduccion = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
+    const historialProduccion = safeLocalGet('historial_produccion', []);
     const pedidoERP = pedidosERP.find(pe => pe.id == id);
     DEBUG_MODE && console.log('[viewPedido] pedidoERP encontrado:', !!pedidoERP);
 

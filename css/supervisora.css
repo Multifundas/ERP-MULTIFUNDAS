@@ -9289,3 +9289,31 @@ body.day-mode .mensaje-rapido-btn {
     color: #334155;
     border-color: rgba(0, 0, 0, 0.1);
 }
+
+/* Loading overlay */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    border-radius: inherit;
+}
+
+.loading-spinner {
+    font-size: 0.9rem;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.loading-spinner i {
+    font-size: 1.2rem;
+    color: #007bff;
+}

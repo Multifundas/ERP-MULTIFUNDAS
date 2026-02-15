@@ -17,7 +17,7 @@ class SupabaseDatabase {
     // INICIALIZACIÓN — Precarga datos desde Supabase
     // ========================================
     async _init() {
-        console.log('[SupabaseDB] Iniciando precarga de datos...');
+        DEBUG_MODE && console.log('[SupabaseDB] Iniciando precarga de datos...');
         try {
             // Cargar todo en paralelo
             const [
@@ -97,7 +97,7 @@ class SupabaseDatabase {
             };
 
             this._ready = true;
-            console.log('[SupabaseDB] Precarga completa:', {
+            DEBUG_MODE && console.log('[SupabaseDB] Precarga completa:', {
                 areas: this.data.areas.length,
                 estaciones: this.data.estaciones.length,
                 procesos: this.data.procesos.length,
@@ -1207,4 +1207,4 @@ class SupabaseDatabase {
 
 // Exportar
 window.SupabaseDatabase = SupabaseDatabase;
-console.log('[SupabaseDB] Adapter cargado');
+DEBUG_MODE && console.log('[SupabaseDB] Adapter cargado');
