@@ -524,6 +524,23 @@ function renderLayoutInSupervisora(layout) {
 
     // Actualizar estadisticas de zonas
     updateZoneStats();
+
+    // Auto-zoom para ajustar al viewport en móvil
+    autoFitMapMobile(layout);
+}
+
+// Auto-ajustar zoom del mapa en pantallas pequeñas
+function autoFitMapMobile(layout) {
+    if (window.innerWidth > 768 || !layout) return;
+    var mapContainer = document.querySelector('.plant-map-container');
+    if (!mapContainer) return;
+    var containerWidth = mapContainer.clientWidth;
+    if (containerWidth <= 0 || !layout.canvasWidth) return;
+    var fitZoom = (containerWidth - 10) / layout.canvasWidth;
+    fitZoom = Math.min(fitZoom, 1);
+    fitZoom = Math.max(fitZoom, 0.25);
+    supervisoraState.zoom = Math.round(fitZoom * 100) / 100;
+    applyZoom();
 }
 
 // Detectar tipo de area por nombre
@@ -3173,8 +3190,12 @@ function zoomOut() {
 }
 
 function resetZoom() {
-    supervisoraState.zoom = 1;
-    applyZoom();
+    if (window.innerWidth <= 768 && supervisoraState.layout) {
+        autoFitMapMobile(supervisoraState.layout);
+    } else {
+        supervisoraState.zoom = 1;
+        applyZoom();
+    }
 }
 
 function applyZoom() {

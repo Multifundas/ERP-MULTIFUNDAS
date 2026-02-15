@@ -1989,13 +1989,18 @@ body {
     }
 
     .plant-filtros-bar {
-        padding: 0 4px;
-        gap: 3px;
+        padding: 4px 8px;
+        gap: 4px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
     }
 
     .filtro-mapa-btn {
-        padding: 3px 6px;
-        font-size: 0.6rem;
+        padding: 6px 10px;
+        font-size: 0.7rem;
+        white-space: nowrap;
+        flex-shrink: 0;
     }
 
     .tm-analisis-grid {
@@ -2017,41 +2022,43 @@ body {
 
     /* ---- PLANT MAP MOBILE ---- */
     .plant-area {
-        min-height: 250px;
-        overflow: auto;
+        min-height: 60vh;
+        overflow: hidden;
         flex-shrink: 0;
         flex: none;
         height: auto;
+        border-top: 2px solid #3d4a5c;
     }
 
     .plant-map-container {
-        min-height: 180px;
+        min-height: 55vh;
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .plant-map {
-        min-height: 200px;
-        padding: 10px;
+        min-height: 300px;
+        padding: 5px;
     }
 
     .plant-toolbar {
-        flex-wrap: wrap;
-        gap: 3px;
-        padding: 4px 6px;
+        gap: 6px;
+        padding: 8px 10px;
     }
 
     .toolbar-title {
-        font-size: 0.68rem;
+        font-size: 0.8rem;
     }
 
     .zoom-btn {
-        width: 22px;
-        height: 22px;
-        font-size: 0.6rem;
+        width: 34px;
+        height: 34px;
+        font-size: 14px;
     }
 
     .zoom-level {
-        font-size: 0.65rem;
-        min-width: 28px;
+        font-size: 0.8rem;
+        min-width: 40px;
     }
 
     /* ---- MODALS MOBILE ---- */
@@ -2098,13 +2105,13 @@ body {
 
     .plant-legend {
         flex-wrap: wrap;
-        gap: 6px;
-        padding: 4px 8px;
-        font-size: 0.65rem;
+        gap: 8px;
+        padding: 6px 10px;
+        font-size: 0.72rem;
     }
 
     .plant-legend .legend-item {
-        gap: 3px;
+        gap: 4px;
     }
 
     .estacion-detalle {
