@@ -3,6 +3,9 @@
 // Implementa la MISMA interfaz que la clase Database de data.js
 // ========================================
 
+// DEBUG_MODE se define aquí porque este archivo carga antes de app.js
+var DEBUG_MODE = window.DEBUG_MODE || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
 // Referencia al helper CRUD exportado por supabase-client.js
 var SupabaseClient = window.SupabaseClient;
 

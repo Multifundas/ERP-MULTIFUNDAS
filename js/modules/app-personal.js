@@ -1190,6 +1190,7 @@ window.toggleHoraComida = toggleHoraComida;
 window.toggleHoraComidaEdit = toggleHoraComidaEdit;
 
 // Exponer funciones de estaciones globalmente
+// Solo exportar funciones definidas en app-dashboard.js (ya cargado antes)
 window.renombrarEstacion = renombrarEstacion;
 window.confirmarRenombrarEstacion = confirmarRenombrarEstacion;
 window.eliminarEstacionConConfirm = eliminarEstacionConConfirm;
@@ -1197,12 +1198,9 @@ window.sincronizarEstacionesConPaneles = sincronizarEstacionesConPaneles;
 window.crearEstadoOperadorEnMapa = crearEstadoOperadorEnMapa;
 window.eliminarEstadoOperadorDeMapa = eliminarEstadoOperadorDeMapa;
 window.sincronizarEstadoOperadoresDB = sincronizarEstadoOperadoresDB;
-window.asignarOperadorAEstacionDesdeModal = asignarOperadorAEstacionDesdeModal;
-window.desasignarOperadorDeEstacion = desasignarOperadorDeEstacion;
-window.showPosicionDetalle = showPosicionDetalle;
-window.showPosicionSinOperador = showPosicionSinOperador;
-window.calcularEstadisticasEmpleado = calcularEstadisticasEmpleado;
+// sincronizarEstadoOperadoresAlInicio está en app.js (ya cargado antes)
 window.sincronizarEstadoOperadoresAlInicio = sincronizarEstadoOperadoresAlInicio;
+// Las siguientes funciones se definen en app-admin.js (carga después) - se exportan allí
 
 function toggleCredencialesSection(rol) {
     const credencialesSection = document.getElementById('credencialesSection');

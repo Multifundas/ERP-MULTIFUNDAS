@@ -2582,3 +2582,10 @@ function desasignarOperadorDeEstacion(estacionId) {
     showToast(`Operador desasignado de estación ${estacionId}`, 'success');
 }
 
+// Exponer funciones de admin/estaciones globalmente (definidas en este archivo)
+window.asignarOperadorAEstacionDesdeModal = asignarOperadorAEstacionDesdeModal;
+window.desasignarOperadorDeEstacion = desasignarOperadorDeEstacion;
+window.showPosicionDetalle = showPosicionDetalle;
+window.showPosicionSinOperador = showPosicionSinOperador;
+window.calcularEstadisticasEmpleado = calcularEstadisticasEmpleado;
+

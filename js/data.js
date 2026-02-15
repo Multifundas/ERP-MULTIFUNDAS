@@ -2,6 +2,11 @@
 // ERP MULTIFUNDAS - BASE DE DATOS LOCAL
 // ========================================
 
+// DEBUG_MODE se define aquí porque este archivo carga antes de app.js
+if (typeof DEBUG_MODE === 'undefined') {
+    var DEBUG_MODE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+}
+
 // Almacenamiento en LocalStorage
 const DB_KEY = 'erp_multifundas_db';
 
