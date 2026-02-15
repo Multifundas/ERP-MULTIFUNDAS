@@ -2467,6 +2467,105 @@ body {
     border: 1px solid var(--gray-600);
 }
 
+.btn-suspender {
+    background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+    color: white;
+}
+
+.btn-suspender:active {
+    background: linear-gradient(135deg, #7c3aed, #5b21b6);
+}
+
+/* Selector de procesos suspendidos */
+.selector-suspendidos {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.btn-proceso-suspendido {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px;
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    color: var(--gray-200);
+    width: 100%;
+}
+
+.btn-proceso-suspendido:hover {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: rgba(139, 92, 246, 0.5);
+    transform: translateY(-1px);
+}
+
+.proceso-susp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.proceso-susp-nombre {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.badge-suspendido {
+    background: rgba(139, 92, 246, 0.3);
+    color: #c4b5fd;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.proceso-susp-info {
+    color: var(--gray-400);
+    font-size: 0.8rem;
+}
+
+.proceso-susp-progreso {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--gray-300);
+}
+
+.mini-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.mini-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.proceso-susp-tiempo {
+    color: var(--gray-400);
+    font-size: 0.75rem;
+}
+
+.proceso-susp-tiempo i {
+    margin-right: 4px;
+    color: #a78bfa;
+}
+
 .btn-temporizador:active {
     transform: scale(0.95);
 }

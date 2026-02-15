@@ -18,7 +18,10 @@
         'historial_produccion',
         'tiempos_muertos',
         'notificaciones_admin_to_supervisora',
-        'historial_alertas_admin'
+        'historial_alertas_admin',
+        'cola_procesos_operadores',
+        'supervisora_maquinas',
+        'historial_asignaciones_completadas'
     ];
 
     // ID único por tab/dispositivo (más robusto que solo random)

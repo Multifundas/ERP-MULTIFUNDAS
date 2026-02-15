@@ -65,6 +65,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateStats();
             }
         }, 500);
+
+        // FASE 3.1: Escuchar sync-update para reaccionar inmediatamente a cambios remotos
+        window.addEventListener('sync-update', (e) => {
+            const key = e.detail?.key;
+            if (key === 'historial_asignaciones_completadas' || key === 'estado_maquinas' || key === 'asignaciones_estaciones') {
+                console.log('[SUPERVISORA] sync-update recibido para:', key, '→ actualizando datos');
+                actualizarDatosDeOperadoras();
+            }
+        });
+
+        // FASE 5.3: Indicador de conexión
+        initSyncIndicator();
     });
 });
 
@@ -120,6 +132,35 @@ function initRefreshInterval() {
     supervisoraState.refreshInterval = setInterval(() => {
         refreshData();
     }, 30000);
+}
+
+// FASE 5.3: Indicador de conexión en tiempo real
+function initSyncIndicator() {
+    function updateIndicator() {
+        const dot = document.getElementById('syncDot');
+        const label = document.getElementById('syncLabel');
+        if (!dot || !label) return;
+
+        const online = navigator.onLine;
+        const syncStatus = typeof getSyncStatus === 'function' ? getSyncStatus() : null;
+        const syncConnected = syncStatus ? syncStatus.connected : false;
+
+        if (!online) {
+            dot.style.color = '#ef4444';
+            label.textContent = 'Offline';
+        } else if (syncConnected) {
+            dot.style.color = '#10b981';
+            label.textContent = 'Sync';
+        } else {
+            dot.style.color = '#f59e0b';
+            label.textContent = 'Local';
+        }
+    }
+
+    updateIndicator();
+    setInterval(updateIndicator, 10000);
+    window.addEventListener('online', updateIndicator);
+    window.addEventListener('offline', updateIndicator);
 }
 
 // ========================================
@@ -7752,6 +7793,17 @@ function actualizarDatosDeOperadoras() {
 
                 if (teniaProcesoAntes) {
                     DEBUG_MODE && console.log('[SUPERVISORA] Estación', estacionId, 'limpiada - operador terminó proceso');
+                }
+            } else if (estado.estado === 'suspendido') {
+                // Proceso suspendido: mostrar como pausado con indicador especial
+                supervisoraState.maquinas[estacionId].estado = 'pausado';
+                supervisoraState.maquinas[estacionId].procesoSuspendido = estado.procesoSuspendido;
+                supervisoraState.maquinas[estacionId].piezasSuspendidas = estado.piezasSuspendidas;
+                if (estado.operadoraNombre) {
+                    supervisoraState.maquinas[estacionId].operadores = [{
+                        id: estado.operadoraId,
+                        nombre: estado.operadoraNombre
+                    }];
                 }
             } else {
                 // Comportamiento normal para estaciones activas

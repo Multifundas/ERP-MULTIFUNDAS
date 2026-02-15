@@ -752,6 +752,51 @@ function generarAlertasAccionables() {
         });
     }
 
+    // 6. Alertas predictivas de entrega (IA)
+    try {
+        const alertasEntrega = typeof verificarAlertasEntrega === 'function' ? verificarAlertasEntrega() : [];
+        alertasEntrega.forEach(ae => {
+            alertas.push({
+                tipo: ae.prioridad === 'alta' ? 'danger' : 'warning',
+                icono: 'fa-brain',
+                titulo: ae.tipo === 'sin_produccion' ? `Sin producción: ${ae.codigo}` : `Ritmo insuficiente: ${ae.codigo}`,
+                detalle: ae.mensaje,
+                accion: `abrirChat(); document.getElementById('chatInput').value='alertas entrega'; enviarMensajeChat()`,
+                botonTexto: 'Ver análisis'
+            });
+        });
+    } catch (e) {
+        console.error('[COCO IA] Error integrando alertas de entrega:', e);
+    }
+
+    // 7. Anomalías detectadas por IA
+    try {
+        const anomalias = typeof detectarAnomalias === 'function' ? detectarAnomalias() : [];
+        anomalias.forEach(an => {
+            if (an.tipo === 'baja_produccion') {
+                alertas.push({
+                    tipo: 'warning',
+                    icono: 'fa-chart-line',
+                    titulo: `Producción ${an.decline}% por debajo del promedio`,
+                    detalle: an.mensaje,
+                    accion: `abrirChat(); document.getElementById('chatInput').value='anomalías'; enviarMensajeChat()`,
+                    botonTexto: 'Analizar'
+                });
+            } else if (an.tipo === 'estacion_inactiva') {
+                alertas.push({
+                    tipo: 'warning',
+                    icono: 'fa-exclamation-triangle',
+                    titulo: `Estación inactiva: ${an.estacionId}`,
+                    detalle: an.mensaje,
+                    accion: `showSection('planta'); setTimeout(() => selectEstacion('${an.estacionId}'), 300)`,
+                    botonTexto: 'Revisar'
+                });
+            }
+        });
+    } catch (e) {
+        console.error('[COCO IA] Error integrando anomalías:', e);
+    }
+
     // Ordenar: danger primero, luego warning, luego info
     const prioridad = { danger: 0, warning: 1, info: 2 };
     alertas.sort((a, b) => (prioridad[a.tipo] || 2) - (prioridad[b.tipo] || 2));
@@ -3571,7 +3616,7 @@ function enviarPregunta(preguntaPredef) {
     `;
 
     // Generar respuesta de IA
-    const respuesta = generarRespuestaIA(pregunta);
+    const respuesta = generarRespuestaIAEnhanced(pregunta);
 
     setTimeout(() => {
         chatMessages.innerHTML += `
@@ -3586,6 +3631,286 @@ function enviarPregunta(preguntaPredef) {
     }, 500);
 
     if (input) input.value = '';
+}
+
+// ========================================
+// INTELIGENCIA ARTIFICIAL - ANÁLISIS PREDICTIVO
+// ========================================
+
+/**
+ * FASE 6.1: Alertas predictivas de entrega
+ * Calcula ritmo de producción actual y proyecta si alcanzará para fecha de entrega
+ */
+function verificarAlertasEntrega() {
+    const alertas = [];
+    try {
+        const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+        const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+        const hoy = new Date();
+
+        pedidosERP.forEach(pedido => {
+            if (pedido.estado === 'completado' || pedido.estado === 'entregado') return;
+
+            const fechaEntrega = pedido.fechaEntrega ? new Date(pedido.fechaEntrega) : null;
+            if (!fechaEntrega || fechaEntrega <= hoy) return;
+
+            const diasRestantes = Math.ceil((fechaEntrega - hoy) / (1000 * 60 * 60 * 24));
+            if (diasRestantes <= 0) return;
+
+            // Calcular piezas totales producidas para este pedido
+            const piezasProducidas = (pedido.procesos || []).reduce((sum, p) => sum + (p.piezas || 0), 0);
+            const cantidadTotal = pedido.cantidad || 0;
+            const piezasFaltantes = Math.max(0, cantidadTotal - piezasProducidas);
+
+            if (piezasFaltantes === 0) return;
+
+            // Calcular ritmo: piezas producidas hoy para este pedido
+            const hoyStr = hoy.toISOString().split('T')[0];
+            const produccionHoy = historial.filter(h =>
+                h.pedidoId == pedido.id && h.fecha?.startsWith(hoyStr)
+            );
+            const piezasHoy = produccionHoy.reduce((s, h) => s + (h.cantidad || 0), 0);
+
+            // Proyección: necesitamos piezasFaltantes en diasRestantes días
+            const necesitasPorDia = piezasFaltantes / diasRestantes;
+
+            if (piezasHoy > 0 && piezasHoy < necesitasPorDia * 0.7) {
+                alertas.push({
+                    tipo: 'entrega_en_riesgo',
+                    pedidoId: pedido.id,
+                    codigo: pedido.codigo,
+                    cliente: pedido.cliente,
+                    mensaje: `${pedido.codigo}: ritmo actual (${piezasHoy}/día) insuficiente. Necesita ${Math.ceil(necesitasPorDia)}/día para entregar en ${diasRestantes} días.`,
+                    deficit: Math.ceil(necesitasPorDia - piezasHoy),
+                    diasRestantes: diasRestantes,
+                    prioridad: diasRestantes <= 3 ? 'alta' : 'media'
+                });
+            } else if (piezasHoy === 0 && diasRestantes <= 5 && piezasFaltantes > 0) {
+                alertas.push({
+                    tipo: 'sin_produccion',
+                    pedidoId: pedido.id,
+                    codigo: pedido.codigo,
+                    cliente: pedido.cliente,
+                    mensaje: `${pedido.codigo}: sin producción hoy. Faltan ${piezasFaltantes} piezas y quedan ${diasRestantes} días.`,
+                    diasRestantes: diasRestantes,
+                    prioridad: 'alta'
+                });
+            }
+        });
+    } catch (e) {
+        console.error('[COCO IA] Error en alertas de entrega:', e);
+    }
+    return alertas;
+}
+
+/**
+ * FASE 6.2: Detección de anomalías en producción
+ * Compara producción de hoy vs promedio de 7 días
+ */
+function detectarAnomalias() {
+    const anomalias = [];
+    try {
+        const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+        const hoy = new Date();
+        const hoyStr = hoy.toISOString().split('T')[0];
+
+        // Agrupar producción por día de los últimos 7 días
+        const produccionPorDia = {};
+        for (let i = 0; i < 7; i++) {
+            const dia = new Date(hoy);
+            dia.setDate(dia.getDate() - i);
+            const diaStr = dia.toISOString().split('T')[0];
+            produccionPorDia[diaStr] = historial
+                .filter(h => h.fecha?.startsWith(diaStr))
+                .reduce((s, h) => s + (h.cantidad || 0), 0);
+        }
+
+        const piezasHoy = produccionPorDia[hoyStr] || 0;
+        const diasAnteriores = Object.entries(produccionPorDia)
+            .filter(([d]) => d !== hoyStr && produccionPorDia[d] > 0)
+            .map(([, v]) => v);
+
+        if (diasAnteriores.length >= 3) {
+            const promedio = diasAnteriores.reduce((s, v) => s + v, 0) / diasAnteriores.length;
+            const decline = promedio > 0 ? ((promedio - piezasHoy) / promedio) * 100 : 0;
+
+            if (decline >= 30) {
+                anomalias.push({
+                    tipo: 'baja_produccion',
+                    mensaje: `Producción de hoy (${piezasHoy}) es ${Math.round(decline)}% menor que el promedio (${Math.round(promedio)}).`,
+                    piezasHoy: piezasHoy,
+                    promedio: Math.round(promedio),
+                    decline: Math.round(decline)
+                });
+            }
+        }
+
+        // Detectar estaciones sin actividad que deberían estar trabajando
+        const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+        const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+
+        Object.entries(asignaciones).forEach(([estId, asig]) => {
+            const estado = estadoMaquinas[estId];
+            if (asig.pedidoId && (!estado || !estado.procesoActivo)) {
+                const ultimaCaptura = estado?.ultimaCaptura ? new Date(estado.ultimaCaptura) : null;
+                const sinActividad = !ultimaCaptura || (hoy - ultimaCaptura > 30 * 60 * 1000); // 30 min
+
+                if (sinActividad) {
+                    anomalias.push({
+                        tipo: 'estacion_inactiva',
+                        estacionId: estId,
+                        mensaje: `Estación ${estId} tiene pedido asignado pero sin actividad por más de 30 min.`
+                    });
+                }
+            }
+        });
+    } catch (e) {
+        console.error('[COCO IA] Error en detección de anomalías:', e);
+    }
+    return anomalias;
+}
+
+/**
+ * FASE 6.3: Sugerencias de reasignación basadas en eficiencia histórica
+ */
+function sugerirReasignaciones() {
+    const sugerencias = [];
+    try {
+        const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+        const personal = JSON.parse(localStorage.getItem('erp_multifundas_db') || '{}').personal || [];
+
+        // Calcular eficiencia por operador por proceso
+        const eficienciaPorOperador = {};
+        historial.forEach(h => {
+            if (!h.operadoraId || !h.procesoNombre || !h.cantidad) return;
+            const key = `${h.operadoraId}_${h.procesoNombre.toLowerCase()}`;
+            if (!eficienciaPorOperador[key]) {
+                eficienciaPorOperador[key] = {
+                    operadoraId: h.operadoraId,
+                    operadoraNombre: h.operadoraNombre,
+                    proceso: h.procesoNombre,
+                    totalPiezas: 0,
+                    capturas: 0
+                };
+            }
+            eficienciaPorOperador[key].totalPiezas += h.cantidad;
+            eficienciaPorOperador[key].capturas++;
+        });
+
+        // Buscar procesos donde hay diferencias significativas de eficiencia
+        const porProceso = {};
+        Object.values(eficienciaPorOperador).forEach(e => {
+            const proc = e.proceso.toLowerCase();
+            if (!porProceso[proc]) porProceso[proc] = [];
+            const promedioPorCaptura = e.capturas > 0 ? e.totalPiezas / e.capturas : 0;
+            porProceso[proc].push({
+                ...e,
+                promedioPorCaptura: Math.round(promedioPorCaptura * 10) / 10
+            });
+        });
+
+        Object.entries(porProceso).forEach(([proceso, operadores]) => {
+            if (operadores.length < 2) return;
+            operadores.sort((a, b) => b.promedioPorCaptura - a.promedioPorCaptura);
+
+            const mejor = operadores[0];
+            const peor = operadores[operadores.length - 1];
+
+            if (peor.promedioPorCaptura > 0 && mejor.promedioPorCaptura > peor.promedioPorCaptura * 1.3) {
+                sugerencias.push({
+                    proceso: proceso,
+                    mejorOperadora: mejor.operadoraNombre,
+                    mejorPromedio: mejor.promedioPorCaptura,
+                    peorOperadora: peor.operadoraNombre,
+                    peorPromedio: peor.promedioPorCaptura,
+                    mensaje: `En "${proceso}": ${mejor.operadoraNombre} produce ${mejor.promedioPorCaptura} pzas/captura vs ${peor.operadoraNombre} con ${peor.promedioPorCaptura}. Considerar reasignar.`
+                });
+            }
+        });
+    } catch (e) {
+        console.error('[COCO IA] Error en sugerencias de reasignación:', e);
+    }
+    return sugerencias;
+}
+
+/**
+ * FASE 6.5: Enhanced Coco chat - Wraps generarRespuestaIA with contextual AI data
+ */
+function generarRespuestaIAEnhanced(pregunta) {
+    const preguntaLower = (pregunta || '').toLowerCase().trim();
+
+    // Patrones contextuales con datos reales
+    if (preguntaLower.includes('alerta') || preguntaLower.includes('entrega') || preguntaLower.includes('riesgo')) {
+        const alertas = verificarAlertasEntrega();
+        if (alertas.length > 0) {
+            const lista = alertas.slice(0, 3).map(a => '• ' + a.mensaje).join('\n');
+            return `Hay ${alertas.length} alerta(s) de entrega:\n${lista}`;
+        }
+        return 'No hay alertas de entrega en este momento. Todos los pedidos van en tiempo.';
+    }
+
+    if (preguntaLower.includes('anomal') || preguntaLower.includes('problema') || preguntaLower.includes('raro')) {
+        const anomalias = detectarAnomalias();
+        if (anomalias.length > 0) {
+            const lista = anomalias.slice(0, 3).map(a => '• ' + a.mensaje).join('\n');
+            return `Detecté ${anomalias.length} anomalía(s):\n${lista}`;
+        }
+        return 'No detecté anomalías. La producción va dentro de parámetros normales.';
+    }
+
+    if (preguntaLower.includes('reasign') || preguntaLower.includes('mejor operador') || preguntaLower.includes('eficiencia')) {
+        const sugerencias = sugerirReasignaciones();
+        if (sugerencias.length > 0) {
+            const lista = sugerencias.slice(0, 3).map(s => '• ' + s.mensaje).join('\n');
+            return `Tengo ${sugerencias.length} sugerencia(s) de reasignación:\n${lista}`;
+        }
+        return 'Actualmente no hay oportunidades claras de reasignación. Las eficiencias están balanceadas.';
+    }
+
+    if (preguntaLower.includes('como vamos') || preguntaLower.includes('cómo vamos') || preguntaLower.includes('resumen') || preguntaLower.includes('status')) {
+        const alertas = verificarAlertasEntrega();
+        const anomalias = detectarAnomalias();
+        const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+        const hoyStr = new Date().toISOString().split('T')[0];
+        const produccionHoy = historial.filter(h => h.fecha?.startsWith(hoyStr));
+        const totalHoy = produccionHoy.reduce((s, h) => s + (h.cantidad || 0), 0);
+        const operadoresActivos = new Set(produccionHoy.map(h => h.operadoraId).filter(Boolean)).size;
+
+        let resumen = `Resumen del día:\n• Producción total: ${totalHoy} piezas\n• Operadoras activas: ${operadoresActivos}`;
+
+        if (alertas.length > 0) {
+            resumen += `\n• ⚠ ${alertas.length} alerta(s) de entrega`;
+        }
+        if (anomalias.length > 0) {
+            resumen += `\n• ⚠ ${anomalias.length} anomalía(s) detectada(s)`;
+        }
+        if (alertas.length === 0 && anomalias.length === 0) {
+            resumen += '\n• Todo marcha bien, sin alertas.';
+        }
+        return resumen;
+    }
+
+    // Buscar por nombre de operadora
+    const personal = JSON.parse(localStorage.getItem('erp_multifundas_db') || '{}').personal || [];
+    for (const persona of personal) {
+        if (persona.nombre && preguntaLower.includes(persona.nombre.toLowerCase().split(' ')[0])) {
+            const historial = JSON.parse(localStorage.getItem('historial_produccion') || '[]');
+            const hoyStr = new Date().toISOString().split('T')[0];
+            const registros = historial.filter(h =>
+                h.operadoraId == persona.id && h.fecha?.startsWith(hoyStr)
+            );
+            const piezasHoy = registros.reduce((s, h) => s + (h.cantidad || 0), 0);
+            const capturas = registros.length;
+
+            if (piezasHoy > 0) {
+                return `${persona.nombre}: ${piezasHoy} piezas hoy en ${capturas} capturas. Promedio: ${capturas > 0 ? Math.round(piezasHoy / capturas) : 0} pzas/captura.`;
+            }
+            return `${persona.nombre} no ha registrado producción hoy.`;
+        }
+    }
+
+    // Fallback: usar la función original
+    return generarRespuestaIA(pregunta);
 }
 
 function generarRespuestaIA(pregunta) {

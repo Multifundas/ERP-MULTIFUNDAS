@@ -715,6 +715,15 @@ function verificarSesionActiva() {
             return false;
         }
 
+        // FASE 4.2: Verificar expiración de sesión (8 horas máximo)
+        const SESSION_EXPIRY_MS = 8 * 60 * 60 * 1000;
+        const tiempoSesion = Date.now() - new Date(sesion.fecha).getTime();
+        if (tiempoSesion > SESSION_EXPIRY_MS) {
+            console.warn('[AUTH] Sesión expirada después de 8 horas');
+            localStorage.removeItem('sesion_operadora');
+            return false;
+        }
+
         // Verificar que la operadora existe
         const operadoras = getOperadorasDB();
         const operadora = operadoras.find(op => op.id === sesion.operadoraId);
@@ -744,6 +753,28 @@ function guardarSesion() {
         fecha: new Date().toISOString()
     };
     localStorage.setItem('sesion_operadora', JSON.stringify(sesion));
+
+    // FASE 4.2: Verificar expiración cada 60 segundos
+    if (!window._sessionExpiryInterval) {
+        window._sessionExpiryInterval = setInterval(() => {
+            const sesionActual = localStorage.getItem('sesion_operadora');
+            if (!sesionActual) return;
+            try {
+                const s = JSON.parse(sesionActual);
+                const tiempoSesion = Date.now() - new Date(s.fecha).getTime();
+                const SESSION_EXPIRY_MS = 8 * 60 * 60 * 1000;
+                if (tiempoSesion > SESSION_EXPIRY_MS) {
+                    console.warn('[AUTH] Sesión expirada por inactividad');
+                    if (typeof mostrarToast === 'function') {
+                        mostrarToast('Sesión expirada. Por favor inicia sesión de nuevo.', 'warning');
+                    }
+                    setTimeout(() => {
+                        if (typeof cerrarSesion === 'function') cerrarSesion();
+                    }, 2000);
+                }
+            } catch (e) {}
+        }, 60000);
+    }
 }
 
 // ========================================

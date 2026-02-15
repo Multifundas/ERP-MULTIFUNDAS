@@ -281,7 +281,7 @@ function initCompletionNotifications() {
         }
     });
 
-    // Polling cada 30 segundos como respaldo
+    // Polling cada 120 segundos como respaldo (Realtime maneja la mayoría)
     setInterval(function() {
         try {
             var admin = JSON.parse(localStorage.getItem('notificaciones_admin') || '[]');
@@ -290,7 +290,7 @@ function initCompletionNotifications() {
             checkForNewCompletions(coco);
         } catch (e) {}
         updateNotificationBadge();
-    }, 30000);
+    }, 120000);
 
     function checkForNewCompletions(notifs) {
         if (!Array.isArray(notifs)) return;

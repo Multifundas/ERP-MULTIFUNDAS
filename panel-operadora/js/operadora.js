@@ -288,14 +288,25 @@ function initPanelOperadora() {
         verificarMensajesCoco();
     }, 30000));
 
+    // Grupo 4.5: Cada 30 minutos (detección de fatiga)
+    window._erpIntervals.push(setInterval(detectarFatiga, 1800000));
+
     // Grupo 5: Cada 60 segundos (recordatorio hora + tiempo turno)
     window._erpIntervals.push(setInterval(function() {
         verificarRecordatorioHora();
         actualizarTiempoTurno();
     }, 60000));
 
-    // Grupo 6: Cada 5 minutos (badges)
-    window._erpIntervals.push(setInterval(verificarNuevosBadges, 300000));
+    // Grupo 6: Cada 5 minutos (badges + cleanup)
+    window._erpIntervals.push(setInterval(function() {
+        verificarNuevosBadges();
+        // Limpiar pedidos completados/entregados del estado en memoria
+        if (operadoraState.pedidosActivos && operadoraState.pedidosActivos.length > 0) {
+            operadoraState.pedidosActivos = operadoraState.pedidosActivos.filter(p =>
+                p.estado !== 'completado' && p.estado !== 'entregado'
+            );
+        }
+    }, 300000));
 
     // Función para limpiar todos los intervalos
     window.clearAllErpIntervals = function() {
@@ -311,6 +322,25 @@ function initPanelOperadora() {
 
     window.addEventListener('offline', () => {
         mostrarToast('Sin conexión. Trabajando offline', 'warning');
+    });
+
+    // Cleanup al cerrar/refrescar
+    window.addEventListener('beforeunload', function() {
+        // Limpiar todos los intervalos
+        if (window.clearAllErpIntervals) window.clearAllErpIntervals();
+        if (operadoraState.intervaloProceso) {
+            clearInterval(operadoraState.intervaloProceso);
+        }
+        // Detener cámara si está activa
+        if (window._cameraStream) {
+            window._cameraStream.getTracks().forEach(t => t.stop());
+            window._cameraStream = null;
+        }
+        // Guardar estado si hay proceso activo
+        if (operadoraState.procesoIniciado) {
+            guardarEstadoTemporizador();
+            guardarDatos();
+        }
     });
 
     // Verificar si es primer uso (mostrar tutorial)
@@ -369,7 +399,7 @@ function actualizarHeaderOperadora() {
         .join('')
         .substring(0, 2)
         .toUpperCase();
-    document.getElementById('userAvatar').innerHTML = `<span>${iniciales}</span>`;
+    document.getElementById('userAvatar').innerHTML = `<span>${S(iniciales)}</span>`;
 }
 
 function actualizarReloj() {
@@ -478,7 +508,16 @@ function cargarDatosGuardados() {
             DEBUG_MODE && console.log('[OPERADORA] Sin proceso actual, capturas reseteadas');
         }
 
-        operadoraState.piezasCapturadas = operadoraState.capturasDia.reduce((sum, c) => sum + c.cantidad, 0);
+        // Si hay piezasCapturadas guardadas para este proceso, restaurarlas
+        const procesoIdActual = operadoraState.procesoActual?.procesoId;
+        const procesoNombreActual = operadoraState.procesoActual?.procesoNombre;
+        if (datos.piezasCapturadas > 0 &&
+            ((datos.procesoActualId && datos.procesoActualId == procesoIdActual) ||
+             (datos.procesoActualNombre && procesoNombreActual && datos.procesoActualNombre.toLowerCase() === procesoNombreActual.toLowerCase()))) {
+            operadoraState.piezasCapturadas = datos.piezasCapturadas;
+        } else {
+            operadoraState.piezasCapturadas = operadoraState.capturasDia.reduce((sum, c) => sum + c.cantidad, 0);
+        }
         operadoraState.ultimaCaptura = datos.ultimaCaptura ? new Date(datos.ultimaCaptura) : null;
     } else {
         // No hay datos guardados, inicializar en 0
@@ -496,7 +535,10 @@ function guardarDatos() {
 
     const datos = {
         capturas: operadoraState.capturasDia,
-        ultimaCaptura: operadoraState.ultimaCaptura?.toISOString()
+        ultimaCaptura: operadoraState.ultimaCaptura?.toISOString(),
+        piezasCapturadas: operadoraState.piezasCapturadas,
+        procesoActualId: operadoraState.procesoActual?.procesoId || null,
+        procesoActualNombre: operadoraState.procesoActual?.procesoNombre || null
     };
 
     localStorage.setItem(key, JSON.stringify(datos));
@@ -603,13 +645,29 @@ function cargarPedidoAsignado() {
     operadoraState.piezasMeta = miAsignacion.meta || miAsignacion.cantidadMeta || pedido.cantidad || 100;
     operadoraState.metaPorMinuto = miAsignacion.metaPorMinuto || 2.5;
 
-    // Resetear piezas capturadas para el nuevo proceso
-    // (cargarDatosGuardados filtrará solo las capturas del proceso actual)
-    operadoraState.piezasCapturadas = 0;
-    operadoraState.capturasDia = [];
+    // Verificar si es reanudación de proceso suspendido
+    if (miAsignacion.esReanudacion && miAsignacion.datosSuspendidos) {
+        const datos = miAsignacion.datosSuspendidos;
+        operadoraState.piezasCapturadas = datos.piezasCapturadas || 0;
+        operadoraState.tiempoProcesoAcumulado = datos.tiempoAcumulado || 0;
+        operadoraState.capturasDia = datos.capturasDia || [];
+        operadoraState.historialPausas = datos.historialPausas || [];
+        DEBUG_MODE && console.log('[OPERADORA] Restaurando proceso suspendido:', datos.piezasCapturadas, 'piezas,', formatearTiempo(datos.tiempoAcumulado || 0));
 
-    // Cargar capturas previas solo de este proceso (si las hay)
-    cargarDatosGuardados();
+        // Limpiar flag de reanudación de la asignación
+        const asignTemp = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+        if (asignTemp[estacionIdUsada]) {
+            delete asignTemp[estacionIdUsada].esReanudacion;
+            delete asignTemp[estacionIdUsada].datosSuspendidos;
+            localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignTemp));
+        }
+    } else {
+        // Resetear piezas capturadas para el nuevo proceso
+        operadoraState.piezasCapturadas = 0;
+        operadoraState.capturasDia = [];
+        // Cargar capturas previas solo de este proceso (si las hay)
+        cargarDatosGuardados();
+    }
 
     mostrarPedido(pedido, miAsignacion);
 }
@@ -621,7 +679,7 @@ function mostrarPedido(pedido, asignacion) {
     document.getElementById('pedidoId').textContent = `#${pedido.id}`;
     document.getElementById('pedidoCliente').innerHTML = `
         <i class="fas fa-building"></i>
-        <span>${pedido.cliente || 'Cliente'}</span>
+        <span>${S(pedido.cliente || 'Cliente')}</span>
     `;
 
     // Prioridad
@@ -654,7 +712,7 @@ function mostrarPedido(pedido, asignacion) {
     }
 
     if (imagenFinal) {
-        imgContainer.innerHTML = `<img src="${imagenFinal}" alt="${productoNombre}">`;
+        imgContainer.innerHTML = `<img src="${S(imagenFinal)}" alt="${S(productoNombre)}">`;
         imgContainer.classList.add('tiene-imagen');
     } else {
         imgContainer.innerHTML = `
@@ -1130,12 +1188,12 @@ function renderizarColaProcesosOperadora(asignacion) {
                         ${operadoraState.modoSimultaneo ? `
                             <input type="checkbox"
                                    ${estaSeleccionado ? 'checked' : ''}
-                                   onchange="event.stopPropagation(); toggleProcesoSimultaneo('${procesoActual.procesoId}', '${procesoActual.procesoNombre}', '${procesoActual.pedidoId || ''}', '${procesoActual.productoId || ''}')"
+                                   onchange="event.stopPropagation(); toggleProcesoSimultaneo('${S(procesoActual.procesoId)}', '${S(procesoActual.procesoNombre)}', '${S(procesoActual.pedidoId || '')}', '${S(procesoActual.productoId || '')}')"
                                    id="check-${procesoActual.procesoId}">
                         ` : `<i class="fas fa-play-circle"></i>`}
                     </div>
                     <div class="proceso-info">
-                        <span class="proceso-nombre">${procesoActual.procesoNombre}</span>
+                        <span class="proceso-nombre">${S(procesoActual.procesoNombre)}</span>
                         <span class="proceso-estado actual">En curso</span>
                     </div>
                     <button class="btn-expandir-proceso" onclick="event.stopPropagation(); toggleDetallesProceso('${procesoActual.procesoId}')" title="Ver detalles">
@@ -1145,11 +1203,11 @@ function renderizarColaProcesosOperadora(asignacion) {
                 <div class="proceso-detalles" id="detalles-${procesoActual.procesoId}" style="display: none;">
                     <div class="detalle-item">
                         <i class="fas fa-shopping-cart"></i>
-                        <span><strong>Pedido:</strong> #${pedidoInfo.pedidoId} - ${pedidoInfo.cliente}</span>
+                        <span><strong>Pedido:</strong> #${S(pedidoInfo.pedidoId)} - ${S(pedidoInfo.cliente)}</span>
                     </div>
                     <div class="detalle-item">
                         <i class="fas fa-box"></i>
-                        <span><strong>Producto:</strong> ${pedidoInfo.producto}</span>
+                        <span><strong>Producto:</strong> ${S(pedidoInfo.producto)}</span>
                     </div>
                     <div class="detalle-item">
                         <i class="fas fa-layer-group"></i>
@@ -1158,7 +1216,7 @@ function renderizarColaProcesosOperadora(asignacion) {
                     ${pedidoInfo.notas ? `
                     <div class="detalle-item notas">
                         <i class="fas fa-sticky-note"></i>
-                        <span><strong>Notas:</strong> ${pedidoInfo.notas}</span>
+                        <span><strong>Notas:</strong> ${S(pedidoInfo.notas)}</span>
                     </div>
                     ` : ''}
                 </div>
@@ -1190,7 +1248,7 @@ function renderizarColaProcesosOperadora(asignacion) {
                             ${puedeSeleccionar ? `
                                 <input type="checkbox"
                                        ${estaSeleccionado ? 'checked' : ''}
-                                       onchange="event.stopPropagation(); toggleProcesoSimultaneo('${proceso.procesoId}', '${proceso.procesoNombre}', '${proceso.pedidoId || ''}', '${proceso.productoId || ''}')"
+                                       onchange="event.stopPropagation(); toggleProcesoSimultaneo('${S(proceso.procesoId)}', '${S(proceso.procesoNombre)}', '${S(proceso.pedidoId || '')}', '${S(proceso.productoId || '')}')"
                                        id="check-${proceso.procesoId}">
                             ` : estaBloqueado ? `
                                 <i class="fas fa-lock" title="${S(motivoBloqueo)}"></i>
@@ -1199,9 +1257,9 @@ function renderizarColaProcesosOperadora(asignacion) {
                         <div class="proceso-info">
                             <span class="proceso-nombre">${S(proceso.procesoNombre)}</span>
                             ${estaBloqueado ? `
-                                <span class="proceso-bloqueado-msg"><i class="fas fa-exclamation-triangle"></i> ${motivoBloqueo}</span>
+                                <span class="proceso-bloqueado-msg"><i class="fas fa-exclamation-triangle"></i> ${S(motivoBloqueo)}</span>
                             ` : `
-                                <span class="proceso-pedido">${proceso.pedidoCodigo || 'Pedido #' + (proceso.pedidoId || '')}</span>
+                                <span class="proceso-pedido">${S(proceso.pedidoCodigo || 'Pedido #' + (proceso.pedidoId || ''))}</span>
                             `}
                         </div>
                         <button class="btn-expandir-proceso" onclick="event.stopPropagation(); toggleDetallesProceso('${proceso.procesoId}')" title="Ver detalles">
@@ -1211,11 +1269,11 @@ function renderizarColaProcesosOperadora(asignacion) {
                     <div class="proceso-detalles" id="detalles-${proceso.procesoId}" style="display: none;">
                         <div class="detalle-item">
                             <i class="fas fa-shopping-cart"></i>
-                            <span><strong>Pedido:</strong> #${proceso.pedidoId || 'N/A'} - ${proceso.clienteNombre || 'Cliente'}</span>
+                            <span><strong>Pedido:</strong> #${S(proceso.pedidoId || 'N/A')} - ${S(proceso.clienteNombre || 'Cliente')}</span>
                         </div>
                         <div class="detalle-item">
                             <i class="fas fa-box"></i>
-                            <span><strong>Producto:</strong> ${proceso.productoNombre || 'Producto'}</span>
+                            <span><strong>Producto:</strong> ${S(proceso.productoNombre || 'Producto')}</span>
                         </div>
                         <div class="detalle-item">
                             <i class="fas fa-layer-group"></i>
@@ -1224,7 +1282,7 @@ function renderizarColaProcesosOperadora(asignacion) {
                         ${estaBloqueado ? `
                         <div class="detalle-item bloqueado-info">
                             <i class="fas fa-info-circle"></i>
-                            <span><strong>Estado:</strong> Bloqueado - ${motivoBloqueo}</span>
+                            <span><strong>Estado:</strong> Bloqueado - ${S(motivoBloqueo)}</span>
                         </div>
                         ` : ''}
                     </div>
@@ -1244,7 +1302,7 @@ function renderizarColaProcesosOperadora(asignacion) {
                 </div>
                 <div class="simultaneos-lista">
                     ${operadoraState.procesosSimultaneos.map(p => `
-                        <span class="simultaneo-tag">${p.procesoNombre}</span>
+                        <span class="simultaneo-tag">${S(p.procesoNombre)}</span>
                     `).join('')}
                 </div>
                 <p class="simultaneos-nota">Las piezas se contabilizarán para todos los procesos seleccionados</p>
@@ -1687,19 +1745,15 @@ function capturarPiezas() {
     }
 
     // *** NUEVA LÓGICA: Auto-finalizar cuando se alcanza la meta del EQUIPO ***
-    // Verificar si hay otras operadoras trabajando en el mismo proceso
-    const otrasOperadoras = obtenerOtrasOperadorasEnProceso();
-    const totalOtras = otrasOperadoras.reduce((sum, op) => sum + op.piezas, 0);
-    const granTotal = operadoraState.piezasCapturadas + totalOtras;
+    // Usar pedidos_erp como fuente única de verdad (acumula piezas de TODOS los operadores)
+    const granTotal = obtenerTotalPiezasProceso();
 
     if (operadoraState.piezasMeta > 0 && granTotal >= operadoraState.piezasMeta) {
         DEBUG_MODE && console.log('[OPERADORA] Meta del EQUIPO alcanzada. Gran total:', granTotal, '/', operadoraState.piezasMeta);
 
-        // Si el gran total cumple la meta, auto-finalizar
-        // Pero solo si mis piezas contribuyen (para evitar finalizar sin haber trabajado)
+        // Solo auto-finalizar si mis piezas contribuyen (para evitar finalizar sin haber trabajado)
         if (operadoraState.piezasCapturadas > 0) {
             DEBUG_MODE && console.log('[OPERADORA] Iniciando auto-finalización por meta de equipo...');
-            // Pequeño delay para que el usuario vea el feedback
             setTimeout(() => {
                 mostrarToast('¡El equipo completó la meta del proceso!', 'success');
                 finalizarProcesoAutomatico();
@@ -2018,6 +2072,39 @@ function obtenerOtrasOperadorasEnProceso() {
 }
 
 /**
+ * Obtiene el total real de piezas de un proceso desde pedidos_erp (fuente única de verdad)
+ * Incluye las piezas de TODOS los operadores que trabajan en el mismo proceso
+ */
+function obtenerTotalPiezasProceso() {
+    const pedidoId = operadoraState.pedidoActual?.id;
+    const procesoId = operadoraState.procesoActual?.procesoId;
+    const procesoNombre = operadoraState.procesoActual?.procesoNombre;
+
+    if (!pedidoId) return operadoraState.piezasCapturadas;
+
+    try {
+        const pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+        const pedido = pedidosERP.find(p => p.id == pedidoId);
+        if (!pedido || !pedido.procesos) return operadoraState.piezasCapturadas;
+
+        let proceso = pedido.procesos.find(p => p.id == procesoId);
+        if (!proceso && procesoNombre) {
+            proceso = pedido.procesos.find(p =>
+                (p.nombre || '').toLowerCase() === procesoNombre.toLowerCase()
+            );
+        }
+
+        if (proceso && typeof proceso.piezas === 'number') {
+            return proceso.piezas;
+        }
+    } catch (e) {
+        console.error('[OPERADORA] Error leyendo total piezas de pedidos_erp:', e);
+    }
+
+    return operadoraState.piezasCapturadas;
+}
+
+/**
  * Obtener iniciales de un nombre
  */
 function obtenerIniciales(nombre) {
@@ -2059,10 +2146,10 @@ function actualizarProgresoEquipo() {
 
             return `
                 <div class="otra-operadora-item">
-                    <div class="otra-operadora-avatar">${op.iniciales}</div>
+                    <div class="otra-operadora-avatar">${S(op.iniciales)}</div>
                     <div class="otra-operadora-info">
-                        <span class="otra-operadora-nombre">${op.nombre}</span>
-                        <span class="otra-operadora-estacion">${op.estacionId}</span>
+                        <span class="otra-operadora-nombre">${S(op.nombre)}</span>
+                        <span class="otra-operadora-estacion">${S(op.estacionId)}</span>
                     </div>
                     <div class="otra-operadora-mini-progress">
                         <svg viewBox="0 0 40 40">
@@ -2077,10 +2164,8 @@ function actualizarProgresoEquipo() {
         }).join('');
     }
 
-    // Calcular y mostrar gran total
-    const misPiezas = operadoraState.piezasCapturadas || 0;
-    const totalOtras = otrasOperadoras.reduce((sum, op) => sum + op.piezas, 0);
-    const granTotal = misPiezas + totalOtras;
+    // Calcular y mostrar gran total (usar pedidos_erp como fuente única de verdad)
+    const granTotal = obtenerTotalPiezasProceso();
     const meta = operadoraState.piezasMeta || 100;
     const porcentajeTotal = meta > 0 ? Math.min(100, Math.round((granTotal / meta) * 100)) : 0;
 
@@ -2156,7 +2241,7 @@ function reportarProblema(tipoId) {
         <div class="problema-form">
             <div class="problema-tipo-seleccionado">
                 <i class="fas ${tipo.icono}" style="color: ${tipo.color}"></i>
-                <span>${tipo.nombre}</span>
+                <span>${S(tipo.nombre)}</span>
             </div>
 
             <div class="form-group">
@@ -2351,14 +2436,14 @@ function mostrarInstrucciones() {
     const content = `
         <div class="instrucciones-content">
             <div class="instruccion-header">
-                <h4>${pedido.producto || pedido.nombre || 'Producto'}</h4>
+                <h4>${S(pedido.producto || pedido.nombre || 'Producto')}</h4>
                 <span class="pedido-badge">#${pedido.id}</span>
             </div>
 
             <div class="instruccion-seccion">
                 <h5><i class="fas fa-info-circle"></i> Información General</h5>
                 <ul>
-                    <li><strong>Cliente:</strong> ${pedido.cliente || '---'}</li>
+                    <li><strong>Cliente:</strong> ${S(pedido.cliente || '---')}</li>
                     <li><strong>Cantidad:</strong> ${pedido.cantidad || operadoraState.piezasMeta} piezas</li>
                     <li><strong>Entrega:</strong> ${pedido.fechaEntrega ? new Date(pedido.fechaEntrega).toLocaleDateString() : '---'}</li>
                 </ul>
@@ -2367,14 +2452,14 @@ function mostrarInstrucciones() {
             ${asignacion?.instrucciones ? `
                 <div class="instruccion-seccion">
                     <h5><i class="fas fa-clipboard-list"></i> Instrucciones Específicas</h5>
-                    <p>${asignacion.instrucciones}</p>
+                    <p>${S(asignacion.instrucciones)}</p>
                 </div>
             ` : ''}
 
             ${pedido.observaciones ? `
                 <div class="instruccion-seccion">
                     <h5><i class="fas fa-sticky-note"></i> Observaciones</h5>
-                    <p>${pedido.observaciones}</p>
+                    <p>${S(pedido.observaciones)}</p>
                 </div>
             ` : ''}
         </div>
@@ -2442,7 +2527,7 @@ function mostrarToast(mensaje, tipo = 'info') {
 
     toast.innerHTML = `
         <i class="fas ${iconos[tipo] || iconos.info}"></i>
-        <span>${mensaje}</span>
+        <span>${S(mensaje)}</span>
     `;
 
     container.appendChild(toast);
@@ -2492,7 +2577,10 @@ function iniciarProceso() {
     operadoraState.procesoIniciado = true;
     operadoraState.procesoEnPausa = false;
     operadoraState.tiempoProcesoInicio = new Date();
-    operadoraState.tiempoProcesoAcumulado = 0;
+    // Solo resetear tiempo acumulado si NO es reanudación de proceso suspendido
+    if (!operadoraState.tiempoProcesoAcumulado || operadoraState.tiempoProcesoAcumulado <= 0) {
+        operadoraState.tiempoProcesoAcumulado = 0;
+    }
 
     // Iniciar intervalo de actualización
     operadoraState.intervaloProceso = setInterval(actualizarTiempoProceso, 1000);
@@ -2645,6 +2733,308 @@ function reanudarProceso() {
     mostrarToast('Proceso reanudado', 'success');
 }
 
+// ========================================
+// SISTEMA DE SUSPENSIÓN DE PROCESOS
+// ========================================
+
+/**
+ * Suspende el proceso actual para trabajar en otro de la cola.
+ * Guarda progreso completo (piezas, tiempo, capturas) para restaurar después.
+ */
+function suspenderProceso() {
+    if (!operadoraState.procesoIniciado || !operadoraState.pedidoActual) {
+        mostrarToast('No hay proceso activo para suspender', 'warning');
+        return;
+    }
+
+    if (!confirm('¿Suspender este proceso? El progreso se guardará y podrás retomarlo después.')) {
+        return;
+    }
+
+    // Calcular tiempo trabajado hasta ahora
+    let tiempoTrabajado = operadoraState.tiempoProcesoAcumulado;
+    if (!operadoraState.procesoEnPausa && operadoraState.tiempoProcesoInicio) {
+        tiempoTrabajado += (Date.now() - operadoraState.tiempoProcesoInicio);
+    }
+
+    // Detener intervalos
+    if (operadoraState.intervaloProceso) {
+        clearInterval(operadoraState.intervaloProceso);
+        operadoraState.intervaloProceso = null;
+    }
+    detenerContadorPausa();
+
+    // Crear datos de suspensión con progreso completo
+    const suspendedData = {
+        pedidoId: operadoraState.pedidoActual.id,
+        pedidoCodigo: operadoraState.pedidoActual.codigo,
+        cliente: operadoraState.pedidoActual.cliente || operadoraState.pedidoActual.clienteNombre,
+        producto: operadoraState.pedidoActual.producto || operadoraState.pedidoActual.productoNombre,
+        procesoId: operadoraState.procesoActual?.procesoId,
+        procesoNombre: operadoraState.procesoActual?.procesoNombre,
+        meta: operadoraState.piezasMeta,
+        metaPorMinuto: operadoraState.metaPorMinuto,
+        piezasCapturadas: operadoraState.piezasCapturadas,
+        tiempoAcumulado: tiempoTrabajado,
+        capturasDia: operadoraState.capturasDia.slice(),
+        historialPausas: operadoraState.historialPausas.slice(),
+        fechaSuspension: new Date().toISOString(),
+        estado: 'suspendido',
+        operadoraId: authState.operadoraActual?.id,
+        operadoraNombre: authState.operadoraActual?.nombre,
+        estacionId: CONFIG_ESTACION.id
+    };
+
+    // Guardar en asignaciones_estaciones como proceso suspendido en cola
+    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    let estacionIdUsada = CONFIG_ESTACION.id;
+    if (!asignaciones[CONFIG_ESTACION.id]) {
+        const miIdN = CONFIG_ESTACION.id.toLowerCase().replace(/[-_\s]/g, '');
+        for (const [estId] of Object.entries(asignaciones)) {
+            const estIdN = estId.toLowerCase().replace(/[-_\s]/g, '');
+            if (estIdN === miIdN || estIdN.includes(miIdN) || miIdN.includes(estIdN)) {
+                estacionIdUsada = estId;
+                break;
+            }
+        }
+    }
+
+    if (asignaciones[estacionIdUsada]) {
+        if (!asignaciones[estacionIdUsada].colaProcesos) {
+            asignaciones[estacionIdUsada].colaProcesos = [];
+        }
+        // Insertar el proceso suspendido al INICIO de la cola (alta prioridad)
+        asignaciones[estacionIdUsada].colaProcesos.unshift(suspendedData);
+
+        // Verificar si hay otro proceso pendiente en cola para cargar
+        const colaRestante = asignaciones[estacionIdUsada].colaProcesos.filter(p => p.estado !== 'suspendido');
+        if (colaRestante.length > 0) {
+            // Cargar el siguiente proceso no-suspendido
+            const idx = asignaciones[estacionIdUsada].colaProcesos.findIndex(p => p.estado !== 'suspendido');
+            const siguiente = asignaciones[estacionIdUsada].colaProcesos.splice(idx, 1)[0];
+            const colaActualizada = asignaciones[estacionIdUsada].colaProcesos;
+            asignaciones[estacionIdUsada] = {
+                ...siguiente,
+                operadoraId: authState.operadoraActual?.id,
+                operadoraNombre: authState.operadoraActual?.nombre,
+                colaProcesos: colaActualizada,
+                estado: 'asignado',
+                fechaAsignacion: new Date().toISOString()
+            };
+        } else {
+            // Solo hay procesos suspendidos en cola → mostrar selector
+            // Mantener la asignación actual pero marcarla como vacía para trigger selector
+            const colaActualizada = asignaciones[estacionIdUsada].colaProcesos;
+            delete asignaciones[estacionIdUsada];
+            // Guardar cola como metadato temporal
+            localStorage.setItem(`cola_suspendidos_${CONFIG_ESTACION.id}`, JSON.stringify(colaActualizada));
+        }
+
+        localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
+    }
+
+    // Actualizar estado de la máquina
+    const estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    estadoMaquinas[CONFIG_ESTACION.id] = {
+        ...(estadoMaquinas[CONFIG_ESTACION.id] || {}),
+        estado: 'suspendido',
+        procesoActivo: false,
+        procesoSuspendido: suspendedData.procesoNombre,
+        piezasSuspendidas: suspendedData.piezasCapturadas,
+        ultimaActualizacion: new Date().toISOString()
+    };
+    localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
+
+    // Notificar a supervisora
+    const notificaciones = JSON.parse(localStorage.getItem('notificaciones_coco') || '[]');
+    notificaciones.unshift({
+        id: Date.now(),
+        tipo: 'proceso_suspendido',
+        titulo: 'Proceso Suspendido',
+        mensaje: `${authState.operadoraActual?.nombre} suspendió "${suspendedData.procesoNombre}" con ${suspendedData.piezasCapturadas} piezas (${suspendedData.piezasCapturadas}/${suspendedData.meta})`,
+        operadoraId: authState.operadoraActual?.id,
+        estacionId: CONFIG_ESTACION.id,
+        pedidoId: suspendedData.pedidoId,
+        procesoNombre: suspendedData.procesoNombre,
+        piezas: suspendedData.piezasCapturadas,
+        fecha: new Date().toISOString(),
+        leida: false
+    });
+    localStorage.setItem('notificaciones_coco', JSON.stringify(notificaciones.slice(0, 100)));
+
+    // Resetear estado local
+    operadoraState.procesoIniciado = false;
+    operadoraState.procesoEnPausa = false;
+    operadoraState.tiempoProcesoInicio = null;
+    operadoraState.tiempoProcesoAcumulado = 0;
+    operadoraState.motivoPausaActual = null;
+    operadoraState.historialPausas = [];
+    operadoraState.pedidoActual = null;
+    operadoraState.procesoActual = null;
+    operadoraState.piezasCapturadas = 0;
+    operadoraState.piezasMeta = 0;
+    operadoraState.capturasDia = [];
+
+    // Actualizar UI
+    actualizarBotonesTemporizador('sin-iniciar');
+    actualizarEstadoProceso('sin-iniciar');
+    ocultarIndicadorPausa();
+    resetearDisplayTiempo();
+    localStorage.removeItem(`temporizador_${CONFIG_ESTACION.id}`);
+
+    if (typeof detenerMonitoreoDesempeno === 'function') detenerMonitoreoDesempeno();
+    if (typeof resetearFeedbackState === 'function') resetearFeedbackState();
+
+    // Reproducir sonido
+    if (typeof reproducirSonido === 'function') reproducirSonido('pausar');
+
+    mostrarToast('Proceso suspendido. Progreso guardado.', 'info');
+
+    // Verificar si hay un siguiente proceso asignado o mostrar selector de suspendidos
+    const asignacionesActualizadas = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    if (asignacionesActualizadas[estacionIdUsada]) {
+        cargarPedidoAsignado();
+    } else {
+        // Revisar si hay procesos suspendidos para mostrar selector
+        const colaSuspendidos = JSON.parse(localStorage.getItem(`cola_suspendidos_${CONFIG_ESTACION.id}`) || '[]');
+        if (colaSuspendidos.length > 0) {
+            mostrarSelectorProcesosSuspendidos(colaSuspendidos);
+        } else {
+            mostrarSinPedido();
+        }
+    }
+}
+
+/**
+ * Muestra un modal con los procesos suspendidos para que el operador elija cuál reanudar
+ */
+function mostrarSelectorProcesosSuspendidos(colaSuspendidos) {
+    if (!colaSuspendidos || colaSuspendidos.length === 0) {
+        mostrarSinPedido();
+        return;
+    }
+
+    const items = colaSuspendidos.map((proc, index) => {
+        const porcentaje = proc.meta > 0 ? Math.round((proc.piezasCapturadas / proc.meta) * 100) : 0;
+        const tiempoStr = formatearTiempo(proc.tiempoAcumulado || 0);
+        return `
+            <button class="btn-proceso-suspendido" onclick="reanudarProcesoDeCola(${index})">
+                <div class="proceso-susp-header">
+                    <span class="proceso-susp-nombre">${S(proc.procesoNombre || 'Proceso')}</span>
+                    <span class="badge-suspendido">SUSPENDIDO</span>
+                </div>
+                <div class="proceso-susp-info">
+                    <span>${S(proc.pedidoCodigo || '')} - ${S(proc.cliente || '')}</span>
+                </div>
+                <div class="proceso-susp-progreso">
+                    <div class="mini-progress-bar">
+                        <div class="mini-progress-fill" style="width: ${porcentaje}%"></div>
+                    </div>
+                    <span>${proc.piezasCapturadas}/${proc.meta} piezas (${porcentaje}%)</span>
+                </div>
+                <div class="proceso-susp-tiempo">
+                    <i class="fas fa-clock"></i> Tiempo trabajado: ${tiempoStr}
+                </div>
+            </button>
+        `;
+    }).join('');
+
+    const content = `
+        <div class="selector-suspendidos">
+            <p style="color: var(--gray-400); margin-bottom: 12px;">Selecciona un proceso suspendido para retomar:</p>
+            ${items}
+        </div>
+    `;
+
+    mostrarModal('Procesos Suspendidos', content, [
+        { text: 'Esperar nueva asignación', class: 'btn-secondary', onclick: 'cerrarModal(); mostrarSinPedido();' }
+    ]);
+}
+
+/**
+ * Reanuda un proceso suspendido de la cola, restaurando todo su progreso
+ */
+function reanudarProcesoDeCola(index) {
+    cerrarModal();
+
+    const colaSuspendidos = JSON.parse(localStorage.getItem(`cola_suspendidos_${CONFIG_ESTACION.id}`) || '[]');
+
+    // También buscar en asignaciones_estaciones.colaProcesos
+    const asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    let estacionIdUsada = CONFIG_ESTACION.id;
+    if (!asignaciones[CONFIG_ESTACION.id]) {
+        const miIdN = CONFIG_ESTACION.id.toLowerCase().replace(/[-_\s]/g, '');
+        for (const [estId] of Object.entries(asignaciones)) {
+            const estIdN = estId.toLowerCase().replace(/[-_\s]/g, '');
+            if (estIdN === miIdN || estIdN.includes(miIdN) || miIdN.includes(estIdN)) {
+                estacionIdUsada = estId;
+                break;
+            }
+        }
+    }
+
+    let procesoSuspendido = null;
+    let source = 'cola_suspendidos';
+
+    if (colaSuspendidos.length > index) {
+        procesoSuspendido = colaSuspendidos.splice(index, 1)[0];
+        localStorage.setItem(`cola_suspendidos_${CONFIG_ESTACION.id}`, JSON.stringify(colaSuspendidos));
+    } else if (asignaciones[estacionIdUsada]?.colaProcesos) {
+        const suspendidos = asignaciones[estacionIdUsada].colaProcesos.filter(p => p.estado === 'suspendido');
+        if (suspendidos.length > index) {
+            procesoSuspendido = suspendidos[index];
+            const realIdx = asignaciones[estacionIdUsada].colaProcesos.indexOf(procesoSuspendido);
+            asignaciones[estacionIdUsada].colaProcesos.splice(realIdx, 1);
+            source = 'asignaciones';
+        }
+    }
+
+    if (!procesoSuspendido) {
+        mostrarToast('Proceso suspendido no encontrado', 'error');
+        mostrarSinPedido();
+        return;
+    }
+
+    // Restaurar la asignación en asignaciones_estaciones
+    const colaRestante = (source === 'cola_suspendidos')
+        ? colaSuspendidos
+        : (asignaciones[estacionIdUsada]?.colaProcesos || []);
+
+    asignaciones[estacionIdUsada] = {
+        pedidoId: procesoSuspendido.pedidoId,
+        procesoId: procesoSuspendido.procesoId,
+        procesoNombre: procesoSuspendido.procesoNombre,
+        meta: procesoSuspendido.meta,
+        cantidadMeta: procesoSuspendido.meta,
+        metaPorMinuto: procesoSuspendido.metaPorMinuto,
+        operadoraId: authState.operadoraActual?.id,
+        operadoraNombre: authState.operadoraActual?.nombre,
+        colaProcesos: colaRestante,
+        estado: 'asignado',
+        fechaAsignacion: new Date().toISOString(),
+        esReanudacion: true,
+        datosSuspendidos: {
+            piezasCapturadas: procesoSuspendido.piezasCapturadas,
+            tiempoAcumulado: procesoSuspendido.tiempoAcumulado,
+            capturasDia: procesoSuspendido.capturasDia,
+            historialPausas: procesoSuspendido.historialPausas
+        }
+    };
+    localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
+
+    // Limpiar cola_suspendidos si ya se usó
+    if (source === 'cola_suspendidos' && colaSuspendidos.length === 0) {
+        localStorage.removeItem(`cola_suspendidos_${CONFIG_ESTACION.id}`);
+    }
+
+    DEBUG_MODE && console.log('[OPERADORA] Reanudando proceso suspendido:', procesoSuspendido.procesoNombre, 'con', procesoSuspendido.piezasCapturadas, 'piezas');
+
+    // Cargar el pedido (cargarPedidoAsignado detectará esReanudacion)
+    cargarPedidoAsignado();
+
+    mostrarToast(`Reanudando "${procesoSuspendido.procesoNombre}" con ${procesoSuspendido.piezasCapturadas} piezas`, 'success');
+}
+
 /**
  * Finaliza el proceso automáticamente cuando se alcanza la meta de piezas
  * Similar a finalizarProceso pero sin confirmación del usuario
@@ -2756,6 +3146,22 @@ function finalizarProcesoAutomatico() {
                 pedido.procesos[procesoIndex].estado = 'completado';
                 pedido.procesos[procesoIndex].fechaCompletado = new Date().toISOString();
                 pedido.procesos[procesoIndex].finalizadoAutomaticamente = true;
+            }
+
+            // Verificar si TODOS los procesos del pedido están completados
+            const todosCompletadosAuto = pedido.procesos.every(p => p.estado === 'completado');
+            if (todosCompletadosAuto) {
+                pedido.estado = 'completado';
+                pedido.fechaCompletado = new Date().toISOString();
+                DEBUG_MODE && console.log('[OPERADORA] Todos los procesos completados (auto) → pedido completado:', pedidoId);
+
+                const pedidosActivosAuto = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+                const paIdxAuto = pedidosActivosAuto.findIndex(p => p.id == pedidoId);
+                if (paIdxAuto >= 0) {
+                    pedidosActivosAuto[paIdxAuto].estado = 'completado';
+                    pedidosActivosAuto[paIdxAuto].fechaCompletado = new Date().toISOString();
+                    localStorage.setItem('pedidos_activos', JSON.stringify(pedidosActivosAuto));
+                }
             }
         }
         localStorage.setItem('pedidos_erp', JSON.stringify(pedidosERP));
@@ -3051,6 +3457,22 @@ function finalizarProceso() {
                 DEBUG_MODE && console.warn('[OPERADORA] Proceso no encontrado en pedido:', procesoId, 'procesos disponibles:', pedido.procesos.map(p => p.id));
             }
         }
+        // Verificar si TODOS los procesos del pedido están completados
+        const todosCompletados = pedido.procesos.every(p => p.estado === 'completado');
+        if (todosCompletados) {
+            pedido.estado = 'completado';
+            pedido.fechaCompletado = new Date().toISOString();
+            DEBUG_MODE && console.log('[OPERADORA] Todos los procesos completados → pedido marcado como completado:', pedidoId);
+
+            // También actualizar en pedidos_activos
+            const pedidosActivos = JSON.parse(localStorage.getItem('pedidos_activos') || '[]');
+            const paIdx = pedidosActivos.findIndex(p => p.id == pedidoId);
+            if (paIdx >= 0) {
+                pedidosActivos[paIdx].estado = 'completado';
+                pedidosActivos[paIdx].fechaCompletado = new Date().toISOString();
+                localStorage.setItem('pedidos_activos', JSON.stringify(pedidosActivos));
+            }
+        }
         localStorage.setItem('pedidos_erp', JSON.stringify(pedidosERP));
     } else {
         DEBUG_MODE && console.warn('[OPERADORA] Pedido no encontrado en pedidos_erp:', pedidoId);
@@ -3088,7 +3510,8 @@ function finalizarProceso() {
             fechaFin: new Date().toISOString(),
             piezasProducidas: piezasProducidas,
             tiempoTotalMs: tiempoTotal,
-            marcadoComoCompletado: false
+            marcadoComoCompletado: false,
+            needsAck: true
         };
 
         // Guardar en historial de asignaciones completadas (para supervisora)
@@ -3455,11 +3878,11 @@ function mostrarModalMetrosCorte(esAutomatico = false) {
             <div class="metros-resumen">
                 <div class="resumen-item">
                     <span class="resumen-label">Pedido</span>
-                    <span class="resumen-valor">#${pedidoId}</span>
+                    <span class="resumen-valor">#${S(pedidoId)}</span>
                 </div>
                 <div class="resumen-item">
                     <span class="resumen-label">Proceso</span>
-                    <span class="resumen-valor">${procesoNombre}</span>
+                    <span class="resumen-valor">${S(procesoNombre)}</span>
                 </div>
                 <div class="resumen-item">
                     <span class="resumen-label">Piezas Producidas</span>
@@ -3846,12 +4269,14 @@ function actualizarBotonesTemporizador(estado) {
     const btnPausar = document.getElementById('btnPausar');
     const btnReanudar = document.getElementById('btnReanudar');
     const btnFinalizar = document.getElementById('btnFinalizar');
+    const btnSuspender = document.getElementById('btnSuspender');
 
     // Ocultar todos
     if (btnIniciar) btnIniciar.style.display = 'none';
     if (btnPausar) btnPausar.style.display = 'none';
     if (btnReanudar) btnReanudar.style.display = 'none';
     if (btnFinalizar) btnFinalizar.style.display = 'none';
+    if (btnSuspender) btnSuspender.style.display = 'none';
 
     switch(estado) {
         case 'sin-iniciar':
@@ -3860,10 +4285,12 @@ function actualizarBotonesTemporizador(estado) {
         case 'trabajando':
             if (btnPausar) btnPausar.style.display = 'flex';
             if (btnFinalizar) btnFinalizar.style.display = 'flex';
+            if (btnSuspender) btnSuspender.style.display = 'flex';
             break;
         case 'pausado':
             if (btnReanudar) btnReanudar.style.display = 'flex';
             if (btnFinalizar) btnFinalizar.style.display = 'flex';
+            if (btnSuspender) btnSuspender.style.display = 'flex';
             break;
     }
 }
@@ -3882,7 +4309,7 @@ function actualizarEstadoProceso(estado, motivo = null) {
             estadoEl.className = 'temporizador-estado trabajando';
             break;
         case 'pausado':
-            estadoEl.innerHTML = `<i class="fas fa-circle estado-amarillo"></i> ${motivo?.nombre || 'En pausa'}`;
+            estadoEl.innerHTML = `<i class="fas fa-circle estado-amarillo"></i> ${S(motivo?.nombre || 'En pausa')}`;
             estadoEl.className = 'temporizador-estado pausado';
             break;
     }
@@ -3980,6 +4407,38 @@ function registrarEventoProceso(tipo, descripcion) {
         pedidoId: operadoraState.pedidoActual?.id
     });
     localStorage.setItem('eventos_proceso', JSON.stringify(eventos.slice(0, 500)));
+}
+
+/**
+ * FASE 6.4 - Detecta fatiga comparando ritmo primera vs segunda mitad del turno
+ * Se ejecuta cada 30 minutos
+ */
+function detectarFatiga() {
+    if (!operadoraState.procesoIniciado || !authState.inicioTurno) return;
+
+    const ahora = Date.now();
+    const inicioTurno = new Date(authState.inicioTurno).getTime();
+    const tiempoTurno = ahora - inicioTurno;
+
+    // Solo verificar si lleva al menos 2 horas trabajando
+    if (tiempoTurno < 2 * 60 * 60 * 1000) return;
+
+    const mitadTurno = inicioTurno + (tiempoTurno / 2);
+    const capturas = operadoraState.capturasDia || [];
+
+    const primerasMitad = capturas.filter(c => new Date(c.fecha).getTime() < mitadTurno);
+    const segundaMitad = capturas.filter(c => new Date(c.fecha).getTime() >= mitadTurno);
+
+    const piezasPrimera = primerasMitad.reduce((s, c) => s + c.cantidad, 0);
+    const piezasSegunda = segundaMitad.reduce((s, c) => s + c.cantidad, 0);
+
+    if (piezasPrimera > 0 && piezasSegunda > 0) {
+        const decline = ((piezasPrimera - piezasSegunda) / piezasPrimera) * 100;
+        if (decline >= 25) {
+            mostrarToast('Tu ritmo ha bajado. \u00bfNecesitas un descanso? Recuerda tomar agua \ud83d\udca7', 'info');
+            DEBUG_MODE && console.log('[OPERADORA] Fatiga detectada. Decline:', Math.round(decline) + '%');
+        }
+    }
 }
 
 function guardarEstadoTemporizador() {
@@ -4512,7 +4971,7 @@ function mostrarMisReportes() {
                 <div class="mejor-proceso-op">
                     <h4><i class="fas fa-star"></i> Tu Mejor Proceso</h4>
                     <div class="proceso-destacado">
-                        <span class="proceso-nombre">${procesos[0].nombre}</span>
+                        <span class="proceso-nombre">${S(procesos[0].nombre)}</span>
                         <span class="proceso-piezas">${procesos[0].piezas.toLocaleString()} piezas</span>
                     </div>
                 </div>
@@ -4543,8 +5002,8 @@ function mostrarMisReportes() {
                             <div class="historial-row-op">
                                 <span class="fecha-op">${formatearFechaCorta(h.fecha)}</span>
                                 <span class="piezas-op">${h.cantidad || h.piezas || 0}</span>
-                                <span class="proceso-op">${h.procesoNombre || '-'}</span>
-                                <span class="cliente-op">${h.clienteNombre ? h.clienteNombre.substring(0, 12) : '-'}</span>
+                                <span class="proceso-op">${S(h.procesoNombre || '-')}</span>
+                                <span class="cliente-op">${S(h.clienteNombre ? h.clienteNombre.substring(0, 12) : '-')}</span>
                             </div>
                         `).join('')}
                     </div>
@@ -4561,7 +5020,7 @@ function mostrarMisReportes() {
                             <div class="proceso-item-op">
                                 <span class="proceso-rank">#${idx + 1}</span>
                                 <div class="proceso-info">
-                                    <span class="proceso-nombre">${p.nombre}</span>
+                                    <span class="proceso-nombre">${S(p.nombre)}</span>
                                     <div class="proceso-barra">
                                         <div class="proceso-fill" style="width: ${procesos[0].piezas > 0 ? (p.piezas / procesos[0].piezas) * 100 : 0}%"></div>
                                     </div>
@@ -4583,7 +5042,7 @@ function mostrarMisReportes() {
                             <div class="cliente-item-op">
                                 <span class="cliente-rank">#${idx + 1}</span>
                                 <div class="cliente-info">
-                                    <span class="cliente-nombre">${c.nombre}</span>
+                                    <span class="cliente-nombre">${S(c.nombre)}</span>
                                     <div class="cliente-barra">
                                         <div class="cliente-fill" style="width: ${clientesArr[0].piezas > 0 ? (c.piezas / clientesArr[0].piezas) * 100 : 0}%"></div>
                                     </div>
@@ -4694,7 +5153,7 @@ function mostrarRankingPersonal() {
                         <span class="ranking-pos">
                             ${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
                         </span>
-                        <span class="ranking-nombre">${op.nombre}</span>
+                        <span class="ranking-nombre">${S(op.nombre)}</span>
                         <span class="ranking-piezas">${op.piezas} pzas</span>
                         <span class="ranking-eficiencia">${op.eficiencia}%</span>
                         <span class="ranking-premio" style="color:${tierOp ? tierOp.color : '#999'}">
@@ -5172,8 +5631,8 @@ function mostrarNuevoBadge(badge) {
                 <i class="fas ${badge.icono}"></i>
             </div>
             <h3>¡Nuevo logro!</h3>
-            <h4>${badge.nombre}</h4>
-            <p>${badge.descripcion}</p>
+            <h4>${S(badge.nombre)}</h4>
+            <p>${S(badge.descripcion)}</p>
             <button onclick="this.closest('.badge-notificacion-overlay').remove()">
                 <i class="fas fa-check"></i> ¡Genial!
             </button>
@@ -5230,11 +5689,11 @@ function mostrarPanelMotivacion() {
                         return `
                             <div class="badge-item ${ganado ? 'ganado' : 'bloqueado'}"
                                  style="${ganado ? '--badge-color: ' + badge.color : ''}"
-                                 title="${badge.descripcion}">
+                                 title="${S(badge.descripcion)}">
                                 <div class="badge-icono">
                                     <i class="fas ${badge.icono}"></i>
                                 </div>
-                                <span class="badge-nombre">${badge.nombre}</span>
+                                <span class="badge-nombre">${S(badge.nombre)}</span>
                             </div>
                         `;
                     }).join('')}
@@ -5377,7 +5836,7 @@ function actualizarIndicadorDesempeno() {
     // Actualizar nivel mostrado
     const nivelEl = document.getElementById('desempenoNivel');
     if (nivelEl) {
-        nivelEl.innerHTML = `<i class="fas ${nivel.icono}"></i> ${nivel.nombre}`;
+        nivelEl.innerHTML = `<i class="fas ${nivel.icono}"></i> ${S(nivel.nombre)}`;
         nivelEl.className = `desempeno-nivel ${nivel.id}`;
     }
 
@@ -5408,7 +5867,7 @@ function actualizarIndicadorDesempeno() {
         // Enriquecer mensaje con contexto económico
         const tierPremio = calcularTierLocal(eficiencia);
         if (tierPremio && incentivosState.premioEstimado > 0) {
-            mensaje += ` | <strong>${tierPremio.nombre}</strong> · $${incentivosState.premioEstimado}`;
+            mensaje += ` | <strong>${S(tierPremio.nombre)}</strong> · $${incentivosState.premioEstimado}`;
         }
 
         mensajeEl.innerHTML = `<i class="fas fa-lightbulb"></i><span>${mensaje}</span>`;
@@ -5454,8 +5913,8 @@ function mostrarFeedbackToast(nivel, eficiencia) {
             <i class="fas ${nivel.icono}"></i>
         </div>
         <div class="feedback-toast-content">
-            <div class="feedback-toast-nivel">${nivel.emoji} ${nivel.nombre}${premioToast ? ' — ' + premioToast : ''}</div>
-            <div class="feedback-toast-mensaje">${mensaje}</div>
+            <div class="feedback-toast-nivel">${nivel.emoji} ${S(nivel.nombre)}${premioToast ? ' — ' + premioToast : ''}</div>
+            <div class="feedback-toast-mensaje">${S(mensaje)}</div>
         </div>
     `;
 
@@ -6075,11 +6534,11 @@ function renderizarTarjetasPedidos() {
 
                 <!-- Header de la tarjeta -->
                 <div class="pedido-card-header-multi">
-                    <span class="pedido-numero-multi">#${pedido.pedidoId}</span>
+                    <span class="pedido-numero-multi">#${S(pedido.pedidoId)}</span>
                     <div class="header-actions">
                         ${pedido.pausaGeneral ?
                             `<span class="badge-pausa-general"><i class="fas fa-pause-circle"></i> Sin piezas</span>` :
-                            `<span class="pedido-prioridad-multi ${pedido.prioridad || 'normal'}">${pedido.prioridad || 'normal'}</span>`
+                            `<span class="pedido-prioridad-multi ${pedido.prioridad || 'normal'}">${S(pedido.prioridad || 'normal')}</span>`
                         }
                     </div>
                 </div>
@@ -6088,13 +6547,13 @@ function renderizarTarjetasPedidos() {
                 <div class="pedido-card-info-compact clickable" onclick="event.stopPropagation(); mostrarDetallePedido('${pedido.id}')" title="Ver detalle del pedido">
                     <div class="pedido-imagen-mini">
                         ${pedido.imagen
-                            ? `<img src="${pedido.imagen}" alt="${pedido.producto}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23f0f0f0%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2240%22>?</text></svg>'">`
+                            ? `<img src="${S(pedido.imagen)}" alt="${S(pedido.producto)}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23f0f0f0%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2240%22>?</text></svg>'">`
                             : `<div class="sin-imagen-mini"><i class="fas fa-box"></i></div>`
                         }
                     </div>
                     <div class="pedido-datos-mini">
-                        <div class="pedido-cliente-mini"><i class="fas fa-building"></i> ${pedido.cliente || 'Cliente'}</div>
-                        <div class="pedido-producto-mini">${pedido.producto || 'Producto'}</div>
+                        <div class="pedido-cliente-mini"><i class="fas fa-building"></i> ${S(pedido.cliente || 'Cliente')}</div>
+                        <div class="pedido-producto-mini">${S(pedido.producto || 'Producto')}</div>
                         <div class="ver-detalle-hint"><i class="fas fa-eye"></i> Ver detalle</div>
                     </div>
                 </div>
@@ -6119,7 +6578,7 @@ function renderizarTarjetasPedidos() {
                         ` : operadoresActivos.map(op => `
                             <div class="operador-item ${op.enPausa ? 'en-pausa' : 'trabajando'}" data-operador-id="${op.id}">
                                 <div class="operador-info">
-                                    <span class="operador-nombre">${op.nombre.split(' ')[0]}</span>
+                                    <span class="operador-nombre">${S(op.nombre.split(' ')[0])}</span>
                                     <span class="operador-timer" id="timer-op-${pedido.id}-${op.id}">${formatearTiempoOperador(op)}</span>
                                 </div>
                                 <div class="operador-acciones">
@@ -6312,7 +6771,7 @@ function mostrarSelectorOperadores(pedidoId) {
             <div class="modal-operadores">
                 <div class="modal-operadores-header">
                     <h3><i class="fas fa-users"></i> Asignar Personal</h3>
-                    <span class="pedido-ref">Pedido #${pedido.pedidoId} - ${pedido.producto || 'Producto'}</span>
+                    <span class="pedido-ref">Pedido #${S(pedido.pedidoId)} - ${S(pedido.producto || 'Producto')}</span>
                 </div>
                 <div class="modal-operadores-body">
                     <p class="instruccion">Selecciona las personas que trabajarán en este pedido:</p>
@@ -6321,10 +6780,10 @@ function mostrarSelectorOperadores(pedidoId) {
                             <label class="operador-checkbox ${operadoresEnPedido.includes(op.id) ? 'ya-asignado' : ''}">
                                 <input type="checkbox"
                                        value="${op.id}"
-                                       data-nombre="${op.nombre}"
+                                       data-nombre="${S(op.nombre)}"
                                        ${operadoresEnPedido.includes(op.id) ? 'checked disabled' : ''}>
                                 <span class="checkmark"></span>
-                                <span class="operador-label">${op.nombre}</span>
+                                <span class="operador-label">${S(op.nombre)}</span>
                                 ${operadoresEnPedido.includes(op.id) ? '<span class="badge-ya">Ya asignado</span>' : ''}
                             </label>
                         `).join('')}
@@ -6592,8 +7051,8 @@ function mostrarDetallePedido(pedidoId) {
                 <thead><tr><th>Producto</th><th>Descripción</th><th>Cantidad</th></tr></thead>
                 <tbody>
                     <tr>
-                        <td>${pedido.producto}</td>
-                        <td>${pedido.descripcion || pedidoCompleto?.descripcion || '-'}</td>
+                        <td>${S(pedido.producto)}</td>
+                        <td>${S(pedido.descripcion || pedidoCompleto?.descripcion || '-')}</td>
                         <td>${pedido.piezasMeta || '-'}</td>
                     </tr>
                 </tbody>
@@ -6637,18 +7096,18 @@ function mostrarDetallePedido(pedidoId) {
                     ${pedido.imagen ? `
                         <div class="detalle-seccion detalle-imagen-principal">
                             <div class="detalle-imagen-container">
-                                <img src="${pedido.imagen}" alt="${pedido.producto}" class="detalle-imagen">
+                                <img src="${S(pedido.imagen)}" alt="${S(pedido.producto)}" class="detalle-imagen">
                             </div>
                         </div>
                     ` : ''}
                     <div class="detalle-seccion">
                         <h4><i class="fas fa-info-circle"></i> Información General</h4>
                         <div class="detalle-grid">
-                            <div class="detalle-item"><span class="detalle-label">Cliente:</span><span class="detalle-valor">${pedido.cliente || pedidoCompleto?.cliente || 'No especificado'}</span></div>
-                            <div class="detalle-item"><span class="detalle-label">Producto:</span><span class="detalle-valor">${pedido.producto || 'No especificado'}</span></div>
+                            <div class="detalle-item"><span class="detalle-label">Cliente:</span><span class="detalle-valor">${S(pedido.cliente || pedidoCompleto?.cliente || 'No especificado')}</span></div>
+                            <div class="detalle-item"><span class="detalle-label">Producto:</span><span class="detalle-valor">${S(pedido.producto || 'No especificado')}</span></div>
                             <div class="detalle-item"><span class="detalle-label">Cantidad Total:</span><span class="detalle-valor destacado">${pedido.piezasMeta || pedidoCompleto?.cantidad || '-'} piezas</span></div>
-                            <div class="detalle-item"><span class="detalle-label">Proceso:</span><span class="detalle-valor">${procesoNombre}</span></div>
-                            <div class="detalle-item"><span class="detalle-label">Prioridad:</span><span class="detalle-valor prioridad-${(pedido.prioridad || 'normal').toLowerCase()}">${pedido.prioridad || 'Normal'}</span></div>
+                            <div class="detalle-item"><span class="detalle-label">Proceso:</span><span class="detalle-valor">${S(procesoNombre)}</span></div>
+                            <div class="detalle-item"><span class="detalle-label">Prioridad:</span><span class="detalle-valor prioridad-${(pedido.prioridad || 'normal').toLowerCase()}">${S(pedido.prioridad || 'Normal')}</span></div>
                             ${fechaEntregaHTML}
                         </div>
                     </div>
@@ -6698,7 +7157,7 @@ function mostrarCapturaPiezas(pedidoId) {
             <div class="modal-captura">
                 <div class="modal-captura-header">
                     <h3><i class="fas fa-plus-circle"></i> Capturar Piezas</h3>
-                    <span>Pedido #${pedido.pedidoId}</span>
+                    <span>Pedido #${S(pedido.pedidoId)}</span>
                 </div>
                 <div class="modal-captura-body">
                     <div class="captura-actual">
@@ -7373,15 +7832,15 @@ function mostrarModalEtiqueta(pedido) {
             <div class="etiqueta-resumen-nuevo">
                 <div class="resumen-row">
                     <div class="resumen-label">Pedido:</div>
-                    <div class="resumen-valor">#${pedido.pedidoId || pedido.codigo || '---'}</div>
+                    <div class="resumen-valor">#${S(pedido.pedidoId || pedido.codigo || '---')}</div>
                 </div>
                 <div class="resumen-row">
                     <div class="resumen-label">Cliente:</div>
-                    <div class="resumen-valor">${pedido.cliente || 'Sin cliente'}</div>
+                    <div class="resumen-valor">${S(pedido.cliente || 'Sin cliente')}</div>
                 </div>
                 <div class="resumen-row">
                     <div class="resumen-label">Producto:</div>
-                    <div class="resumen-valor">${pedido.producto || 'Sin producto'}</div>
+                    <div class="resumen-valor">${S(pedido.producto || 'Sin producto')}</div>
                 </div>
                 <div class="resumen-row destacado">
                     <div class="resumen-label">Total Piezas:</div>
@@ -7529,11 +7988,11 @@ function generarHTMLEtiquetaPreview(pedido, numCajas, piezasPorCaja, numeroCaja)
             <div class="etiqueta-datos-print">
                 <div class="dato-row">
                     <span class="dato-label">Cliente:</span>
-                    <span class="dato-valor">${pedido.cliente || ''}</span>
+                    <span class="dato-valor">${S(pedido.cliente || '')}</span>
                 </div>
                 <div class="dato-row">
                     <span class="dato-label">Producto:</span>
-                    <span class="dato-valor">${pedido.producto || ''}</span>
+                    <span class="dato-valor">${S(pedido.producto || '')}</span>
                 </div>
                 <div class="dato-row">
                     <span class="dato-label">Piezas Por Caja:</span>
@@ -7580,14 +8039,14 @@ function generarHTMLEtiquetaImpresion(pedido, numCajas, piezasEnCaja, numeroCaja
                 <div>
                     <div style="font-size: 11pt; font-weight: 700; color: #000;">Cliente:</div>
                     <div style="font-size: 10pt; color: #000; margin-top: 1mm; word-wrap: break-word;">
-                        ${pedido.cliente || ''}
+                        ${S(pedido.cliente || '')}
                     </div>
                 </div>
 
                 <div>
                     <div style="font-size: 11pt; font-weight: 700; color: #000;">Producto:</div>
                     <div style="font-size: 10pt; color: #000; margin-top: 1mm; word-wrap: break-word;">
-                        ${pedido.producto || ''}
+                        ${S(pedido.producto || '')}
                     </div>
                 </div>
 
@@ -7996,9 +8455,9 @@ function mostrarHistorialEtiquetas() {
             return `
                 <div class="historial-etiqueta-item">
                     <div class="historial-etiqueta-info">
-                        <div class="historial-pedido">#${etiqueta.pedidoId}</div>
-                        <div class="historial-cliente">${etiqueta.cliente || '-'}</div>
-                        <div class="historial-producto">${etiqueta.producto || '-'}</div>
+                        <div class="historial-pedido">#${S(etiqueta.pedidoId)}</div>
+                        <div class="historial-cliente">${S(etiqueta.cliente || '-')}</div>
+                        <div class="historial-producto">${S(etiqueta.producto || '-')}</div>
                         <div class="historial-cajas">${cajasDetalle} - ${etiqueta.totalPiezas} pzas total</div>
                         <div class="historial-fecha">${fechaStr} ${horaStr}</div>
                     </div>
@@ -8239,7 +8698,7 @@ function actualizarPremioWidget() {
     const tierBadgeEl = document.getElementById('premioTierBadge');
     if (tierBadgeEl) {
         if (tier) {
-            tierBadgeEl.innerHTML = '<i class="fas ' + tier.icono + '"></i> ' + tier.nombre;
+            tierBadgeEl.innerHTML = '<i class="fas ' + tier.icono + '"></i> ' + S(tier.nombre);
             tierBadgeEl.style.background = tier.color + '22';
             tierBadgeEl.style.color = tier.color;
             tierBadgeEl.style.borderColor = tier.color;
@@ -8280,7 +8739,7 @@ function actualizarPremioWidget() {
             const piezasFaltantes = calcularPiezasParaTier(siguienteTier.minEficiencia);
             if (piezasFaltantes > 0) {
                 siguienteEl.innerHTML = '<i class="fas fa-arrow-up" style="color:' + siguienteTier.color + '"></i> ' +
-                    'Te faltan <strong>' + piezasFaltantes + ' piezas</strong> para <span style="color:' + siguienteTier.color + '">' + siguienteTier.nombre + '</span>';
+                    'Te faltan <strong>' + piezasFaltantes + ' piezas</strong> para <span style="color:' + siguienteTier.color + '">' + S(siguienteTier.nombre) + '</span>';
             } else {
                 siguienteEl.innerHTML = '';
             }
@@ -8340,7 +8799,7 @@ function actualizarNivelBadgeHeader(tier) {
 
     if (tier && operadoraState.procesoIniciado) {
         badgeEl.style.display = 'inline-flex';
-        badgeEl.innerHTML = '<i class="fas ' + tier.icono + '"></i> ' + tier.nombre;
+        badgeEl.innerHTML = '<i class="fas ' + tier.icono + '"></i> ' + S(tier.nombre);
         badgeEl.style.background = tier.color + '22';
         badgeEl.style.color = tier.color;
         badgeEl.style.borderColor = tier.color;
@@ -8356,7 +8815,7 @@ function celebrarCambioTier(nuevoTier, premioEstimado) {
     // Usar el sistema de celebraciones existente
     if (typeof mostrarLogroCelebracion === 'function') {
         mostrarLogroCelebracion({
-            titulo: '¡Subiste a ' + nuevoTier.nombre + '!',
+            titulo: '¡Subiste a ' + S(nuevoTier.nombre) + '!',
             mensaje: 'Tu premio estimado: $' + premioEstimado,
             icono: nuevoTier.icono,
             color: nuevoTier.color
@@ -8506,7 +8965,7 @@ function mostrarMisGanancias() {
                                     <td>${formatearFechaCorta(p.fecha)}</td>
                                     <td>${p.piezas || 0}</td>
                                     <td>${p.eficiencia}%</td>
-                                    <td><span style="color:${tierObj ? tierObj.color : '#999'}">${p.tier}</span></td>
+                                    <td><span style="color:${tierObj ? tierObj.color : '#999'}">${S(p.tier)}</span></td>
                                     <td><strong>$${p.premio}</strong></td>
                                 </tr>
                             `;
@@ -8759,7 +9218,7 @@ function cargarFichaTecnica(pedido) {
     if (productoImagen) {
         html += `
             <div class="ficha-imagen-container">
-                <img src="${productoImagen}" alt="Producto" onclick="ampliarImagen()">
+                <img src="${S(productoImagen)}" alt="Producto" onclick="ampliarImagen()">
             </div>
         `;
     }
@@ -8972,8 +9431,8 @@ function mostrarCelebracionBanner(tipo, titulo, subtitulo) {
     banner.innerHTML = `
         <i class="fas ${iconos[tipo] || 'fa-star'}"></i>
         <div>
-            <div class="banner-text">${titulo}</div>
-            ${subtitulo ? `<div class="banner-sub">${subtitulo}</div>` : ''}
+            <div class="banner-text">${S(titulo)}</div>
+            ${subtitulo ? `<div class="banner-sub">${S(subtitulo)}</div>` : ''}
         </div>
         <button class="banner-close" onclick="cerrarCelebracionBanner()"><i class="fas fa-times"></i></button>
     `;
@@ -9080,7 +9539,7 @@ function reportarProblemaConFoto(tipoId) {
         <div class="problema-form">
             <div class="problema-tipo-seleccionado">
                 <i class="fas ${tipo.icono}" style="color: ${tipo.color}"></i>
-                <span>${tipo.nombre}</span>
+                <span>${S(tipo.nombre)}</span>
             </div>
 
             <div class="form-group">
