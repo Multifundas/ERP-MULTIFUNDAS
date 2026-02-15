@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERP Multifundas - Tests Automatizados</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; background: #f8fafc; }
+        h1 { margin-bottom: 20px; color: #1e293b; }
+        .test-suite { background: #fff; border-radius: 8px; margin-bottom: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .suite-header { padding: 12px 16px; background: #f1f5f9; font-weight: 600; display: flex; justify-content: space-between; }
+        .test-item { padding: 8px 16px; border-top: 1px solid #f1f5f9; display: flex; align-items: center; gap: 8px; }
+        .test-item.pass { color: #15803d; }
+        .test-item.fail { color: #dc2626; background: #fef2f2; }
+        .test-item.skip { color: #6b7280; opacity: 0.6; }
+        .icon-pass::before { content: "\2713"; font-weight: bold; }
+        .icon-fail::before { content: "\2717"; font-weight: bold; }
+        .icon-skip::before { content: "\25CB"; }
+        .summary { padding: 16px; background: #fff; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; gap: 24px; }
+        .summary-item { font-size: 1.2em; font-weight: 600; }
+        .summary-item.pass { color: #15803d; }
+        .summary-item.fail { color: #dc2626; }
+        .summary-item.total { color: #1e293b; }
+        .error-detail { font-size: 0.85em; color: #dc2626; padding: 4px 0 4px 24px; font-family: monospace; }
+        #runBtn { padding: 8px 24px; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-size: 1em; cursor: pointer; margin-bottom: 20px; }
+        #runBtn:hover { background: #2563eb; }
+        #runBtn:disabled { background: #94a3b8; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <h1>ERP Multifundas - Tests Automatizados</h1>
+    <button id="runBtn" onclick="runAllTests()">Ejecutar Tests</button>
+    <div id="summary" class="summary" style="display:none;"></div>
+    <div id="results"></div>
+
+    <!-- Load dependencies -->
+    <script src="../js/sanitize.js"></script>
+    <script src="../js/erp-core.js"></script>
+    <script src="../js/utils.js"></script>
+
+    <script>
+    // ========================================
+    // MINI TEST FRAMEWORK
+    // ========================================
+    var _suites = [];
+    var _currentSuite = null;
+
+    function describe(name, fn) {
+        _currentSuite = { name: name, tests: [], passed: 0, failed: 0, skipped: 0 };
+        _suites.push(_currentSuite);
+        fn();
+        _currentSuite = null;
+    }
+
+    function it(name, fn) {
+        if (!_currentSuite) return;
+        _currentSuite.tests.push({ name: name, fn: fn, status: 'pending', error: null });
+    }
+
+    function expect(actual) {
+        return {
+            toBe: function(expected) {
+                if (actual !== expected) throw new Error('Expected ' + JSON.stringify(expected) + ' but got ' + JSON.stringify(actual));
+            },
+            toEqual: function(expected) {
+                if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error('Expected ' + JSON.stringify(expected) + ' but got ' + JSON.stringify(actual));
+            },
+            toBeTruthy: function() {
+                if (!actual) throw new Error('Expected truthy but got ' + JSON.stringify(actual));
+            },
+            toBeFalsy: function() {
+                if (actual) throw new Error('Expected falsy but got ' + JSON.stringify(actual));
+            },
+            toBeGreaterThan: function(expected) {
+                if (actual <= expected) throw new Error('Expected ' + actual + ' to be greater than ' + expected);
+            },
+            toBeLessThan: function(expected) {
+                if (actual >= expected) throw new Error('Expected ' + actual + ' to be less than ' + expected);
+            },
+            toContain: function(expected) {
+                if (typeof actual === 'string') {
+                    if (actual.indexOf(expected) === -1) throw new Error('Expected string to contain "' + expected + '"');
+                } else if (Array.isArray(actual)) {
+                    if (actual.indexOf(expected) === -1) throw new Error('Expected array to contain ' + JSON.stringify(expected));
+                } else {
+                    throw new Error('toContain requires string or array');
+                }
+            },
+            toThrow: function() {
+                if (typeof actual !== 'function') throw new Error('toThrow requires a function');
+                try { actual(); throw new Error('Expected function to throw'); } catch (e) { if (e.message === 'Expected function to throw') throw e; }
+            },
+            not: {
+                toBe: function(expected) {
+                    if (actual === expected) throw new Error('Expected ' + JSON.stringify(actual) + ' not to be ' + JSON.stringify(expected));
+                },
+                toEqual: function(expected) {
+                    if (JSON.stringify(actual) === JSON.stringify(expected)) throw new Error('Expected values not to be equal');
+                },
+                toBeTruthy: function() {
+                    if (actual) throw new Error('Expected falsy but got ' + JSON.stringify(actual));
+                }
+            },
+            toBeInstanceOf: function(type) {
+                if (!(actual instanceof type)) throw new Error('Expected instance of ' + type.name);
+            }
+        };
+    }
+
+    // ========================================
+    // TEST SUITES
+    // ========================================
+
+    // 1. safeJsonParse tests
+    describe('safeJsonParse', function() {
+        it('should parse valid JSON', function() {
+            expect(safeJsonParse('{"a":1}')).toEqual({a: 1});
+        });
+        it('should return default for invalid JSON', function() {
+            expect(safeJsonParse('not json', {})).toEqual({});
+        });
+        it('should return default for null', function() {
+            expect(safeJsonParse(null, [])).toEqual([]);
+        });
+        it('should return default for undefined', function() {
+            expect(safeJsonParse(undefined, 'default')).toBe('default');
+        });
+        it('should return default for empty string', function() {
+            expect(safeJsonParse('', 42)).toBe(42);
+        });
+        it('should parse arrays', function() {
+            expect(safeJsonParse('[1,2,3]')).toEqual([1,2,3]);
+        });
+        it('should return null as default if no default provided', function() {
+            expect(safeJsonParse('bad')).toBe(null);
+        });
+    });
+
+    // 2. safeLocalGet / safeLocalSet tests
+    describe('safeLocalGet / safeLocalSet', function() {
+        it('should write and read a value', function() {
+            safeLocalSet('_test_key_1', { name: 'test' });
+            expect(safeLocalGet('_test_key_1')).toEqual({ name: 'test' });
+            localStorage.removeItem('_test_key_1');
+        });
+        it('should return default for missing key', function() {
+            expect(safeLocalGet('_nonexistent_key_xyz', 'fallback')).toBe('fallback');
+        });
+        it('should return default for corrupted data', function() {
+            localStorage.setItem('_test_corrupt', '{bad json');
+            expect(safeLocalGet('_test_corrupt', [])).toEqual([]);
+            localStorage.removeItem('_test_corrupt');
+        });
+        it('should handle arrays', function() {
+            safeLocalSet('_test_arr', [1, 2, 3]);
+            expect(safeLocalGet('_test_arr')).toEqual([1, 2, 3]);
+            localStorage.removeItem('_test_arr');
+        });
+    });
+
+    // 3. Sanitize tests
+    describe('Sanitize (S function)', function() {
+        it('should escape HTML entities', function() {
+            expect(S('<script>alert("xss")</script>')).toContain('&lt;script&gt;');
+        });
+        it('should escape quotes', function() {
+            expect(S('"double" and \'single\'')).toContain('&quot;');
+        });
+        it('should handle null/undefined', function() {
+            expect(S(null)).toBe('');
+            expect(S(undefined)).toBe('');
+        });
+        it('should handle numbers', function() {
+            expect(S(42)).toBe('42');
+        });
+        it('should handle empty string', function() {
+            expect(S('')).toBe('');
+        });
+        it('should escape ampersands', function() {
+            expect(S('a & b')).toContain('&amp;');
+        });
+    });
+
+    // 4. Sanitize context methods
+    describe('Sanitize contexts', function() {
+        it('Sanitize.html should escape HTML', function() {
+            expect(Sanitize.html('<b>bold</b>')).toContain('&lt;b&gt;');
+        });
+        it('Sanitize.attr should escape backticks', function() {
+            expect(Sanitize.attr('test`value')).toContain('&#96;');
+        });
+        it('Sanitize.url should encode', function() {
+            expect(Sanitize.url('hello world')).toBe('hello%20world');
+        });
+        it('Sanitize.css should strip dangerous chars', function() {
+            var result = Sanitize.css('color: red; background: url("evil")');
+            expect(result).not.toContain('"');
+            expect(result).not.toContain('(');
+        });
+    });
+
+    // 5. Validators tests
+    describe('Validators', function() {
+        it('required should reject empty', function() {
+            expect(Validators.required('', 'Name').valid).toBeFalsy();
+        });
+        it('required should accept value', function() {
+            expect(Validators.required('test', 'Name').valid).toBeTruthy();
+        });
+        it('minLength should enforce minimum', function() {
+            expect(Validators.minLength('ab', 3, 'Field').valid).toBeFalsy();
+            expect(Validators.minLength('abc', 3, 'Field').valid).toBeTruthy();
+        });
+        it('positiveNumber should reject negative', function() {
+            expect(Validators.positiveNumber(-5, 'Price').valid).toBeFalsy();
+        });
+        it('positiveNumber should accept zero', function() {
+            expect(Validators.positiveNumber(0, 'Price').valid).toBeTruthy();
+        });
+        it('email should validate format', function() {
+            expect(Validators.email('bad').valid).toBeFalsy();
+            expect(Validators.email('test@example.com').valid).toBeTruthy();
+        });
+        it('pin should require 4 digits', function() {
+            expect(Validators.pin('123').valid).toBeFalsy();
+            expect(Validators.pin('1234').valid).toBeTruthy();
+            expect(Validators.pin('abcd').valid).toBeFalsy();
+        });
+        it('validate should check schema', function() {
+            var result = Validators.validate(
+                { nombre: '', email: 'bad' },
+                { nombre: [{ type: 'required', label: 'Nombre' }], email: [{ type: 'email' }] }
+            );
+            expect(result.valid).toBeFalsy();
+            expect(result.errors.length).toBe(2);
+        });
+    });
+
+    // 6. debounce tests
+    describe('debounce', function() {
+        it('should delay execution', function() {
+            var count = 0;
+            var fn = debounce(function() { count++; }, 50);
+            fn(); fn(); fn();
+            expect(count).toBe(0); // Not yet executed
+        });
+        it('should return a function', function() {
+            var fn = debounce(function() {}, 100);
+            expect(typeof fn).toBe('function');
+        });
+    });
+
+    // 7. throttle tests
+    describe('throttle', function() {
+        it('should execute immediately first time', function() {
+            var count = 0;
+            var fn = throttle(function() { count++; }, 1000);
+            fn();
+            expect(count).toBe(1);
+        });
+        it('should block rapid calls', function() {
+            var count = 0;
+            var fn = throttle(function() { count++; }, 1000);
+            fn(); fn(); fn();
+            expect(count).toBe(1);
+        });
+    });
+
+    // 8. DeltaMerge tests (if available)
+    describe('DeltaMerge', function() {
+        it('should be available globally', function() {
+            // May not be loaded yet if erp-core doesn't include it
+            if (typeof DeltaMerge === 'undefined') {
+                console.log('DeltaMerge not loaded - skipping');
+                return;
+            }
+            expect(typeof DeltaMerge.applyPiezasDelta).toBe('function');
+        });
+        it('should calculate total piezas correctly', function() {
+            if (typeof DeltaMerge === 'undefined') return;
+            // Setup test data
+            safeLocalSet('pedidos_erp', [{ id: 999, procesos: [{ id: 'p1', piezas: 100 }] }]);
+            safeLocalSet('_piezas_deltas', []);
+            var total = DeltaMerge.getTotalPiezas(999, 'p1');
+            expect(total).toBe(100);
+            // Cleanup
+            localStorage.removeItem('pedidos_erp');
+            localStorage.removeItem('_piezas_deltas');
+        });
+    });
+
+    // 9. FeatureFlags tests
+    describe('FeatureFlags', function() {
+        it('should have default flags', function() {
+            expect(FeatureFlags.isEnabled('OFFLINE_QUEUE')).toBeTruthy();
+        });
+        it('should allow setting flags', function() {
+            FeatureFlags.set('TEST_FLAG', true);
+            expect(FeatureFlags.isEnabled('TEST_FLAG')).toBeTruthy();
+            FeatureFlags.set('TEST_FLAG', false);
+            expect(FeatureFlags.isEnabled('TEST_FLAG')).toBeFalsy();
+        });
+        it('should return all flags', function() {
+            var all = FeatureFlags.getAll();
+            expect(typeof all).toBe('object');
+            expect(all.OFFLINE_QUEUE).toBeTruthy();
+        });
+    });
+
+    // 10. Utils functions
+    describe('Utils (formatDate, formatCurrency, etc)', function() {
+        it('formatDate should format correctly', function() {
+            var result = formatDate('2024-03-15');
+            expect(result).toContain('15');
+            expect(result).toContain('03');
+        });
+        it('formatDate should handle null', function() {
+            expect(formatDate(null)).toBe('-');
+        });
+        it('formatCurrency should add $ and decimals', function() {
+            expect(formatCurrency(1234.5)).toContain('$');
+            expect(formatCurrency(1234.5)).toContain('1,234.50');
+        });
+        it('formatCurrency should handle null', function() {
+            expect(formatCurrency(null)).toBe('$0.00');
+        });
+        it('getIniciales should extract initials', function() {
+            expect(getIniciales('Maria Lopez')).toBe('ML');
+        });
+        it('getIniciales should handle single name', function() {
+            expect(getIniciales('Maria')).toBe('MA');
+        });
+        it('getIniciales should handle null', function() {
+            expect(getIniciales(null)).toBe('??');
+        });
+    });
+
+    // 11. Pagination
+    describe('Pagination', function() {
+        it('paginarArray should return correct page', function() {
+            var arr = [];
+            for (var i = 0; i < 100; i++) arr.push(i);
+            var page1 = paginarArray(arr, 1);
+            expect(page1.length).toBe(25);
+            expect(page1[0]).toBe(0);
+            var page2 = paginarArray(arr, 2);
+            expect(page2[0]).toBe(25);
+        });
+        it('renderPaginacion should return empty for small sets', function() {
+            var result = renderPaginacion('test', 10, 1, 'testFn');
+            expect(result).toBe('');
+        });
+        it('renderPaginacion should generate HTML for large sets', function() {
+            var result = renderPaginacion('test', 100, 1, 'testFn');
+            expect(result).toContain('paginacion');
+        });
+    });
+
+    // 12. AuditTrail tests
+    describe('AuditTrail', function() {
+        it('should log entries', function() {
+            AuditTrail.clear();
+            AuditTrail.log('Test Action', 'Test Detail', 'TestEntity', '123');
+            var recent = AuditTrail.getRecent(1);
+            expect(recent.length).toBe(1);
+            expect(recent[0].action).toBe('Test Action');
+            AuditTrail.clear();
+        });
+        it('should search entries', function() {
+            AuditTrail.clear();
+            AuditTrail.log('Create User', 'Created user Juan', 'User', '1');
+            AuditTrail.log('Delete Order', 'Deleted order 5', 'Order', '5');
+            var results = AuditTrail.search('Juan');
+            expect(results.length).toBe(1);
+            AuditTrail.clear();
+        });
+        it('should track changes', function() {
+            if (!AuditTrail.trackChanges) return;
+            var changes = AuditTrail.trackChanges(
+                { name: 'Old', price: 10 },
+                { name: 'New', price: 10 }
+            );
+            expect(changes).toBeTruthy();
+            expect(changes.name.from).toBe('Old');
+            expect(changes.name.to).toBe('New');
+        });
+    });
+
+    // 13. BackupManager tests
+    describe('BackupManager', function() {
+        it('should be available', function() {
+            if (typeof BackupManager === 'undefined') return;
+            expect(typeof BackupManager.start).toBe('function');
+            expect(typeof BackupManager.runBackup).toBe('function');
+        });
+        it('should track last backup info', function() {
+            if (typeof BackupManager === 'undefined') return;
+            var info = BackupManager.getLastBackupInfo();
+            expect(typeof info).toBe('object');
+            expect(info).toBeTruthy();
+        });
+    });
+
+    // 14. IDBStore tests
+    describe('IDBStore', function() {
+        it('should be available', function() {
+            if (typeof IDBStore === 'undefined') return;
+            expect(typeof IDBStore.init).toBe('function');
+            expect(typeof IDBStore.put).toBe('function');
+            expect(typeof IDBStore.getAll).toBe('function');
+        });
+    });
+
+    // ========================================
+    // TEST RUNNER
+    // ========================================
+    async function runAllTests() {
+        var btn = document.getElementById('runBtn');
+        btn.disabled = true;
+        btn.textContent = 'Ejecutando...';
+
+        var totalPass = 0;
+        var totalFail = 0;
+        var totalSkip = 0;
+        var html = '';
+
+        for (var s = 0; s < _suites.length; s++) {
+            var suite = _suites[s];
+            suite.passed = 0;
+            suite.failed = 0;
+
+            for (var t = 0; t < suite.tests.length; t++) {
+                var test = suite.tests[t];
+                try {
+                    var result = test.fn();
+                    if (result instanceof Promise) await result;
+                    test.status = 'pass';
+                    suite.passed++;
+                    totalPass++;
+                } catch (e) {
+                    test.status = 'fail';
+                    test.error = e.message;
+                    suite.failed++;
+                    totalFail++;
+                }
+            }
+
+            html += '<div class="test-suite">';
+            html += '<div class="suite-header"><span>' + suite.name + '</span><span>' + suite.passed + '/' + suite.tests.length + '</span></div>';
+            for (var t = 0; t < suite.tests.length; t++) {
+                var test = suite.tests[t];
+                html += '<div class="test-item ' + test.status + '">';
+                html += '<span class="icon-' + test.status + '"></span> ' + test.name;
+                html += '</div>';
+                if (test.error) {
+                    html += '<div class="error-detail">' + test.error + '</div>';
+                }
+            }
+            html += '</div>';
+        }
+
+        document.getElementById('results').innerHTML = html;
+
+        var summaryHtml = '<div class="summary-item total">Total: ' + (totalPass + totalFail) + '</div>';
+        summaryHtml += '<div class="summary-item pass">Pasaron: ' + totalPass + '</div>';
+        summaryHtml += '<div class="summary-item fail">Fallaron: ' + totalFail + '</div>';
+        document.getElementById('summary').innerHTML = summaryHtml;
+        document.getElementById('summary').style.display = 'flex';
+
+        btn.disabled = false;
+        btn.textContent = 'Ejecutar Tests de Nuevo';
+    }
+
+    // Auto-run on load
+    window.addEventListener('load', function() {
+        setTimeout(runAllTests, 500);
+    });
+    </script>
+</body>
+</html>

@@ -4005,6 +4005,7 @@ function encontrarMejorOperadoraPorProceso(tipoProceso) {
 // ========================================
 
 let tiemposMuertosFiltro = 'hoy';
+var tiemposMuertosPage = 1;
 
 function renderTiemposMuertos() {
     const container = document.querySelector('.coco-tiempos-muertos-container');
@@ -4188,7 +4189,12 @@ function renderTiemposMuertos() {
                                 </tr>
                             </thead>
                             <tbody>
-                                ${historial.slice(0, 25).map(h => {
+                                ${(() => {
+                                    const pageSize = 25;
+                                    const totalPages = Math.ceil(historial.length / pageSize);
+                                    const startIdx = (tiemposMuertosPage - 1) * pageSize;
+                                    const pageItems = historial.slice(startIdx, startIdx + pageSize);
+                                    return pageItems.map(h => {
                                     const inicio = new Date(h.inicio);
                                     const fechaStr = inicio.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' });
                                     const horaStr = inicio.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
@@ -4209,9 +4215,24 @@ function renderTiemposMuertos() {
                                             <td class="solucion-cell" title="${h.solucion || ''}">${h.solucion || '-'}</td>
                                         </tr>
                                     `;
-                                }).join('')}
+                                }).join('');
+                                })()}
                             </tbody>
                         </table>
+                        ${historial.length > 25 ? `
+                            <div class="tm-paginacion" style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:12px;padding:8px 0;">
+                                <span style="color:var(--text-muted);font-size:0.85em;">
+                                    ${((tiemposMuertosPage - 1) * 25) + 1}-${Math.min(tiemposMuertosPage * 25, historial.length)} de ${historial.length}
+                                </span>
+                                <button class="btn btn-sm" ${tiemposMuertosPage <= 1 ? 'disabled' : ''} onclick="cambiarPaginaTM(${tiemposMuertosPage - 1})">
+                                    <i class="fas fa-chevron-left"></i>
+                                </button>
+                                <span style="font-weight:600;">Pág. ${tiemposMuertosPage}/${Math.ceil(historial.length / 25)}</span>
+                                <button class="btn btn-sm" ${tiemposMuertosPage >= Math.ceil(historial.length / 25) ? 'disabled' : ''} onclick="cambiarPaginaTM(${tiemposMuertosPage + 1})">
+                                    <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        ` : ''}
                     ` : '<p class="text-muted text-center">No hay paros registrados en este período</p>'}
                 </div>
             </div>
@@ -4221,6 +4242,12 @@ function renderTiemposMuertos() {
 
 function cambiarFiltroTM(filtro) {
     tiemposMuertosFiltro = filtro;
+    tiemposMuertosPage = 1;
+    renderTiemposMuertos();
+}
+
+function cambiarPaginaTM(page) {
+    tiemposMuertosPage = page;
     renderTiemposMuertos();
 }
 
@@ -4270,4 +4297,173 @@ function renderTendenciaTM(stats, filtro) {
         return '<span class="tm-tendencia empeorando"><i class="fas fa-arrow-up"></i> Empeorando</span>';
     }
     return '<span class="tm-tendencia estable"><i class="fas fa-minus"></i> Estable</span>';
+}
+
+// ========================================
+// MEJORA 6: Dashboard de Métricas Históricas
+// Persiste métricas diarias y muestra tendencias
+// ========================================
+
+var _metricsSnapshotTimer = null;
+
+function iniciarMetricsSnapshot() {
+    // Guardar snapshot cada hora
+    if (_metricsSnapshotTimer) clearInterval(_metricsSnapshotTimer);
+    _metricsSnapshotTimer = setInterval(function() {
+        guardarSnapshotMetricas();
+    }, 60 * 60 * 1000); // Cada hora
+
+    // Snapshot inmediato a las 17:00 (fin de turno)
+    var ahora = new Date();
+    var finTurno = new Date();
+    finTurno.setHours(17, 0, 0, 0);
+    if (ahora < finTurno) {
+        var msHastaFinTurno = finTurno - ahora;
+        setTimeout(function() {
+            guardarSnapshotMetricas();
+        }, msHastaFinTurno);
+    }
+}
+
+function guardarSnapshotMetricas() {
+    if (typeof MetricsStore === 'undefined') return;
+
+    try {
+        var metrics = MetricsStore.calculateCurrent();
+
+        // Enriquecer con datos de alertas e IA
+        metrics.alertasEntrega = (typeof verificarAlertasEntrega === 'function') ? verificarAlertasEntrega().length : 0;
+        metrics.anomaliasDetectadas = (typeof detectarAnomalias === 'function') ? detectarAnomalias().length : 0;
+
+        // Top operadoras del día
+        var historial = safeLocalGet('historial_produccion', []);
+        var hoyStr = new Date().toISOString().split('T')[0];
+        var porOperadora = {};
+        historial.filter(function(h) { return h.fecha && h.fecha.startsWith(hoyStr); }).forEach(function(h) {
+            if (!h.operadoraId) return;
+            if (!porOperadora[h.operadoraId]) {
+                porOperadora[h.operadoraId] = { id: h.operadoraId, nombre: h.operadoraNombre || 'Desconocida', piezas: 0 };
+            }
+            porOperadora[h.operadoraId].piezas += (h.cantidad || 0);
+        });
+        metrics.topOperadoras = Object.values(porOperadora).sort(function(a, b) { return b.piezas - a.piezas; }).slice(0, 5);
+
+        MetricsStore.saveSnapshot(metrics);
+        console.log('[Metrics] Snapshot guardado:', metrics.produccionTotal, 'piezas,', metrics.operadorasActivas, 'operadoras');
+    } catch (e) {
+        console.error('[Metrics] Error guardando snapshot:', e);
+    }
+}
+
+async function renderMetricsDashboard(containerId) {
+    var container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (typeof MetricsStore === 'undefined') {
+        container.innerHTML = '<p class="text-muted">Módulo de métricas no disponible</p>';
+        return;
+    }
+
+    var history = await MetricsStore.getHistory(14);
+
+    if (history.length === 0) {
+        container.innerHTML = `
+            <div style="text-align:center;padding:20px;color:var(--text-muted);">
+                <i class="fas fa-chart-line" style="font-size:2em;margin-bottom:10px;"></i>
+                <p>Aún no hay datos históricos. Las métricas se guardan automáticamente cada hora.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Calcular tendencias
+    var ultimoDia = history[history.length - 1];
+    var penultimoDia = history.length >= 2 ? history[history.length - 2] : null;
+
+    function tendencia(actual, anterior) {
+        if (!anterior || anterior === 0) return { icon: 'fa-minus', color: '#6b7280', pct: 0 };
+        var diff = ((actual - anterior) / anterior) * 100;
+        if (diff > 5) return { icon: 'fa-arrow-up', color: '#10b981', pct: Math.round(diff) };
+        if (diff < -5) return { icon: 'fa-arrow-down', color: '#ef4444', pct: Math.round(diff) };
+        return { icon: 'fa-minus', color: '#6b7280', pct: 0 };
+    }
+
+    var tProd = tendencia(ultimoDia.produccionTotal, penultimoDia ? penultimoDia.produccionTotal : 0);
+    var tTM = tendencia(ultimoDia.tiempoMuertoMinutos, penultimoDia ? penultimoDia.tiempoMuertoMinutos : 0);
+
+    // Sparkline data (últimos 14 días)
+    var prodData = history.map(function(h) { return h.produccionTotal || 0; });
+    var maxProd = Math.max.apply(null, prodData) || 1;
+    var sparkPoints = prodData.map(function(v, i) {
+        var x = (i / Math.max(1, prodData.length - 1)) * 200;
+        var y = 40 - ((v / maxProd) * 35);
+        return x + ',' + y;
+    }).join(' ');
+
+    var html = `
+        <div class="metrics-dashboard">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
+                <div class="metrics-card" style="background:var(--bg-card,#fff);padding:12px;border-radius:8px;border:1px solid var(--border-color,#e5e7eb);">
+                    <div style="font-size:0.8em;color:var(--text-muted);">Producción (último día)</div>
+                    <div style="font-size:1.5em;font-weight:700;">${ultimoDia.produccionTotal || 0}</div>
+                    <div style="font-size:0.8em;color:${tProd.color};"><i class="fas ${tProd.icon}"></i> ${tProd.pct}% vs anterior</div>
+                </div>
+                <div class="metrics-card" style="background:var(--bg-card,#fff);padding:12px;border-radius:8px;border:1px solid var(--border-color,#e5e7eb);">
+                    <div style="font-size:0.8em;color:var(--text-muted);">Operadoras Activas</div>
+                    <div style="font-size:1.5em;font-weight:700;">${ultimoDia.operadorasActivas || 0}</div>
+                </div>
+                <div class="metrics-card" style="background:var(--bg-card,#fff);padding:12px;border-radius:8px;border:1px solid var(--border-color,#e5e7eb);">
+                    <div style="font-size:0.8em;color:var(--text-muted);">Tiempo Muerto</div>
+                    <div style="font-size:1.5em;font-weight:700;">${ultimoDia.tiempoMuertoMinutos || 0}<span style="font-size:0.6em;"> min</span></div>
+                    <div style="font-size:0.8em;color:${tTM.color};"><i class="fas ${tTM.icon}"></i> ${Math.abs(tTM.pct)}%</div>
+                </div>
+                <div class="metrics-card" style="background:var(--bg-card,#fff);padding:12px;border-radius:8px;border:1px solid var(--border-color,#e5e7eb);">
+                    <div style="font-size:0.8em;color:var(--text-muted);">Alertas / Anomalías</div>
+                    <div style="font-size:1.5em;font-weight:700;">${ultimoDia.alertasEntrega || 0} / ${ultimoDia.anomaliasDetectadas || 0}</div>
+                </div>
+            </div>
+
+            <div style="background:var(--bg-card,#fff);padding:16px;border-radius:8px;border:1px solid var(--border-color,#e5e7eb);margin-bottom:16px;">
+                <div style="font-size:0.9em;font-weight:600;margin-bottom:8px;">Tendencia de Producción (${history.length} días)</div>
+                <svg viewBox="0 0 200 45" style="width:100%;height:60px;">
+                    <polyline points="${sparkPoints}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    ${prodData.map(function(v, i) {
+                        var x = (i / Math.max(1, prodData.length - 1)) * 200;
+                        var y = 40 - ((v / maxProd) * 35);
+                        return '<circle cx="' + x + '" cy="' + y + '" r="2" fill="#3b82f6"/>';
+                    }).join('')}
+                </svg>
+                <div style="display:flex;justify-content:space-between;font-size:0.75em;color:var(--text-muted);">
+                    <span>${history[0].fecha}</span>
+                    <span>${history[history.length-1].fecha}</span>
+                </div>
+            </div>
+
+            ${ultimoDia.topOperadoras && ultimoDia.topOperadoras.length > 0 ? `
+            <div style="background:var(--bg-card,#fff);padding:16px;border-radius:8px;border:1px solid var(--border-color,#e5e7eb);">
+                <div style="font-size:0.9em;font-weight:600;margin-bottom:8px;">Top Operadoras (último día)</div>
+                ${ultimoDia.topOperadoras.map(function(op, idx) {
+                    var barWidth = maxProd > 0 ? Math.round((op.piezas / ultimoDia.topOperadoras[0].piezas) * 100) : 0;
+                    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' +
+                        '<span style="font-size:0.8em;width:20px;text-align:center;font-weight:600;">' + (idx+1) + '</span>' +
+                        '<span style="font-size:0.85em;width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (op.nombre || 'N/A') + '</span>' +
+                        '<div style="flex:1;height:8px;background:var(--bg-tertiary,#f3f4f6);border-radius:4px;overflow:hidden;">' +
+                            '<div style="width:' + barWidth + '%;height:100%;background:#3b82f6;border-radius:4px;"></div>' +
+                        '</div>' +
+                        '<span style="font-size:0.85em;font-weight:600;min-width:50px;text-align:right;">' + op.piezas + '</span>' +
+                    '</div>';
+                }).join('')}
+            </div>
+            ` : ''}
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+// Iniciar cuando el dashboard se carga
+if (typeof window !== 'undefined') {
+    window.addEventListener('DOMContentLoaded', function() {
+        setTimeout(iniciarMetricsSnapshot, 5000);
+    });
 }

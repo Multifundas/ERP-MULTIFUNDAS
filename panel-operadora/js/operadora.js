@@ -1817,77 +1817,122 @@ function sincronizarConSupervisora(captura) {
     historial.push(registro);
     localStorage.setItem('historial_produccion', JSON.stringify(historial.slice(-1000)));
 
+    // Persistir en IndexedDB para historial ilimitado
+    if (typeof IDBStore !== 'undefined') {
+        IDBStore.put('historial_produccion', registro).catch(function() {});
+    }
+
     // Actualizar avance del proceso en pedidos_erp (para que supervisora lo vea)
     const pedidoId = operadoraState.pedidoActual?.id;
     const procesoId = captura.procesoId || operadoraState.procesoActual?.procesoId;
     const procesoNombre = operadoraState.procesoActual?.procesoNombre || operadoraState.procesoActual?.nombre;
 
     if (pedidoId) {
-        const pedidosERP = safeLocalGet('pedidos_erp', []);
-        // Usar == para comparación flexible (string/number)
-        let pedidoIndex = pedidosERP.findIndex(p => p.id == pedidoId);
+        // Usar DeltaMerge si está disponible (evita race conditions multi-operador)
+        if (typeof DeltaMerge !== 'undefined') {
+            // Asegurar que el pedido/proceso existan en pedidos_erp
+            var pedidosERP = safeLocalGet('pedidos_erp', []);
+            var pedidoIndex = pedidosERP.findIndex(p => p.id == pedidoId);
 
-        // Si el pedido no existe en pedidos_erp, crearlo
-        if (pedidoIndex < 0) {
-            const nuevoPedido = {
-                id: pedidoId,
-                codigo: operadoraState.pedidoActual?.codigo || `PED-${pedidoId}`,
-                cliente: operadoraState.pedidoActual?.cliente || operadoraState.pedidoActual?.clienteNombre || 'Cliente',
-                producto: operadoraState.pedidoActual?.producto || operadoraState.pedidoActual?.productoNombre || 'Producto',
-                cantidad: operadoraState.pedidoActual?.cantidad || operadoraState.piezasMeta || 0,
-                estado: 'en-proceso',
-                procesos: []
-            };
-            pedidosERP.push(nuevoPedido);
-            pedidoIndex = pedidosERP.length - 1;
-            DEBUG_MODE && console.log('[OPERADORA] Pedido creado en pedidos_erp:', pedidoId);
-        }
+            if (pedidoIndex < 0) {
+                var nuevoPedido = {
+                    id: pedidoId,
+                    codigo: operadoraState.pedidoActual?.codigo || `PED-${pedidoId}`,
+                    cliente: operadoraState.pedidoActual?.cliente || operadoraState.pedidoActual?.clienteNombre || 'Cliente',
+                    producto: operadoraState.pedidoActual?.producto || operadoraState.pedidoActual?.productoNombre || 'Producto',
+                    cantidad: operadoraState.pedidoActual?.cantidad || operadoraState.piezasMeta || 0,
+                    estado: 'en-proceso',
+                    procesos: []
+                };
+                pedidosERP.push(nuevoPedido);
+                pedidoIndex = pedidosERP.length - 1;
+            }
 
-        const pedido = pedidosERP[pedidoIndex];
-        if (!pedido.procesos) {
-            pedido.procesos = [];
-        }
+            var pedido = pedidosERP[pedidoIndex];
+            if (!pedido.procesos) pedido.procesos = [];
 
-        // Buscar el proceso por ID primero
-        let procesoIndex = pedido.procesos.findIndex(p => p.id == procesoId);
+            var procesoIndex = pedido.procesos.findIndex(p => p.id == procesoId);
+            if (procesoIndex < 0 && procesoNombre) {
+                procesoIndex = pedido.procesos.findIndex(p =>
+                    (p.nombre || '').toLowerCase() === procesoNombre.toLowerCase()
+                );
+            }
+            if (procesoIndex < 0) {
+                pedido.procesos.push({
+                    id: procesoId || `proc-${Date.now()}`,
+                    nombre: procesoNombre || 'Proceso',
+                    tipo: operadoraState.procesoActual?.tipo || 'produccion',
+                    estado: 'en-proceso',
+                    piezas: 0,
+                    orden: pedido.procesos.length + 1,
+                    pedidoId: pedidoId
+                });
+                // Guardar estructura sin sumar piezas (DeltaMerge lo hará)
+                localStorage.setItem('pedidos_erp', JSON.stringify(pedidosERP));
+            }
 
-        // Si no se encuentra por ID, buscar por nombre
-        if (procesoIndex < 0 && procesoNombre) {
-            procesoIndex = pedido.procesos.findIndex(p =>
-                (p.nombre || '').toLowerCase() === procesoNombre.toLowerCase()
+            // Aplicar delta de forma atómica
+            DeltaMerge.applyPiezasDelta(
+                pedidoId, procesoId, procesoNombre,
+                captura.cantidad,
+                authState.operadoraActual?.id,
+                CONFIG_ESTACION.id
             );
+            DEBUG_MODE && console.log('[OPERADORA] Delta aplicado:', captura.cantidad, 'piezas via DeltaMerge');
+        } else {
+            // Fallback: escritura directa (original)
+            const pedidosERP = safeLocalGet('pedidos_erp', []);
+            let pedidoIndex = pedidosERP.findIndex(p => p.id == pedidoId);
+
+            if (pedidoIndex < 0) {
+                const nuevoPedido = {
+                    id: pedidoId,
+                    codigo: operadoraState.pedidoActual?.codigo || `PED-${pedidoId}`,
+                    cliente: operadoraState.pedidoActual?.cliente || operadoraState.pedidoActual?.clienteNombre || 'Cliente',
+                    producto: operadoraState.pedidoActual?.producto || operadoraState.pedidoActual?.productoNombre || 'Producto',
+                    cantidad: operadoraState.pedidoActual?.cantidad || operadoraState.piezasMeta || 0,
+                    estado: 'en-proceso',
+                    procesos: []
+                };
+                pedidosERP.push(nuevoPedido);
+                pedidoIndex = pedidosERP.length - 1;
+            }
+
+            const pedido = pedidosERP[pedidoIndex];
+            if (!pedido.procesos) pedido.procesos = [];
+
+            let procesoIdx = pedido.procesos.findIndex(p => p.id == procesoId);
+            if (procesoIdx < 0 && procesoNombre) {
+                procesoIdx = pedido.procesos.findIndex(p =>
+                    (p.nombre || '').toLowerCase() === procesoNombre.toLowerCase()
+                );
+            }
+            if (procesoIdx < 0) {
+                pedido.procesos.push({
+                    id: procesoId || `proc-${Date.now()}`,
+                    nombre: procesoNombre || 'Proceso',
+                    tipo: operadoraState.procesoActual?.tipo || 'produccion',
+                    estado: 'en-proceso',
+                    piezas: 0,
+                    orden: pedido.procesos.length + 1,
+                    pedidoId: pedidoId
+                });
+                procesoIdx = pedido.procesos.length - 1;
+            }
+
+            pedido.procesos[procesoIdx].piezas = (pedido.procesos[procesoIdx].piezas || 0) + captura.cantidad;
+            pedido.procesos[procesoIdx].ultimaActualizacion = new Date().toISOString();
+            pedido.procesos[procesoIdx].operadoraId = authState.operadoraActual?.id;
+            pedido.procesos[procesoIdx].operadoraNombre = authState.operadoraActual?.nombre;
+            pedido.procesos[procesoIdx].estacionId = CONFIG_ESTACION.id;
+
+            if (pedido.procesos[procesoIdx].estado === 'pendiente') {
+                pedido.procesos[procesoIdx].estado = 'en-proceso';
+            }
+
+            localStorage.setItem('pedidos_erp', JSON.stringify(pedidosERP));
         }
-
-        // Si el proceso no existe, crearlo
-        if (procesoIndex < 0) {
-            const nuevoProceso = {
-                id: procesoId || `proc-${Date.now()}`,
-                nombre: procesoNombre || 'Proceso',
-                tipo: operadoraState.procesoActual?.tipo || 'produccion',
-                estado: 'en-proceso',
-                piezas: 0,
-                orden: pedido.procesos.length + 1,
-                pedidoId: pedidoId
-            };
-            pedido.procesos.push(nuevoProceso);
-            procesoIndex = pedido.procesos.length - 1;
-            DEBUG_MODE && console.log('[OPERADORA] Proceso creado en pedidos_erp:', procesoId, procesoNombre);
-        }
-
-        // Actualizar piezas del proceso (acumular)
-        pedido.procesos[procesoIndex].piezas = (pedido.procesos[procesoIndex].piezas || 0) + captura.cantidad;
-        pedido.procesos[procesoIndex].ultimaActualizacion = new Date().toISOString();
-        pedido.procesos[procesoIndex].operadoraId = authState.operadoraActual?.id;
-        pedido.procesos[procesoIndex].operadoraNombre = authState.operadoraActual?.nombre;
-        pedido.procesos[procesoIndex].estacionId = CONFIG_ESTACION.id;
-
-        // Si el proceso está en estado pendiente, cambiarlo a en-proceso
-        if (pedido.procesos[procesoIndex].estado === 'pendiente') {
-            pedido.procesos[procesoIndex].estado = 'en-proceso';
-        }
-
-        localStorage.setItem('pedidos_erp', JSON.stringify(pedidosERP));
-        DEBUG_MODE && console.log('[OPERADORA] Avance actualizado en pedido:', pedidoId, 'proceso:', procesoId || procesoNombre, 'piezas:', pedido.procesos[procesoIndex].piezas);
+        DEBUG_MODE && console.log('[OPERADORA] Avance actualizado en pedido:', pedidoId, 'proceso:', procesoId || procesoNombre);
     }
 
     // También actualizar estado de la máquina en tiempo real
@@ -4627,6 +4672,29 @@ function agregarAColaOffline(tipo, datos) {
     });
     localStorage.setItem('cola_offline', JSON.stringify(cola));
 }
+
+// Mejora 5: Sincronizar cola offline cuando se reconecta
+function sincronizarDespuesDeReconexion() {
+    const cola = safeLocalGet('cola_offline', {capturas:[],problemas:[],eventos:[]});
+
+    if (cola.capturas && cola.capturas.length > 0) {
+        mostrarToast('Sincronizando ' + cola.capturas.length + ' capturas pendientes...', 'info');
+
+        cola.capturas.forEach(function(captura) {
+            sincronizarConSupervisora(captura);
+        });
+
+        cola.capturas = [];
+        localStorage.setItem('cola_offline', JSON.stringify(cola));
+
+        mostrarToast('Capturas sincronizadas exitosamente', 'success');
+    }
+}
+
+// Escuchar reconexión para sincronizar automáticamente
+window.addEventListener('online', function() {
+    setTimeout(sincronizarDespuesDeReconexion, 2000);
+});
 
 var _syncRetryCount = 0;
 var _syncRetryTimer = null;

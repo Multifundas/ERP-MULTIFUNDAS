@@ -715,31 +715,81 @@
     };
 
     // ========================================
-    // AUDIT TRAIL (Mejora #18)
-    // Registro visual de cambios
+    // AUDIT TRAIL (Mejora #18 - Enhanced)
+    // Registro visual de cambios con user context y change tracking
     // ========================================
     var AuditTrail = {
-        _maxItems: 200,
+        _maxItems: 500,
         _key: 'erp_audit_visual',
+        _useIDB: true,
 
-        log: function(action, detail, entity, entityId, user) {
-            var trail = safeLocalGet(this._key, []);
-            trail.unshift({
-                id: Date.now(),
+        log: function(action, detail, entity, entityId, user, changes) {
+            var entry = {
+                id: Date.now() + '-' + Math.random().toString(36).substr(2, 5),
                 action: action,
                 detail: detail,
                 entity: entity || null,
                 entityId: entityId || null,
-                user: user || 'Admin',
-                timestamp: new Date().toISOString()
-            });
+                user: user || this._getCurrentUser(),
+                changes: changes || null,
+                timestamp: new Date().toISOString(),
+                fecha: new Date().toISOString().split('T')[0]
+            };
 
-            // Limitar tamaño
+            // Guardar en localStorage (últimos 500 para acceso rápido)
+            var trail = safeLocalGet(this._key, []);
+            trail.unshift(entry);
             if (trail.length > this._maxItems) {
                 trail = trail.slice(0, this._maxItems);
             }
-
             safeLocalSet(this._key, trail);
+
+            // Guardar en IndexedDB para historial completo
+            if (this._useIDB && typeof IDBStore !== 'undefined') {
+                IDBStore.put('audit_log', entry).catch(function() {});
+            }
+
+            // Guardar en Supabase si disponible
+            var sb = window.supabaseInstance;
+            if (sb) {
+                sb.from('auditoria').insert({
+                    usuario: entry.user,
+                    accion: entry.action,
+                    detalle: entry.detail,
+                    entidad: entry.entity,
+                    entidad_id: entry.entityId,
+                    cambios: entry.changes ? JSON.stringify(entry.changes) : null
+                }).then(function() {}).catch(function() {});
+            }
+        },
+
+        // Detectar usuario actual automáticamente
+        _getCurrentUser: function() {
+            // Panel operadora
+            if (window.authState && window.authState.operadoraActual) {
+                return window.authState.operadoraActual.nombre || 'Operadora';
+            }
+            // Admin
+            var sesion = safeLocalGet('admin_session', null);
+            if (sesion && sesion.nombre) return sesion.nombre;
+            return 'Admin';
+        },
+
+        // Crear registro de cambios (before/after)
+        trackChanges: function(oldObj, newObj, fields) {
+            var changes = {};
+            var fieldsToCheck = fields || Object.keys(newObj);
+            var hasChanges = false;
+            for (var i = 0; i < fieldsToCheck.length; i++) {
+                var f = fieldsToCheck[i];
+                var oldVal = oldObj ? oldObj[f] : undefined;
+                var newVal = newObj[f];
+                if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+                    changes[f] = { from: oldVal, to: newVal };
+                    hasChanges = true;
+                }
+            }
+            return hasChanges ? changes : null;
         },
 
         getRecent: function(limit) {
@@ -747,48 +797,109 @@
             return trail.slice(0, limit || 50);
         },
 
-        search: function(query) {
+        // Búsqueda con filtros
+        search: function(query, filters) {
             var trail = safeLocalGet(this._key, []);
-            var q = query.toLowerCase();
+            var q = (query || '').toLowerCase();
             return trail.filter(function(item) {
-                return (item.action && item.action.toLowerCase().indexOf(q) !== -1) ||
-                       (item.detail && item.detail.toLowerCase().indexOf(q) !== -1) ||
-                       (item.entity && item.entity.toLowerCase().indexOf(q) !== -1);
+                var matchesQuery = !q ||
+                    (item.action && item.action.toLowerCase().indexOf(q) !== -1) ||
+                    (item.detail && item.detail.toLowerCase().indexOf(q) !== -1) ||
+                    (item.entity && item.entity.toLowerCase().indexOf(q) !== -1) ||
+                    (item.user && item.user.toLowerCase().indexOf(q) !== -1);
+
+                if (!matchesQuery) return false;
+
+                if (filters) {
+                    if (filters.entity && item.entity !== filters.entity) return false;
+                    if (filters.user && item.user !== filters.user) return false;
+                    if (filters.desde && item.timestamp < filters.desde) return false;
+                    if (filters.hasta && item.timestamp > filters.hasta) return false;
+                }
+                return true;
             });
+        },
+
+        // Obtener historial completo desde IndexedDB
+        getFullHistory: function(limit) {
+            if (typeof IDBStore !== 'undefined') {
+                return IDBStore.getAll('audit_log', 'timestamp', null, limit || 1000);
+            }
+            return Promise.resolve(this.getRecent(limit));
         },
 
         clear: function() {
             safeLocalSet(this._key, []);
         },
 
-        // Renderizar panel de auditoría visual
-        render: function(containerId) {
+        // Renderizar panel de auditoría con filtros y paginación
+        render: function(containerId, options) {
             var container = document.getElementById(containerId);
             if (!container) return;
 
-            var items = this.getRecent(50);
+            options = options || {};
+            var page = options.page || 1;
+            var pageSize = options.pageSize || 25;
+            var searchQuery = options.search || '';
+            var filterEntity = options.entity || '';
+
+            var items = this.search(searchQuery, { entity: filterEntity || undefined });
+            var totalItems = items.length;
+            var totalPages = Math.ceil(totalItems / pageSize);
+            var startIdx = (page - 1) * pageSize;
+            var pageItems = items.slice(startIdx, startIdx + pageSize);
+
             if (items.length === 0) {
                 container.innerHTML = '<p class="text-muted">Sin actividad registrada</p>';
                 return;
             }
 
-            var html = '<div class="audit-trail-list">';
-            items.forEach(function(item) {
+            var html = '<div class="audit-filters" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">';
+            html += '<input type="text" class="form-control" placeholder="Buscar..." value="' + Sanitize.attr(searchQuery) + '" ' +
+                'onchange="AuditTrail.render(\'' + containerId + '\', {search:this.value,page:1})" style="flex:1;min-width:150px;">';
+            html += '<select class="form-control" onchange="AuditTrail.render(\'' + containerId + '\', {entity:this.value,search:\'' + Sanitize.attr(searchQuery) + '\',page:1})" style="width:auto;">';
+            html += '<option value="">Todas las entidades</option>';
+            var entities = {};
+            safeLocalGet(this._key, []).forEach(function(i) { if (i.entity) entities[i.entity] = true; });
+            Object.keys(entities).forEach(function(e) {
+                html += '<option value="' + e + '"' + (e === filterEntity ? ' selected' : '') + '>' + Sanitize.html(e) + '</option>';
+            });
+            html += '</select></div>';
+
+            html += '<div class="audit-trail-list">';
+            pageItems.forEach(function(item) {
                 var time = new Date(item.timestamp);
                 var timeStr = time.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
                 var dateStr = time.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
 
                 var icon = 'fa-circle';
                 var color = '#6b7280';
-                if (item.action.indexOf('creado') !== -1 || item.action.indexOf('Nuevo') !== -1) { icon = 'fa-plus-circle'; color = '#10b981'; }
-                else if (item.action.indexOf('eliminado') !== -1) { icon = 'fa-minus-circle'; color = '#ef4444'; }
+                if (item.action.indexOf('creado') !== -1 || item.action.indexOf('Nuevo') !== -1 || item.action.indexOf('login') !== -1) { icon = 'fa-plus-circle'; color = '#10b981'; }
+                else if (item.action.indexOf('eliminado') !== -1 || item.action.indexOf('logout') !== -1) { icon = 'fa-minus-circle'; color = '#ef4444'; }
                 else if (item.action.indexOf('actualizado') !== -1 || item.action.indexOf('modificado') !== -1) { icon = 'fa-edit'; color = '#3b82f6'; }
+                else if (item.action.indexOf('asigna') !== -1) { icon = 'fa-exchange-alt'; color = '#8b5cf6'; }
+
+                var changesHtml = '';
+                if (item.changes) {
+                    changesHtml = '<div class="audit-changes" style="font-size:0.8em;color:#6b7280;margin-top:2px;">';
+                    var keys = Object.keys(item.changes);
+                    keys.slice(0, 3).forEach(function(k) {
+                        var c = item.changes[k];
+                        changesHtml += '<span style="margin-right:8px;">' + Sanitize.html(k) + ': ' +
+                            Sanitize.html(String(c.from || '-')) + ' \u2192 ' + Sanitize.html(String(c.to || '-')) + '</span>';
+                    });
+                    if (keys.length > 3) changesHtml += '<span>+' + (keys.length - 3) + ' m\u00e1s</span>';
+                    changesHtml += '</div>';
+                }
 
                 html += '<div class="audit-item">' +
                     '<div class="audit-icon" style="color:' + color + '"><i class="fas ' + icon + '"></i></div>' +
                     '<div class="audit-info">' +
                         '<div class="audit-action">' + Sanitize.html(item.action) + '</div>' +
-                        '<div class="audit-detail">' + Sanitize.html(item.detail) + '</div>' +
+                        '<div class="audit-detail">' + Sanitize.html(item.detail) +
+                            (item.user ? ' <span style="color:#6b7280;">\u2014 ' + Sanitize.html(item.user) + '</span>' : '') +
+                        '</div>' +
+                        changesHtml +
                     '</div>' +
                     '<div class="audit-meta">' +
                         '<span class="audit-time">' + timeStr + '</span>' +
@@ -797,6 +908,20 @@
                 '</div>';
             });
             html += '</div>';
+
+            // Paginación
+            if (totalPages > 1) {
+                html += '<div class="audit-pagination" style="display:flex;justify-content:center;gap:4px;margin-top:12px;">';
+                html += '<span style="color:#6b7280;font-size:0.85em;margin-right:8px;">' + startIdx + 1 + '-' + Math.min(startIdx + pageSize, totalItems) + ' de ' + totalItems + '</span>';
+                if (page > 1) {
+                    html += '<button class="btn btn-sm btn-outline" onclick="AuditTrail.render(\'' + containerId + '\',{page:' + (page - 1) + ',search:\'' + Sanitize.attr(searchQuery) + '\',entity:\'' + Sanitize.attr(filterEntity) + '\'})"><i class="fas fa-chevron-left"></i></button>';
+                }
+                if (page < totalPages) {
+                    html += '<button class="btn btn-sm btn-outline" onclick="AuditTrail.render(\'' + containerId + '\',{page:' + (page + 1) + ',search:\'' + Sanitize.attr(searchQuery) + '\',entity:\'' + Sanitize.attr(filterEntity) + '\'})"><i class="fas fa-chevron-right"></i></button>';
+                }
+                html += '</div>';
+            }
+
             container.innerHTML = html;
         }
     };
@@ -857,6 +982,559 @@
     };
 
     // ========================================
+    // INDEXEDDB STORAGE (Mejora #9)
+    // Almacenamiento para datos grandes que exceden localStorage
+    // ========================================
+    var IDBStore = {
+        _dbName: 'erp_multifundas',
+        _version: 1,
+        _db: null,
+        _ready: null,
+
+        init: function() {
+            var self = this;
+            if (self._ready) return self._ready;
+
+            self._ready = new Promise(function(resolve, reject) {
+                if (!window.indexedDB) {
+                    console.warn('[IDB] IndexedDB no disponible, usando localStorage fallback');
+                    resolve(null);
+                    return;
+                }
+                try {
+                    var request = indexedDB.open(self._dbName, self._version);
+                    request.onupgradeneeded = function(event) {
+                        var db = event.target.result;
+                        if (!db.objectStoreNames.contains('historial_produccion')) {
+                            var store = db.createObjectStore('historial_produccion', { keyPath: 'id' });
+                            store.createIndex('fecha', 'fecha', { unique: false });
+                            store.createIndex('operadoraId', 'operadoraId', { unique: false });
+                            store.createIndex('pedidoId', 'pedidoId', { unique: false });
+                        }
+                        if (!db.objectStoreNames.contains('metrics_snapshots')) {
+                            var ms = db.createObjectStore('metrics_snapshots', { keyPath: 'id' });
+                            ms.createIndex('fecha', 'fecha', { unique: false });
+                            ms.createIndex('tipo', 'tipo', { unique: false });
+                        }
+                        if (!db.objectStoreNames.contains('audit_log')) {
+                            var al = db.createObjectStore('audit_log', { keyPath: 'id' });
+                            al.createIndex('timestamp', 'timestamp', { unique: false });
+                            al.createIndex('entity', 'entity', { unique: false });
+                            al.createIndex('user', 'user', { unique: false });
+                        }
+                        if (!db.objectStoreNames.contains('backups')) {
+                            var bk = db.createObjectStore('backups', { keyPath: 'id' });
+                            bk.createIndex('fecha', 'fecha', { unique: false });
+                        }
+                    };
+                    request.onsuccess = function(event) {
+                        self._db = event.target.result;
+                        console.log('[IDB] Base de datos abierta exitosamente');
+                        resolve(self._db);
+                    };
+                    request.onerror = function(event) {
+                        console.error('[IDB] Error abriendo base de datos:', event.target.error);
+                        resolve(null);
+                    };
+                } catch (e) {
+                    console.error('[IDB] Error inicializando:', e.message);
+                    resolve(null);
+                }
+            });
+            return self._ready;
+        },
+
+        // Agregar un registro
+        put: function(storeName, record) {
+            var self = this;
+            return self.init().then(function(db) {
+                if (!db) return null;
+                return new Promise(function(resolve, reject) {
+                    try {
+                        var tx = db.transaction(storeName, 'readwrite');
+                        var store = tx.objectStore(storeName);
+                        var req = store.put(record);
+                        req.onsuccess = function() { resolve(record); };
+                        req.onerror = function() { resolve(null); };
+                    } catch (e) { resolve(null); }
+                });
+            });
+        },
+
+        // Agregar multiples registros
+        putMany: function(storeName, records) {
+            var self = this;
+            return self.init().then(function(db) {
+                if (!db || !records || records.length === 0) return 0;
+                return new Promise(function(resolve) {
+                    try {
+                        var tx = db.transaction(storeName, 'readwrite');
+                        var store = tx.objectStore(storeName);
+                        var count = 0;
+                        records.forEach(function(r) {
+                            var req = store.put(r);
+                            req.onsuccess = function() { count++; };
+                        });
+                        tx.oncomplete = function() { resolve(count); };
+                        tx.onerror = function() { resolve(count); };
+                    } catch (e) { resolve(0); }
+                });
+            });
+        },
+
+        // Obtener por key
+        get: function(storeName, id) {
+            var self = this;
+            return self.init().then(function(db) {
+                if (!db) return null;
+                return new Promise(function(resolve) {
+                    try {
+                        var tx = db.transaction(storeName, 'readonly');
+                        var store = tx.objectStore(storeName);
+                        var req = store.get(id);
+                        req.onsuccess = function() { resolve(req.result || null); };
+                        req.onerror = function() { resolve(null); };
+                    } catch (e) { resolve(null); }
+                });
+            });
+        },
+
+        // Obtener todos los registros de un store
+        getAll: function(storeName, indexName, range, limit) {
+            var self = this;
+            return self.init().then(function(db) {
+                if (!db) return [];
+                return new Promise(function(resolve) {
+                    try {
+                        var tx = db.transaction(storeName, 'readonly');
+                        var store = tx.objectStore(storeName);
+                        var source = indexName ? store.index(indexName) : store;
+                        var req = range ? source.getAll(range, limit || undefined) : source.getAll(null, limit || undefined);
+                        req.onsuccess = function() { resolve(req.result || []); };
+                        req.onerror = function() { resolve([]); };
+                    } catch (e) { resolve([]); }
+                });
+            });
+        },
+
+        // Obtener registros por rango de fecha
+        getByDateRange: function(storeName, startDate, endDate) {
+            var range = IDBKeyRange.bound(startDate, endDate);
+            return this.getAll(storeName, 'fecha', range);
+        },
+
+        // Contar registros
+        count: function(storeName) {
+            var self = this;
+            return self.init().then(function(db) {
+                if (!db) return 0;
+                return new Promise(function(resolve) {
+                    try {
+                        var tx = db.transaction(storeName, 'readonly');
+                        var req = tx.objectStore(storeName).count();
+                        req.onsuccess = function() { resolve(req.result || 0); };
+                        req.onerror = function() { resolve(0); };
+                    } catch (e) { resolve(0); }
+                });
+            });
+        },
+
+        // Eliminar registros antiguos (retención)
+        deleteOlderThan: function(storeName, dateStr) {
+            var self = this;
+            return self.init().then(function(db) {
+                if (!db) return 0;
+                return new Promise(function(resolve) {
+                    try {
+                        var tx = db.transaction(storeName, 'readwrite');
+                        var store = tx.objectStore(storeName);
+                        var index = store.index('fecha');
+                        var range = IDBKeyRange.upperBound(dateStr);
+                        var deleted = 0;
+                        var cursor = index.openCursor(range);
+                        cursor.onsuccess = function(event) {
+                            var c = event.target.result;
+                            if (c) {
+                                store.delete(c.primaryKey);
+                                deleted++;
+                                c.continue();
+                            }
+                        };
+                        tx.oncomplete = function() { resolve(deleted); };
+                        tx.onerror = function() { resolve(deleted); };
+                    } catch (e) { resolve(0); }
+                });
+            });
+        },
+
+        // Verificar cuota aproximada
+        checkQuota: async function() {
+            if (navigator.storage && navigator.storage.estimate) {
+                var estimate = await navigator.storage.estimate();
+                var usedMB = (estimate.usage / (1024 * 1024)).toFixed(2);
+                var totalMB = (estimate.quota / (1024 * 1024)).toFixed(2);
+                var pct = ((estimate.usage / estimate.quota) * 100).toFixed(1);
+                return { usedMB: usedMB, totalMB: totalMB, percentUsed: pct };
+            }
+            return null;
+        }
+    };
+
+    // Inicializar IDB al cargar
+    IDBStore.init();
+
+    // ========================================
+    // DELTA MERGE (Mejora #1)
+    // Merge seguro de datos concurrentes en pedidos_erp
+    // ========================================
+    var DeltaMerge = {
+        // Aplicar un delta de piezas a pedidos_erp de forma atómica
+        // En vez de leer-modificar-escribir (race condition),
+        // usamos un mecanismo de deltas con timestamp
+        applyPiezasDelta: function(pedidoId, procesoId, procesoNombre, cantidad, operadoraId, estacionId) {
+            // 1. Registrar el delta en una cola
+            var deltas = safeLocalGet('_piezas_deltas', []);
+            deltas.push({
+                id: Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+                pedidoId: pedidoId,
+                procesoId: procesoId,
+                procesoNombre: procesoNombre,
+                cantidad: cantidad,
+                operadoraId: operadoraId,
+                estacionId: estacionId,
+                timestamp: new Date().toISOString(),
+                applied: false
+            });
+            safeLocalSet('_piezas_deltas', deltas);
+
+            // 2. Aplicar deltas pendientes con lock optimista
+            return this._flushDeltas();
+        },
+
+        _flushDeltas: function() {
+            var lockKey = '_piezas_lock';
+            var lock = safeLocalGet(lockKey, null);
+            var now = Date.now();
+
+            // Si hay un lock activo de menos de 2 segundos, reintentar
+            if (lock && (now - lock) < 2000) {
+                var self = this;
+                setTimeout(function() { self._flushDeltas(); }, 100);
+                return;
+            }
+
+            // Adquirir lock
+            safeLocalSet(lockKey, now);
+
+            try {
+                var deltas = safeLocalGet('_piezas_deltas', []);
+                var pendientes = deltas.filter(function(d) { return !d.applied; });
+
+                if (pendientes.length === 0) {
+                    localStorage.removeItem(lockKey);
+                    return;
+                }
+
+                // Leer pedidos_erp una sola vez
+                var pedidosERP = safeLocalGet('pedidos_erp', []);
+
+                pendientes.forEach(function(delta) {
+                    var pedidoIdx = pedidosERP.findIndex(function(p) { return p.id == delta.pedidoId; });
+                    if (pedidoIdx < 0) return;
+
+                    var pedido = pedidosERP[pedidoIdx];
+                    if (!pedido.procesos) pedido.procesos = [];
+
+                    var procesoIdx = pedido.procesos.findIndex(function(p) { return p.id == delta.procesoId; });
+                    if (procesoIdx < 0 && delta.procesoNombre) {
+                        procesoIdx = pedido.procesos.findIndex(function(p) {
+                            return (p.nombre || '').toLowerCase() === (delta.procesoNombre || '').toLowerCase();
+                        });
+                    }
+
+                    if (procesoIdx >= 0) {
+                        // Sumar delta (no sobreescribir)
+                        pedido.procesos[procesoIdx].piezas = (pedido.procesos[procesoIdx].piezas || 0) + delta.cantidad;
+                        pedido.procesos[procesoIdx].ultimaActualizacion = delta.timestamp;
+                        pedido.procesos[procesoIdx].ultimoOperador = delta.operadoraId;
+                    }
+
+                    delta.applied = true;
+                });
+
+                // Escribir una sola vez
+                safeLocalSet('pedidos_erp', pedidosERP);
+
+                // Limpiar deltas aplicados (mantener últimos 50 para auditoría)
+                var aplicados = deltas.filter(function(d) { return d.applied; });
+                var noProcesados = deltas.filter(function(d) { return !d.applied; });
+                safeLocalSet('_piezas_deltas', noProcesados.concat(aplicados.slice(-50)));
+
+            } finally {
+                localStorage.removeItem(lockKey);
+            }
+        },
+
+        // Obtener total real de piezas para un proceso (sumando deltas no aplicados)
+        getTotalPiezas: function(pedidoId, procesoId) {
+            var pedidosERP = safeLocalGet('pedidos_erp', []);
+            var pedido = pedidosERP.find(function(p) { return p.id == pedidoId; });
+            if (!pedido || !pedido.procesos) return 0;
+
+            var proceso = pedido.procesos.find(function(p) { return p.id == procesoId; });
+            var base = proceso ? (proceso.piezas || 0) : 0;
+
+            // Sumar deltas pendientes
+            var deltas = safeLocalGet('_piezas_deltas', []);
+            var pendientes = deltas.filter(function(d) {
+                return !d.applied && d.pedidoId == pedidoId && d.procesoId == procesoId;
+            });
+            var deltasSum = pendientes.reduce(function(s, d) { return s + d.cantidad; }, 0);
+
+            return base + deltasSum;
+        }
+    };
+
+    // ========================================
+    // BACKUP MANAGER (Mejora #2)
+    // Backup periódico de datos críticos a Supabase
+    // ========================================
+    var BackupManager = {
+        _intervalId: null,
+        _intervalMs: 5 * 60 * 1000, // Cada 5 minutos
+        _lastBackup: null,
+
+        start: function() {
+            var self = this;
+            if (self._intervalId) return;
+
+            // Backup inicial después de 30 segundos
+            setTimeout(function() { self.runBackup(); }, 30000);
+
+            // Backup periódico
+            self._intervalId = setInterval(function() {
+                self.runBackup();
+            }, self._intervalMs);
+
+            console.log('[Backup] Manager iniciado (cada 5min)');
+        },
+
+        stop: function() {
+            if (this._intervalId) {
+                clearInterval(this._intervalId);
+                this._intervalId = null;
+            }
+        },
+
+        runBackup: async function() {
+            var sb = window.supabaseInstance;
+            if (!sb || !navigator.onLine) return;
+
+            var keysToBackup = [
+                'pedidos_erp', 'pedidos_activos', 'asignaciones_estaciones',
+                'estado_maquinas', 'historial_produccion', 'tiempos_muertos',
+                'cola_procesos_operadores', 'supervisora_maquinas'
+            ];
+
+            var snapshot = {};
+            var hasData = false;
+
+            for (var i = 0; i < keysToBackup.length; i++) {
+                var val = localStorage.getItem(keysToBackup[i]);
+                if (val && val !== '{}' && val !== '[]') {
+                    snapshot[keysToBackup[i]] = val;
+                    hasData = true;
+                }
+            }
+
+            if (!hasData) return;
+
+            var backupRecord = {
+                id: 'backup-' + Date.now(),
+                fecha: new Date().toISOString(),
+                tipo: 'auto',
+                datos: snapshot,
+                dispositivo: window.SYNC_DEVICE_ID || 'unknown',
+                tamano_bytes: JSON.stringify(snapshot).length
+            };
+
+            // Guardar en IndexedDB local
+            if (typeof IDBStore !== 'undefined') {
+                await IDBStore.put('backups', backupRecord);
+            }
+
+            // Guardar snapshot en Supabase sync_state con key especial
+            try {
+                await sb.from('sync_state').upsert({
+                    key: '_backup_snapshot',
+                    value: {
+                        timestamp: backupRecord.fecha,
+                        dispositivo: backupRecord.dispositivo,
+                        keys: Object.keys(snapshot),
+                        tamano: backupRecord.tamano_bytes
+                    },
+                    updated_by: backupRecord.dispositivo,
+                    updated_at: backupRecord.fecha
+                }, { onConflict: 'key' });
+
+                this._lastBackup = backupRecord.fecha;
+                console.log('[Backup] Snapshot guardado:', Object.keys(snapshot).length, 'keys,',
+                    (backupRecord.tamano_bytes / 1024).toFixed(1), 'KB');
+            } catch (e) {
+                console.error('[Backup] Error guardando snapshot:', e.message);
+            }
+        },
+
+        // Restaurar desde el último backup
+        restore: async function() {
+            // Primero intentar desde IndexedDB
+            if (typeof IDBStore !== 'undefined') {
+                var backups = await IDBStore.getAll('backups', 'fecha');
+                if (backups.length > 0) {
+                    var latest = backups[backups.length - 1];
+                    return this._applyBackup(latest);
+                }
+            }
+            return { restored: false, reason: 'No hay backups disponibles' };
+        },
+
+        _applyBackup: function(backup) {
+            if (!backup || !backup.datos) return { restored: false, reason: 'Backup vac\u00edo' };
+            var keys = Object.keys(backup.datos);
+            var restored = 0;
+            keys.forEach(function(key) {
+                try {
+                    localStorage.setItem(key, backup.datos[key]);
+                    restored++;
+                } catch (e) {}
+            });
+            return {
+                restored: true,
+                keys: restored,
+                fecha: backup.fecha,
+                message: 'Restaurados ' + restored + ' keys del backup de ' + new Date(backup.fecha).toLocaleString('es-MX')
+            };
+        },
+
+        getLastBackupInfo: function() {
+            return {
+                lastBackup: this._lastBackup,
+                running: !!this._intervalId
+            };
+        },
+
+        // Limpiar backups antiguos (más de 7 días)
+        cleanOldBackups: async function() {
+            if (typeof IDBStore !== 'undefined') {
+                var cutoff = new Date();
+                cutoff.setDate(cutoff.getDate() - 7);
+                var deleted = await IDBStore.deleteOlderThan('backups', cutoff.toISOString());
+                if (deleted > 0) console.log('[Backup] Limpiados', deleted, 'backups antiguos');
+                return deleted;
+            }
+            return 0;
+        }
+    };
+
+    // ========================================
+    // METRICS STORE (Mejora #6)
+    // Persistencia de métricas históricas
+    // ========================================
+    var MetricsStore = {
+        // Guardar snapshot de métricas del día
+        saveSnapshot: async function(metricsData) {
+            var snapshot = {
+                id: 'metrics-' + new Date().toISOString().split('T')[0] + '-' + Date.now(),
+                fecha: new Date().toISOString().split('T')[0],
+                timestamp: new Date().toISOString(),
+                tipo: 'diario',
+                produccionTotal: metricsData.produccionTotal || 0,
+                operadorasActivas: metricsData.operadorasActivas || 0,
+                eficienciaPromedio: metricsData.eficienciaPromedio || 0,
+                pedidosCompletados: metricsData.pedidosCompletados || 0,
+                tiempoMuertoMinutos: metricsData.tiempoMuertoMinutos || 0,
+                alertasEntrega: metricsData.alertasEntrega || 0,
+                anomaliasDetectadas: metricsData.anomaliasDetectadas || 0,
+                topOperadoras: metricsData.topOperadoras || [],
+                detallesProcesos: metricsData.detallesProcesos || []
+            };
+
+            if (typeof IDBStore !== 'undefined') {
+                await IDBStore.put('metrics_snapshots', snapshot);
+            }
+
+            // También mantener últimos 30 días en localStorage para acceso rápido
+            var cache = safeLocalGet('_metrics_cache', []);
+            // Evitar duplicados del mismo día
+            cache = cache.filter(function(m) { return m.fecha !== snapshot.fecha; });
+            cache.push(snapshot);
+            // Mantener solo últimos 30 días
+            if (cache.length > 30) cache = cache.slice(-30);
+            safeLocalSet('_metrics_cache', cache);
+
+            return snapshot;
+        },
+
+        // Obtener métricas de los últimos N días
+        getHistory: async function(days) {
+            days = days || 30;
+
+            // Primero intentar localStorage cache
+            var cache = safeLocalGet('_metrics_cache', []);
+            if (cache.length >= days) {
+                return cache.slice(-days);
+            }
+
+            // Si no hay suficientes, buscar en IndexedDB
+            if (typeof IDBStore !== 'undefined') {
+                var cutoff = new Date();
+                cutoff.setDate(cutoff.getDate() - days);
+                var snapshots = await IDBStore.getByDateRange('metrics_snapshots', cutoff.toISOString().split('T')[0], new Date().toISOString().split('T')[0] + 'Z');
+                if (snapshots.length > 0) return snapshots;
+            }
+
+            return cache;
+        },
+
+        // Obtener tendencia de una métrica
+        getTrend: async function(metricName, days) {
+            var history = await this.getHistory(days || 14);
+            return history.map(function(s) {
+                return { fecha: s.fecha, valor: s[metricName] || 0 };
+            });
+        },
+
+        // Calcular métricas actuales desde datos en vivo
+        calculateCurrent: function() {
+            var historial = safeLocalGet('historial_produccion', []);
+            var hoyStr = new Date().toISOString().split('T')[0];
+            var produccionHoy = historial.filter(function(h) { return h.fecha && h.fecha.startsWith(hoyStr); });
+            var totalHoy = produccionHoy.reduce(function(s, h) { return s + (h.cantidad || 0); }, 0);
+            var operadoresSet = {};
+            produccionHoy.forEach(function(h) { if (h.operadoraId) operadoresSet[h.operadoraId] = true; });
+
+            var tiempos = safeLocalGet('tiempos_muertos', []);
+            var tiemposHoy = tiempos.filter(function(t) { return t.inicio && t.inicio.startsWith(hoyStr); });
+            var minutosMuertos = tiemposHoy.reduce(function(s, t) { return s + (t.duracionMinutos || 0); }, 0);
+
+            var pedidos = safeLocalGet('pedidos_erp', []);
+            var completadosHoy = pedidos.filter(function(p) { return p.estado === 'completado'; }).length;
+
+            return {
+                produccionTotal: totalHoy,
+                operadorasActivas: Object.keys(operadoresSet).length,
+                eficienciaPromedio: 0, // Se calcula externamente
+                pedidosCompletados: completadosHoy,
+                tiempoMuertoMinutos: minutosMuertos,
+                alertasEntrega: 0,
+                anomaliasDetectadas: 0,
+                topOperadoras: [],
+                detallesProcesos: []
+            };
+        }
+    };
+
+    // ========================================
     // EXPORTAR GLOBALMENTE
     // ========================================
     window.FeatureFlags = FeatureFlags;
@@ -877,5 +1555,9 @@
     window.A11y = A11y;
     window.AuditTrail = AuditTrail;
     window.ServerPagination = ServerPagination;
+    window.IDBStore = IDBStore;
+    window.DeltaMerge = DeltaMerge;
+    window.BackupManager = BackupManager;
+    window.MetricsStore = MetricsStore;
 
 })();

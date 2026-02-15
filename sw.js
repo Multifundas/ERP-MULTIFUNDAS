@@ -3,7 +3,7 @@
 // Network-first para archivos propios, cache-first para CDN
 // ========================================
 
-var CACHE_NAME = 'erp-multifundas-v26';
+var CACHE_NAME = 'erp-multifundas-v27';
 var STATIC_ASSETS = [
     '/',
     '/index.html',
@@ -17,6 +17,7 @@ var STATIC_ASSETS = [
     '/js/utils.js',
     '/js/sanitize.js',
     '/js/erp-core.js',
+    '/js/push-notifications.js',
     '/js/data.js',
     '/js/app.js',
     '/js/supervisora.js',
@@ -131,4 +132,81 @@ self.addEventListener('fetch', function(event) {
             });
         })
     );
+});
+
+// ========================================
+// WEB PUSH NOTIFICATIONS (Mejora #3)
+// Recibe push desde servidor y muestra notificación
+// ========================================
+
+// Manejar notificaciones push entrantes
+self.addEventListener('push', function(event) {
+    var data = { title: 'ERP Multifundas', body: 'Nueva notificación', icon: '/icons/icon-192.png' };
+
+    if (event.data) {
+        try {
+            data = event.data.json();
+        } catch (e) {
+            data.body = event.data.text();
+        }
+    }
+
+    var options = {
+        body: data.body || 'Notificación del sistema',
+        icon: data.icon || '/icons/icon-192.png',
+        badge: data.badge || '/icons/icon-72.png',
+        tag: data.tag || 'erp-notification',
+        data: data.data || {},
+        actions: data.actions || [],
+        vibrate: [200, 100, 200],
+        requireInteraction: data.requireInteraction || false
+    };
+
+    event.waitUntil(
+        self.registration.showNotification(data.title || 'ERP Multifundas', options)
+    );
+});
+
+// Manejar click en notificación
+self.addEventListener('notificationclick', function(event) {
+    event.notification.close();
+
+    var url = '/';
+    var data = event.notification.data || {};
+
+    // Dirigir según tipo de notificación
+    if (data.tipo === 'pedido_atrasado' || data.tipo === 'alerta_entrega') {
+        url = '/supervisora.html';
+    } else if (data.tipo === 'estacion_inactiva' || data.tipo === 'anomalia') {
+        url = '/supervisora.html';
+    } else if (data.tipo === 'mensaje_operadora') {
+        url = '/panel-operadora/operadora.html';
+    } else if (data.url) {
+        url = data.url;
+    }
+
+    // Si se hizo click en una acción específica
+    if (event.action === 'ver_detalle' && data.url) {
+        url = data.url;
+    }
+
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(windowClients) {
+            // Si ya hay una ventana abierta, enfocarla
+            for (var i = 0; i < windowClients.length; i++) {
+                var client = windowClients[i];
+                if (client.url.indexOf(url) !== -1) {
+                    return client.focus();
+                }
+            }
+            // Si no, abrir nueva ventana
+            return clients.openWindow(url);
+        })
+    );
+});
+
+// Manejar cierre de notificación (para analytics)
+self.addEventListener('notificationclose', function(event) {
+    // Opcionalmente trackear que se cerró sin interactuar
+    console.log('[SW] Notificación cerrada:', event.notification.tag);
 });
