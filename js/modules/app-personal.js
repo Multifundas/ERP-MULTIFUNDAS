@@ -172,28 +172,68 @@ function editAreaPlanta(areaId) {
     const area = db.getAreasPlanta().find(a => a.id === areaId);
     if (!area) return;
 
+    const estacionesActuales = db.getEstaciones().filter(e => e.areaPlantaId === areaId);
+    const ocupadas = estacionesActuales.filter(e => e.operadorId).length;
+    const minPosiciones = ocupadas || 1;
+
     const content = `
         <form id="editarAreaPlantaForm">
             <div class="form-group">
                 <label>Nombre del Área *</label>
                 <input type="text" name="nombre" value="${area.nombre}" required>
             </div>
-            <div class="form-group">
-                <label>Color</label>
-                <input type="color" name="color" value="${area.color}">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Posiciones</label>
+                    <input type="number" name="posiciones" value="${estacionesActuales.length}" min="${minPosiciones}" max="50">
+                    ${ocupadas > 0 ? `<small class="text-muted">${ocupadas} ocupada(s), mínimo ${minPosiciones}</small>` : ''}
+                </div>
+                <div class="form-group">
+                    <label>Color</label>
+                    <input type="color" name="color" value="${area.color}">
+                </div>
             </div>
-            <p class="text-muted" style="font-size:0.8rem">
-                <i class="fas fa-info-circle"></i> Para agregar o quitar posiciones, use "Ver Estaciones".
-            </p>
         </form>
     `;
 
     openModal('Editar Área', content, () => {
         const form = document.getElementById('editarAreaPlantaForm');
+        const nuevoNombre = form.querySelector('[name="nombre"]').value;
+        const nuevasPosiciones = parseInt(form.querySelector('[name="posiciones"]').value) || estacionesActuales.length;
+        const nuevoColor = form.querySelector('[name="color"]').value;
+
+        // Actualizar nombre y color del área
         db.updateAreaPlanta(areaId, {
-            nombre: form.querySelector('[name="nombre"]').value,
-            color: form.querySelector('[name="color"]').value
+            nombre: nuevoNombre,
+            color: nuevoColor,
+            posiciones: nuevasPosiciones
         });
+
+        // Ajustar estaciones si cambió la cantidad
+        const diferencia = nuevasPosiciones - estacionesActuales.length;
+
+        if (diferencia > 0) {
+            // Agregar nuevas estaciones
+            const prefijo = nuevoNombre.substring(0, 2).toUpperCase();
+            for (let i = 0; i < diferencia; i++) {
+                const nuevoNumero = estacionesActuales.length + i + 1;
+                const estacionId = `${prefijo}${nuevoNumero}_${Date.now().toString().slice(-4)}`;
+                db.addEstacion({
+                    id: estacionId,
+                    areaPlantaId: areaId,
+                    nombre: `${nuevoNombre} ${nuevoNumero}`,
+                    operadorId: null
+                });
+            }
+        } else if (diferencia < 0) {
+            // Eliminar estaciones vacías (las que no tienen operador), empezando por las últimas
+            const vacias = estacionesActuales.filter(e => !e.operadorId).reverse();
+            const aEliminar = vacias.slice(0, Math.abs(diferencia));
+            aEliminar.forEach(est => {
+                db.deleteEstacion(est.id);
+            });
+        }
+
         loadProcesos();
     });
 }
