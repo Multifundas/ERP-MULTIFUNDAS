@@ -12,6 +12,22 @@
 -- Sin estas políticas, los cambios solo quedan en memoria y se pierden al recargar.
 -- ========================================
 
+-- Primero eliminar todas las write policies existentes para evitar duplicados
+DROP POLICY IF EXISTS "anon_write_areas" ON areas;
+DROP POLICY IF EXISTS "anon_write_areas_planta" ON areas_planta;
+DROP POLICY IF EXISTS "anon_write_estaciones" ON estaciones;
+DROP POLICY IF EXISTS "anon_write_procesos" ON procesos;
+DROP POLICY IF EXISTS "anon_write_familias" ON familias;
+DROP POLICY IF EXISTS "anon_write_subfamilias" ON subfamilias;
+DROP POLICY IF EXISTS "anon_write_clientes" ON clientes;
+DROP POLICY IF EXISTS "anon_write_productos" ON productos;
+DROP POLICY IF EXISTS "anon_write_pedidos" ON pedidos;
+DROP POLICY IF EXISTS "anon_write_pedido_productos" ON pedido_productos;
+DROP POLICY IF EXISTS "anon_write_materiales" ON materiales;
+DROP POLICY IF EXISTS "anon_write_config" ON config_sistema;
+DROP POLICY IF EXISTS "anon_delete_auditoria" ON auditoria;
+DROP POLICY IF EXISTS "anon_write_personal_restricted" ON personal;
+
 -- Catálogos: necesitan escritura desde el panel admin
 CREATE POLICY "anon_write_areas" ON areas FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "anon_write_areas_planta" ON areas_planta FOR ALL TO anon USING (true) WITH CHECK (true);
@@ -28,7 +44,10 @@ CREATE POLICY "anon_write_pedido_productos" ON pedido_productos FOR ALL TO anon 
 CREATE POLICY "anon_write_materiales" ON materiales FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "anon_write_config" ON config_sistema FOR ALL TO anon USING (true) WITH CHECK (true);
 
--- Auditoría: permitir DELETE para limpieza total (INSERT ya existe)
+-- Personal: escritura completa (reemplaza la policy restrictiva de 009)
+CREATE POLICY "anon_write_personal" ON personal FOR ALL TO anon USING (true) WITH CHECK (true);
+
+-- Auditoría: permitir DELETE para limpieza total (INSERT ya existe via anon_insert_only_auditoria)
 CREATE POLICY "anon_delete_auditoria" ON auditoria FOR DELETE TO anon USING (true);
 
 -- ========================================
