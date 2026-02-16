@@ -27,6 +27,7 @@ DROP POLICY IF EXISTS "anon_write_materiales" ON materiales;
 DROP POLICY IF EXISTS "anon_write_config" ON config_sistema;
 DROP POLICY IF EXISTS "anon_delete_auditoria" ON auditoria;
 DROP POLICY IF EXISTS "anon_write_personal_restricted" ON personal;
+DROP POLICY IF EXISTS "anon_write_personal" ON personal;
 
 -- Catálogos: necesitan escritura desde el panel admin
 CREATE POLICY "anon_write_areas" ON areas FOR ALL TO anon USING (true) WITH CHECK (true);
@@ -59,42 +60,42 @@ CREATE OR REPLACE FUNCTION truncate_all_data()
 RETURNS BOOLEAN AS $$
 BEGIN
     -- Tablas dependientes primero (foreign keys)
-    DELETE FROM movimientos_inventario;
-    DELETE FROM articulos_frecuentes;
-    DELETE FROM pedido_productos;
-    DELETE FROM bom;
-    DELETE FROM inventario_piezas;
-    DELETE FROM auditoria;
-    DELETE FROM notificaciones;
-    DELETE FROM estado_operadores;
+    DELETE FROM movimientos_inventario WHERE true;
+    DELETE FROM articulos_frecuentes WHERE true;
+    DELETE FROM pedido_productos WHERE true;
+    DELETE FROM bom WHERE true;
+    DELETE FROM inventario_piezas WHERE true;
+    DELETE FROM auditoria WHERE true;
+    DELETE FROM notificaciones WHERE true;
+    DELETE FROM estado_operadores WHERE true;
 
     -- Tablas principales
-    DELETE FROM pedidos;
-    DELETE FROM productos;
-    DELETE FROM clientes;
-    DELETE FROM personal;
-    DELETE FROM materiales;
-    DELETE FROM subfamilias;
-    DELETE FROM familias;
-    DELETE FROM procesos;
-    DELETE FROM estaciones;
-    DELETE FROM areas_planta;
-    DELETE FROM areas;
-    DELETE FROM config_sistema;
+    DELETE FROM pedidos WHERE true;
+    DELETE FROM productos WHERE true;
+    DELETE FROM clientes WHERE true;
+    DELETE FROM personal WHERE true;
+    DELETE FROM materiales WHERE true;
+    DELETE FROM subfamilias WHERE true;
+    DELETE FROM familias WHERE true;
+    DELETE FROM procesos WHERE true;
+    DELETE FROM estaciones WHERE true;
+    DELETE FROM areas_planta WHERE true;
+    DELETE FROM areas WHERE true;
+    DELETE FROM config_sistema WHERE true;
 
     -- Tablas operacionales adicionales
-    DELETE FROM asignaciones_estaciones;
-    DELETE FROM estado_maquinas;
-    DELETE FROM historial_produccion;
-    DELETE FROM historial_turnos;
-    DELETE FROM historial_procesos;
-    DELETE FROM historial_asignaciones;
-    DELETE FROM notificaciones_coco;
-    DELETE FROM mensajes_operadoras;
-    DELETE FROM tiempos_muertos;
-    DELETE FROM planta_layout;
-    DELETE FROM calendario_eventos;
-    DELETE FROM sync_state;
+    DELETE FROM asignaciones_estaciones WHERE true;
+    DELETE FROM estado_maquinas WHERE true;
+    DELETE FROM historial_produccion WHERE true;
+    DELETE FROM historial_turnos WHERE true;
+    DELETE FROM historial_procesos WHERE true;
+    DELETE FROM historial_asignaciones WHERE true;
+    DELETE FROM notificaciones_coco WHERE true;
+    DELETE FROM mensajes_operadoras WHERE true;
+    DELETE FROM tiempos_muertos WHERE true;
+    DELETE FROM planta_layout WHERE true;
+    DELETE FROM calendario_eventos WHERE true;
+    DELETE FROM sync_state WHERE true;
 
     RETURN true;
 END;
