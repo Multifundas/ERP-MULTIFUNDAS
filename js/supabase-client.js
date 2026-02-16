@@ -129,6 +129,20 @@
             return true;
         },
 
+        // DELETE FROM tabla (todos los registros)
+        deleteAll: async function(table) {
+            var result = await sbClient
+                .from(table)
+                .delete()
+                .neq('id', -1);
+
+            if (result.error) {
+                console.error('[Supabase] Error deleteAll ' + table + ':', result.error.message);
+                return false;
+            }
+            return true;
+        },
+
         // SELECT * FROM tabla WHERE column = value
         getWhere: async function(table, column, value) {
             var result = await sbClient

@@ -1852,7 +1852,7 @@ DEBUG_MODE && console.log('[SYNC] Funciones de sincronización entre paneles car
  * Limpia TODOS los datos del sistema para empezar de cero
  * ⚠️ CUIDADO: Esta acción es irreversible
  */
-function limpiarTodosLosDatos() {
+async function limpiarTodosLosDatos() {
     if (!confirm('⚠️ ¿Estás seguro de eliminar TODOS los datos?\n\nEsto borrará:\n- Clientes\n- Pedidos\n- Productos\n- Empleados\n- Materiales\n- Asignaciones\n- Historial\n\nEsta acción NO se puede deshacer.')) {
         return false;
     }
@@ -1862,6 +1862,39 @@ function limpiarTodosLosDatos() {
     }
 
     DEBUG_MODE && console.log('Iniciando limpieza total...');
+
+    // 0. Si Supabase está activo, eliminar datos de todas las tablas remotas
+    if (typeof USE_SUPABASE !== 'undefined' && USE_SUPABASE && typeof SupabaseClient !== 'undefined') {
+        DEBUG_MODE && console.log('Eliminando datos de Supabase...');
+        const tablasSupabase = [
+            'pedido_productos',
+            'bom',
+            'inventario_piezas',
+            'auditoria',
+            'notificaciones',
+            'estado_operadores',
+            'pedidos',
+            'productos',
+            'clientes',
+            'personal',
+            'materiales',
+            'subfamilias',
+            'familias',
+            'procesos',
+            'estaciones',
+            'areas_planta',
+            'areas',
+            'config_sistema'
+        ];
+        for (const tabla of tablasSupabase) {
+            try {
+                await SupabaseClient.deleteAll(tabla);
+                DEBUG_MODE && console.log(`  Supabase: eliminado ${tabla}`);
+            } catch (e) {
+                DEBUG_MODE && console.log(`  Supabase: error eliminando ${tabla}:`, e.message);
+            }
+        }
+    }
 
     // 1. Crear base de datos vacía pero con estructura completa
     // Usamos la estructura de initialData pero con arrays vacíos
