@@ -580,10 +580,6 @@ function loadIncentivos() {
                         '<small>Se usa cuando la operadora no tiene premio individual asignado</small>' +
                     '</div>' +
                     '<div class="config-field">' +
-                        '<label>Premio puntualidad por defecto</label>' +
-                        '<div class="input-with-prefix"><span>$</span><input type="number" id="premioPuntualidadDefault" value="' + config.premioPuntualidadDefault + '" onchange="guardarConfigGeneral()" min="0"></div>' +
-                    '</div>' +
-                    '<div class="config-field">' +
                         '<label>Meta equipo para supervisora (%)</label>' +
                         '<input type="number" id="metaEquipoSupervisora" value="' + config.metaEquipoSupervisora + '" onchange="guardarConfigGeneral()" min="0" max="200">' +
                         '<small>El equipo debe promediar este % para que la supervisora reciba premio</small>' +
@@ -648,7 +644,6 @@ function actualizarTier(input) {
 function guardarConfigGeneral() {
     var config = getConfigIncentivos();
     config.premioBaseDefault = parseFloat(document.getElementById('premioBaseDefault').value) || 100;
-    config.premioPuntualidadDefault = parseFloat(document.getElementById('premioPuntualidadDefault').value) || 50;
     config.metaEquipoSupervisora = parseFloat(document.getElementById('metaEquipoSupervisora').value) || 90;
     config.multiplicadorSupervisora = parseFloat(document.getElementById('multiplicadorSupervisora').value) || 1.0;
     guardarConfigIncentivos(config);
