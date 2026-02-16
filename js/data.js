@@ -1975,6 +1975,8 @@ function limpiarTodosLosDatos() {
         'notificaciones_supervisora',
         'supervisora_notificaciones',
         'mensajes_operadoras',
+        'notificaciones_admin',
+        'notificaciones_admin_to_supervisora',
 
         // Historial y producción
         'historial_produccion',
@@ -1982,6 +1984,14 @@ function limpiarTodosLosDatos() {
         'historial_procesos',
         'supervisora_historial_procesos',
         'historial_turnos',
+        'historial_asignaciones_completadas',
+        'historial_cortes_inventario',
+        'historial_consumo_material',
+        'historial_ajustes_cantidad',
+        'historial_recomendaciones',
+        'historial_liberaciones',
+        'historial_asistencia',
+        'historial_alertas_admin',
 
         // Tiempos muertos
         'tiempos_muertos',
@@ -1989,18 +1999,59 @@ function limpiarTodosLosDatos() {
         // Estado de supervisora
         'supervisora_maquinas',
         'supervisora_liberaciones',
+        'supervisora_uso_inventario',
+        'supervisora_notif_mostradas',
+        'supervisora_notif_dia',
+        'procesos_desbloqueados',
+        'sup_alertas_descartadas',
         'cola_procesos_operadores',
+
+        // Pedidos
+        'pedidos_erp',
+        'pedidos_cerrados',
+        'multi_pedidos_estado_local',
+        'asignaciones_multi_pedido',
+
+        // Operadora
+        'sesion_operadora',
+        'estacion_id',
+        'estacion_area',
+        'estacion_nombre',
+        'etiquetas_generadas',
+        'sonidos_habilitados',
 
         // Configuración
         'config_sistema',
         'config_operadora_sync',
+        'erp_config_incentivos',
+        'erp_feature_flags',
+        'erp_dashboard_config',
 
         // Eventos
         'calendario_eventos',
         'eventos_proceso',
 
-        // Cola offline
-        'cola_offline'
+        // Layout y mapa
+        'planta_layout',
+        'mapa_estaciones_planta',
+
+        // Cola offline y cache
+        'cola_offline',
+        'erp_offline_queue',
+        '_piezas_deltas',
+        '_piezas_lock',
+        '_metrics_cache',
+
+        // Sesión y UI
+        'erp_multifundas_db',
+        'lastBackup',
+        'tourCompleted',
+        'theme',
+        'supervisora_theme',
+        'dev_mode',
+        'admin_session',
+        'supervisora_sesion',
+        'asistencia_hoy'
     ];
 
     clavesALimpiar.forEach(clave => {
@@ -2008,18 +2059,36 @@ function limpiarTodosLosDatos() {
         DEBUG_MODE && console.log(`  Eliminado: ${clave}`);
     });
 
-    // 3. Limpiar claves de temporizadores de estaciones
+    // 3. Limpiar claves dinámicas (temporizadores, backups, operadora, config_simultaneos, etc.)
     const todasLasClaves = Object.keys(localStorage);
     todasLasClaves.forEach(clave => {
         if (clave.startsWith('temporizador_') ||
             clave.startsWith('backup_') ||
-            clave.startsWith('operadora_')) {
+            clave.startsWith('operadora_') ||
+            clave.startsWith('config_simultaneos_') ||
+            clave.startsWith('cola_suspendidos_') ||
+            clave.startsWith('tutorial_visto_')) {
             localStorage.removeItem(clave);
             DEBUG_MODE && console.log(`  Eliminado: ${clave}`);
         }
     });
 
-    // 4. Recargar la base de datos en memoria
+    // 4. Limpiar IndexedDB (erp_multifundas)
+    try {
+        if (window.indexedDB) {
+            const deleteRequest = indexedDB.deleteDatabase('erp_multifundas');
+            deleteRequest.onsuccess = function() {
+                DEBUG_MODE && console.log('IndexedDB erp_multifundas eliminada');
+            };
+            deleteRequest.onerror = function() {
+                DEBUG_MODE && console.log('Error eliminando IndexedDB');
+            };
+        }
+    } catch (e) {
+        DEBUG_MODE && console.log('Error al intentar eliminar IndexedDB:', e.message);
+    }
+
+    // 5. Recargar la base de datos en memoria
     if (typeof db !== 'undefined') {
         // Actualizar el objeto db.data con la DB vacía
         db.data = dbVacia;
