@@ -120,7 +120,7 @@ function showNuevaAreaPlantaModal() {
         </form>
     `;
 
-    openModal('Nueva Área de Planta', content, () => {
+    openModal('Nueva Área de Planta', content, async () => {
         const form = document.getElementById('nuevaAreaPlantaForm');
         const nombre = form.querySelector('[name="nombre"]').value.trim();
         const posiciones = parseInt(form.querySelector('[name="posiciones"]').value) || 1;
@@ -134,7 +134,8 @@ function showNuevaAreaPlantaModal() {
         // Generar ID del área - asegurarnos que sea único
         const areaId = nombre.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 8) + Date.now().toString().slice(-4);
 
-        // Crear área usando el nuevo método
+        // Crear área usando el nuevo método — await para que exista en Supabase
+        // antes de insertar estaciones (FK constraint)
         const nuevaArea = {
             id: areaId,
             nombre: nombre,
@@ -142,7 +143,7 @@ function showNuevaAreaPlantaModal() {
             color: color
         };
 
-        db.addAreaPlanta(nuevaArea);
+        await db.addAreaPlanta(nuevaArea);
 
         // Crear estaciones usando el nuevo método
         const prefijo = nombre.substring(0, 2).toUpperCase();

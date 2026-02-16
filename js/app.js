@@ -918,8 +918,8 @@ function openModal(title, content, onConfirmOrFooter) {
             <button class="btn btn-secondary" id="modalCancel">Cancelar</button>
             <button class="btn btn-primary" id="modalConfirm">Confirmar</button>
         `;
-        document.getElementById('modalConfirm').onclick = () => {
-            onConfirmOrFooter();
+        document.getElementById('modalConfirm').onclick = async () => {
+            await onConfirmOrFooter();
             closeModal();
         };
         document.getElementById('modalCancel').onclick = closeModal;

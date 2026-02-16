@@ -823,10 +823,10 @@ class SupabaseDatabase {
     getAreasPlanta() { return this.data.areasPlanta || []; }
     getAreaPlanta(areaId) { return (this.data.areasPlanta || []).find(a => a.id === areaId); }
 
-    addAreaPlanta(area) {
+    async addAreaPlanta(area) {
         if (!this.data.areasPlanta) this.data.areasPlanta = [];
         this.data.areasPlanta.push(area);
-        SupabaseClient.insert('areas_planta', { id: area.id, nombre: area.nombre, posiciones: area.posiciones, color: area.color });
+        await SupabaseClient.insert('areas_planta', { id: area.id, nombre: area.nombre, posiciones: area.posiciones, color: area.color });
         this.addAuditoria('Nueva área de planta', `Área "${area.nombre}" creada con ${area.posiciones} posiciones`, 'areaPlanta', area.id);
         return area;
     }
