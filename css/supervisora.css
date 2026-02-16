@@ -4402,6 +4402,121 @@ body.day-mode .proceso-drag-item.asignado-pendiente {
 }
 
 /* ============================================
+   MULTI-STATION ELEMENTS (multiples posiciones)
+   ============================================ */
+
+.estacion-element.multi-station {
+    min-height: 110px;
+}
+
+.multi-station-badge {
+    font-size: 0.55rem;
+    font-weight: 600;
+    background: #3b82f6;
+    color: white;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+.station-slots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 2px;
+}
+
+.station-slot {
+    flex: 1 1 45%;
+    min-width: 60px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 4px 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.station-slot:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.station-slot.activo {
+    border-color: rgba(16, 185, 129, 0.4);
+    background: rgba(16, 185, 129, 0.06);
+}
+
+.station-slot.selected {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 6px rgba(59, 130, 246, 0.3);
+}
+
+.slot-id {
+    font-size: 0.55rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+}
+
+.slot-operadores {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+}
+
+.slot-operadores .operador-chip {
+    font-size: 0.6rem;
+    padding: 1px 4px;
+}
+
+.slot-operadores .sin-operador {
+    font-size: 0.65rem;
+    opacity: 0.4;
+}
+
+.slot-proceso {
+    font-size: 0.55rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.slot-proceso .fa-spin {
+    animation-duration: 2s;
+}
+
+/* Day mode overrides */
+body.day-mode .station-slot {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+body.day-mode .station-slot:hover {
+    background: rgba(0, 0, 0, 0.06);
+    border-color: rgba(0, 0, 0, 0.2);
+}
+
+body.day-mode .station-slot.activo {
+    border-color: rgba(16, 185, 129, 0.4);
+    background: rgba(16, 185, 129, 0.05);
+}
+
+body.day-mode .slot-id {
+    color: rgba(0, 0, 0, 0.5);
+}
+
+body.day-mode .slot-proceso {
+    color: rgba(0, 0, 0, 0.6);
+}
+
+/* ============================================
    DETALLE DE ESTACIÓN - LISTA DE OPERADORES
    ============================================ */
 

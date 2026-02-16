@@ -296,38 +296,57 @@ function renderLayoutInSupervisora(layout) {
 
     // Renderizar estaciones con diseño mejorado
     estaciones.forEach(element => {
-        // Inicializar estado si no existe
-        if (!supervisoraState.maquinas[element.id]) {
-            supervisoraState.maquinas[element.id] = {
-                id: element.id,
-                tipo: element.type,
-                nombre: element.name,
-                operadores: [],  // Array de { id, nombre }
-                procesoId: null,
-                procesoNombre: '',
-                pedidoId: null,
-                estado: 'inactivo',
-                piezasHoy: 0,
-                ultimaActividad: null
-            };
-        } else {
-            // Migrar estructura antigua (operadorId) a nueva (operadores[])
-            const m = supervisoraState.maquinas[element.id];
-            if (!m.operadores) {
-                m.operadores = [];
-                if (m.operadorId && m.operadorNombre) {
-                    m.operadores.push({ id: m.operadorId, nombre: m.operadorNombre });
+        // Multi-station IDs: cada elemento puede tener multiples posiciones
+        const stationIds = element.stationIds || [element.id];
+        const isMultiStation = stationIds.length > 1;
+
+        // Inicializar estado para cada stationId
+        stationIds.forEach(sid => {
+            if (!supervisoraState.maquinas[sid]) {
+                supervisoraState.maquinas[sid] = {
+                    id: sid,
+                    tipo: element.type,
+                    nombre: element.name,
+                    operadores: [],
+                    procesoId: null,
+                    procesoNombre: '',
+                    pedidoId: null,
+                    estado: 'inactivo',
+                    piezasHoy: 0,
+                    ultimaActividad: null
+                };
+            } else {
+                const m = supervisoraState.maquinas[sid];
+                if (!m.operadores) {
+                    m.operadores = [];
+                    if (m.operadorId && m.operadorNombre) {
+                        m.operadores.push({ id: m.operadorId, nombre: m.operadorNombre });
+                    }
                 }
             }
+        });
+
+        // Migrar: si existia maquina con element.id y ahora hay stationIds diferentes, mover datos
+        if (isMultiStation && supervisoraState.maquinas[element.id] && !stationIds.includes(element.id)) {
+            const oldData = supervisoraState.maquinas[element.id];
+            if (oldData.operadores && oldData.operadores.length > 0) {
+                const firstSid = stationIds[0];
+                supervisoraState.maquinas[firstSid].operadores = oldData.operadores;
+                supervisoraState.maquinas[firstSid].estado = oldData.estado;
+            }
+            delete supervisoraState.maquinas[element.id];
         }
 
-        const maquinaState = supervisoraState.maquinas[element.id];
         const icono = tipoIconos[element.type] || 'fa-cog';
 
+        // Determinar estado general del elemento (activo si cualquier posicion esta activa)
+        const anyActive = stationIds.some(sid => supervisoraState.maquinas[sid]?.estado === 'activo');
+        const elementEstado = anyActive ? 'activo' : 'inactivo';
+
         const el = document.createElement('div');
-        el.className = `estacion-element ${element.type} ${maquinaState.estado}`;
+        el.className = `estacion-element ${element.type} ${elementEstado}${isMultiStation ? ' multi-station' : ''}`;
         el.id = 'estacion-' + element.id;
-        el.setAttribute('data-estado', maquinaState.estado);
+        el.setAttribute('data-estado', elementEstado);
         el.style.cssText = `
             position: absolute;
             left: ${element.x}px;
@@ -337,18 +356,154 @@ function renderLayoutInSupervisora(layout) {
             z-index: 10;
         `;
 
-        // Eventos drag & drop
-        el.setAttribute('ondragover', 'allowDrop(event)');
-        el.setAttribute('ondrop', `dropOnEstacion(event, '${element.id}')`);
+        // Si es single-station, drag & drop directo en el elemento
+        if (!isMultiStation) {
+            el.setAttribute('ondragover', 'allowDrop(event)');
+            el.setAttribute('ondrop', `dropOnEstacion(event, '${stationIds[0]}')`);
+        }
 
-        // Calcular progreso si hay pedido asignado
+        const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
+        const estadoMaquinas = safeLocalGet('estado_maquinas', {});
+
+        // Generar HTML para las posiciones/slots
+        let slotsHTML = '';
+
+        if (isMultiStation) {
+            // Multi-station: renderizar un slot por cada stationId
+            slotsHTML = '<div class="station-slots">';
+            stationIds.forEach((sid, idx) => {
+                const slotMaquina = supervisoraState.maquinas[sid];
+                const slotOps = slotMaquina?.operadores || [];
+                const slotEstadoMaq = estadoMaquinas[sid];
+                const slotEstaTrabajando = slotEstadoMaq?.estado === 'trabajando' || slotEstadoMaq?.procesoActivo;
+
+                let slotOpHTML = '';
+                if (slotOps.length > 0) {
+                    slotOpHTML = slotOps.map(op => `
+                        <div class="operador-chip" data-operador-id="${op.id}" title="${S(op.nombre)}">
+                            <span class="operador-iniciales">${S(getIniciales(op.nombre))}</span>
+                            <button class="remove-operador" onclick="event.stopPropagation(); removeOperadorFromEstacion('${S(sid)}', ${op.id})" title="Quitar">&times;</button>
+                        </div>
+                    `).join('');
+                } else {
+                    slotOpHTML = '<span class="sin-operador"><i class="fas fa-user-plus"></i></span>';
+                }
+
+                const slotActivo = slotMaquina?.estado === 'activo' ? 'activo' : 'inactivo';
+                slotsHTML += `
+                    <div class="station-slot ${slotActivo}" data-station-id="${sid}"
+                         ondragover="allowDrop(event)" ondrop="dropOnEstacion(event, '${sid}')"
+                         onclick="event.stopPropagation(); selectEstacion('${sid}')"
+                         ondblclick="event.stopPropagation(); openEstacionModal('${sid}')">
+                        <div class="slot-id">${sid}</div>
+                        <div class="slot-operadores">${slotOpHTML}</div>
+                        ${slotMaquina?.procesoNombre ? `<div class="slot-proceso"><i class="fas fa-cog ${slotEstaTrabajando ? 'fa-spin' : ''}"></i> ${S(slotMaquina.procesoNombre)}</div>` : ''}
+                    </div>
+                `;
+            });
+            slotsHTML += '</div>';
+        } else {
+            // Single-station: renderizado original
+            const maquinaState = supervisoraState.maquinas[stationIds[0]];
+            const asignacionEst = asignacionesEstaciones[stationIds[0]];
+            const estadoMaquinaLS = estadoMaquinas[stationIds[0]];
+
+            const modoSimultaneo = asignacionEst?.modoSimultaneo || estadoMaquinaLS?.modoSimultaneo;
+            const procesosSimultaneos = estadoMaquinaLS?.procesosSimultaneos || [];
+            const estaTrabajando = estadoMaquinaLS?.estado === 'trabajando' || estadoMaquinaLS?.procesoActivo;
+
+            const operadoresCount = maquinaState.operadores?.length || 0;
+            let operadoresHTML = '';
+
+            if (operadoresCount > 0) {
+                const estadoEst = estadoMaquinas[stationIds[0]];
+                const piezasRealizadas = estadoEst?.piezasHoy || maquinaState.piezasHoy || 0;
+                const pedidoAsignado = maquinaState.pedidoId ? supervisoraState.pedidosHoy.find(p => p.id === maquinaState.pedidoId) : null;
+                const cantidadObjetivo = pedidoAsignado?.productos?.[0]?.cantidad || pedidoAsignado?.cantidad || 0;
+                const avanceOp = cantidadObjetivo > 0 ? Math.min(100, Math.round((piezasRealizadas / cantidadObjetivo) * 100)) : 0;
+
+                let semaforo = 'gris';
+                if (cantidadObjetivo > 0 && piezasRealizadas > 0) {
+                    if (avanceOp >= 85) semaforo = 'verde';
+                    else if (avanceOp >= 70) semaforo = 'amarillo';
+                    else semaforo = 'rojo';
+                } else if (maquinaState.estado === 'activo' || estaTrabajando) {
+                    semaforo = 'amarillo';
+                }
+
+                operadoresHTML = maquinaState.operadores.map(op => `
+                    <div class="operador-chip" data-operador-id="${op.id}" title="${S(op.nombre)} - ${avanceOp}%">
+                        <span class="operador-iniciales">${S(getIniciales(op.nombre))}</span>
+                        <span class="operador-semaforo ${semaforo}"></span>
+                        ${cantidadObjetivo > 0 ? `<div class="operador-mini-bar"><div class="operador-mini-fill" style="width:${avanceOp}%"></div></div>` : ''}
+                        <button class="remove-operador" onclick="event.stopPropagation(); removeOperadorFromEstacion('${S(stationIds[0])}', ${op.id})" title="Quitar">&times;</button>
+                    </div>
+                `).join('');
+            } else {
+                operadoresHTML = '<span class="sin-operador"><i class="fas fa-user-plus"></i></span>';
+            }
+
+            if (operadoresCount > 1) {
+                el.classList.add('multi-operadores');
+            }
+
+            let claseTrabajoEstacion = '';
+            let iconoTrabajo = '';
+            if (maquinaState.procesoNombre || procesosSimultaneos.length > 0) {
+                if (estaTrabajando || maquinaState.piezasHoy > 0) {
+                    claseTrabajoEstacion = 'trabajando-activo';
+                    iconoTrabajo = '<i class="fas fa-check-circle estado-trabajo verde"></i>';
+                } else {
+                    claseTrabajoEstacion = 'asignado-sin-iniciar';
+                    iconoTrabajo = '<i class="fas fa-hourglass-half estado-trabajo naranja"></i>';
+                }
+            }
+
+            let procesosHTML = '';
+            if (modoSimultaneo && procesosSimultaneos.length > 0) {
+                procesosHTML = `
+                    <div class="estacion-proceso-new simultaneo">
+                        <i class="fas fa-layer-group"></i> ${procesosSimultaneos.length} simultáneos
+                        <span class="procesos-simultaneos-tooltip" title="${S(procesosSimultaneos.map(p => p.procesoNombre).join(', '))}">
+                            ${S(procesosSimultaneos.slice(0, 2).map(p => p.procesoNombre.substring(0, 10)).join(', '))}${procesosSimultaneos.length > 2 ? '...' : ''}
+                        </span>
+                        ${iconoTrabajo}
+                    </div>
+                `;
+            } else if (maquinaState.procesoNombre) {
+                procesosHTML = `
+                    <div class="estacion-proceso-new">
+                        <i class="fas fa-cog ${estaTrabajando ? 'fa-spin' : ''}"></i> ${S(maquinaState.procesoNombre)}
+                        ${maquinaState.colaProcesos && maquinaState.colaProcesos.length > 0 ?
+                            `<span class="cola-badge-mini" title="${S(maquinaState.colaProcesos.map(p => p.procesoNombre).join(' → '))}">+${maquinaState.colaProcesos.length}</span>`
+                        : ''}
+                        ${iconoTrabajo}
+                    </div>
+                `;
+            }
+
+            slotsHTML = `
+                <div class="estacion-operadores">
+                    ${operadoresHTML}
+                </div>
+                ${procesosHTML}
+                ${maquinaState.piezasHoy > 0 ? `
+                    <div class="estacion-piezas-new">
+                        <i class="fas fa-cubes"></i> ${maquinaState.piezasHoy.toLocaleString()}
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        // Calcular progreso (usar primer stationId para single, aggregate para multi)
+        const primaryMaquina = supervisoraState.maquinas[stationIds[0]];
         let progresoHTML = '';
-        if (maquinaState.pedidoId) {
-            const pedido = supervisoraState.pedidosHoy.find(p => p.id === maquinaState.pedidoId);
+        if (!isMultiStation && primaryMaquina?.pedidoId) {
+            const pedido = supervisoraState.pedidosHoy.find(p => p.id === primaryMaquina.pedidoId);
             if (pedido) {
                 const prod = pedido.productos?.[0];
                 const cantidad = prod?.cantidad || pedido.cantidad || 100;
-                const completadas = prod?.completadas || maquinaState.piezasHoy || 0;
+                const completadas = prod?.completadas || primaryMaquina.piezasHoy || 0;
                 const progreso = Math.min(100, Math.round((completadas / cantidad) * 100));
                 progresoHTML = `
                     <div class="estacion-progress-container">
@@ -359,63 +514,11 @@ function renderLayoutInSupervisora(layout) {
             }
         }
 
-        // Indicador de actividad animado
-        const activityIndicator = maquinaState.estado === 'activo' ?
+        const activityIndicator = anyActive ?
             '<div class="activity-pulse"></div>' : '';
 
-        // Obtener info de procesos simultáneos y estado de trabajo
-        // (debe ir antes del bloque de operadores que usa estaTrabajando)
-        const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
-        const estadoMaquinas = safeLocalGet('estado_maquinas', {});
-        const asignacionEst = asignacionesEstaciones[element.id];
-        const estadoMaquinaLS = estadoMaquinas[element.id];
-
-        const modoSimultaneo = asignacionEst?.modoSimultaneo || estadoMaquinaLS?.modoSimultaneo;
-        const procesosSimultaneos = estadoMaquinaLS?.procesosSimultaneos || [];
-        const estaTrabajando = estadoMaquinaLS?.estado === 'trabajando' || estadoMaquinaLS?.procesoActivo;
-
-        // Generar HTML para múltiples operadores
-        const operadoresCount = maquinaState.operadores?.length || 0;
-        let operadoresHTML = '';
-
-        if (operadoresCount > 0) {
-            // Calcular rendimiento del operador en esta estación
-            const estadoEst = estadoMaquinas[element.id];
-            const piezasRealizadas = estadoEst?.piezasHoy || maquinaState.piezasHoy || 0;
-            const pedidoAsignado = maquinaState.pedidoId ? supervisoraState.pedidosHoy.find(p => p.id === maquinaState.pedidoId) : null;
-            const cantidadObjetivo = pedidoAsignado?.productos?.[0]?.cantidad || pedidoAsignado?.cantidad || 0;
-            const avanceOp = cantidadObjetivo > 0 ? Math.min(100, Math.round((piezasRealizadas / cantidadObjetivo) * 100)) : 0;
-
-            // Semáforo de rendimiento basado en piezas esperadas por tiempo transcurrido
-            let semaforo = 'gris'; // sin datos
-            if (cantidadObjetivo > 0 && piezasRealizadas > 0) {
-                const rendimiento = avanceOp; // simplificado: % completado como proxy
-                if (rendimiento >= 85) semaforo = 'verde';
-                else if (rendimiento >= 70) semaforo = 'amarillo';
-                else semaforo = 'rojo';
-            } else if (maquinaState.estado === 'activo' || estaTrabajando) {
-                semaforo = 'amarillo'; // activo pero sin piezas aún
-            }
-
-            operadoresHTML = maquinaState.operadores.map(op => `
-                <div class="operador-chip" data-operador-id="${op.id}" title="${S(op.nombre)} - ${avanceOp}%">
-                    <span class="operador-iniciales">${S(getIniciales(op.nombre))}</span>
-                    <span class="operador-semaforo ${semaforo}"></span>
-                    ${cantidadObjetivo > 0 ? `<div class="operador-mini-bar"><div class="operador-mini-fill" style="width:${avanceOp}%"></div></div>` : ''}
-                    <button class="remove-operador" onclick="event.stopPropagation(); removeOperadorFromEstacion('${S(element.id)}', ${op.id})" title="Quitar">&times;</button>
-                </div>
-            `).join('');
-        } else {
-            operadoresHTML = '<span class="sin-operador"><i class="fas fa-user-plus"></i></span>';
-        }
-
-        // Agregar clase si tiene múltiples operadores
-        if (operadoresCount > 1) {
-            el.classList.add('multi-operadores');
-        }
-
-        // Verificar si tiene tiempo muerto activo
-        const tiempoMuertoActivo = supervisoraState.tiemposMuertos.activos[element.id];
+        // Verificar si tiene tiempo muerto activo (usar element.id o primer stationId)
+        const tiempoMuertoActivo = supervisoraState.tiemposMuertos.activos[element.id] || supervisoraState.tiemposMuertos.activos[stationIds[0]];
         let tiempoMuertoHTML = '';
 
         if (tiempoMuertoActivo) {
@@ -437,44 +540,8 @@ function renderLayoutInSupervisora(layout) {
             `;
         }
 
-        // Determinar estado de trabajo para colores
-        let claseTrabajoEstacion = '';
-        let iconoTrabajo = '';
-        if (maquinaState.procesoNombre || procesosSimultaneos.length > 0) {
-            if (estaTrabajando || maquinaState.piezasHoy > 0) {
-                claseTrabajoEstacion = 'trabajando-activo';
-                iconoTrabajo = '<i class="fas fa-check-circle estado-trabajo verde"></i>';
-            } else {
-                claseTrabajoEstacion = 'asignado-sin-iniciar';
-                iconoTrabajo = '<i class="fas fa-hourglass-half estado-trabajo naranja"></i>';
-            }
-        }
-
-        // HTML para procesos (incluyendo simultáneos)
-        let procesosHTML = '';
-        if (modoSimultaneo && procesosSimultaneos.length > 0) {
-            // Modo simultáneo activo
-            procesosHTML = `
-                <div class="estacion-proceso-new simultaneo">
-                    <i class="fas fa-layer-group"></i> ${procesosSimultaneos.length} simultáneos
-                    <span class="procesos-simultaneos-tooltip" title="${S(procesosSimultaneos.map(p => p.procesoNombre).join(', '))}">
-                        ${S(procesosSimultaneos.slice(0, 2).map(p => p.procesoNombre.substring(0, 10)).join(', '))}${procesosSimultaneos.length > 2 ? '...' : ''}
-                    </span>
-                    ${iconoTrabajo}
-                </div>
-            `;
-        } else if (maquinaState.procesoNombre) {
-            // Proceso único
-            procesosHTML = `
-                <div class="estacion-proceso-new">
-                    <i class="fas fa-cog ${estaTrabajando ? 'fa-spin' : ''}"></i> ${S(maquinaState.procesoNombre)}
-                    ${maquinaState.colaProcesos && maquinaState.colaProcesos.length > 0 ?
-                        `<span class="cola-badge-mini" title="${S(maquinaState.colaProcesos.map(p => p.procesoNombre).join(' → '))}">+${maquinaState.colaProcesos.length}</span>`
-                    : ''}
-                    ${iconoTrabajo}
-                </div>
-            `;
-        }
+        // Contar total de operadores en todas las posiciones
+        const totalOps = stationIds.reduce((sum, sid) => sum + (supervisoraState.maquinas[sid]?.operadores?.length || 0), 0);
 
         el.innerHTML = `
             ${tiempoMuertoHTML}
@@ -483,31 +550,32 @@ function renderLayoutInSupervisora(layout) {
                 <div class="estacion-icon">
                     <i class="fas ${icono}"></i>
                 </div>
-                <div class="estacion-id-badge">${element.id}</div>
+                <div class="estacion-id-badge">${element.id}${isMultiStation ? ` <span class="multi-station-badge">${stationIds.length} pos.</span>` : ''}</div>
                 <div class="estacion-badges">
-                    ${operadoresCount > 0 ? `<span class="operadores-count-badge">${operadoresCount}</span>` : ''}
-                    <div class="estacion-estado-indicator ${maquinaState.estado}">
-                        <i class="fas ${getEstadoIcon(maquinaState.estado)}"></i>
+                    ${totalOps > 0 ? `<span class="operadores-count-badge">${totalOps}</span>` : ''}
+                    <div class="estacion-estado-indicator ${elementEstado}">
+                        <i class="fas ${getEstadoIcon(elementEstado)}"></i>
                     </div>
                 </div>
             </div>
-            <div class="estacion-body-new ${claseTrabajoEstacion}">
-                <div class="estacion-operadores">
-                    ${operadoresHTML}
-                </div>
-                ${procesosHTML}
-                ${maquinaState.piezasHoy > 0 ? `
-                    <div class="estacion-piezas-new">
-                        <i class="fas fa-cubes"></i> ${maquinaState.piezasHoy.toLocaleString()}
-                    </div>
-                ` : ''}
+            <div class="estacion-body-new">
+                ${slotsHTML}
             </div>
             ${progresoHTML}
-            <div class="estacion-glow ${maquinaState.estado}"></div>
+            <div class="estacion-glow ${elementEstado}"></div>
         `;
 
-        el.addEventListener('click', () => selectEstacion(element.id));
-        el.addEventListener('dblclick', () => openEstacionModal(element.id));
+        if (!isMultiStation) {
+            el.addEventListener('click', () => selectEstacion(stationIds[0]));
+            el.addEventListener('dblclick', () => openEstacionModal(stationIds[0]));
+        } else {
+            // Para multi-station, click en el header selecciona el primer slot
+            el.addEventListener('click', (e) => {
+                if (!e.target.closest('.station-slot')) {
+                    selectEstacion(stationIds[0]);
+                }
+            });
+        }
 
         // Efectos hover
         el.addEventListener('mouseenter', () => {
@@ -564,6 +632,13 @@ function actualizarEstacionesEnMapa() {
         }
     }
 
+    // Multi-station elements requieren full render para mantener los slots internos sincronizados
+    const hasMultiStation = estaciones.some(e => e.stationIds && e.stationIds.length > 1);
+    if (hasMultiStation) {
+        renderLayoutInSupervisora(layout);
+        return;
+    }
+
     // Iconos por tipo (mismos que en renderLayoutInSupervisora)
     const tipoIconos = {
         'costura': 'fa-tshirt',
@@ -575,12 +650,15 @@ function actualizarEstacionesEnMapa() {
         'calidad': 'fa-check-circle'
     };
 
-    // Actualizar cada estación in-place
+    // Actualizar cada estación in-place (solo para single-station elements)
     estaciones.forEach(element => {
-        // Asegurar que existe el estado
-        if (!supervisoraState.maquinas[element.id]) return;
+        const stationIds = element.stationIds || [element.id];
+        const sid = stationIds[0];
 
-        const maquinaState = supervisoraState.maquinas[element.id];
+        // Asegurar que existe el estado
+        if (!supervisoraState.maquinas[sid]) return;
+
+        const maquinaState = supervisoraState.maquinas[sid];
 
         // Migrar estructura antigua si es necesario
         if (!maquinaState.operadores) {
@@ -597,13 +675,13 @@ function actualizarEstacionesEnMapa() {
 
         // --- Actualizar clases del elemento raíz ---
         const oldEstado = el.getAttribute('data-estado');
-        const tiempoMuertoActivo = supervisoraState.tiemposMuertos.activos[element.id];
+        const tiempoMuertoActivo = supervisoraState.tiemposMuertos.activos[sid];
 
         // Obtener info de procesos simultáneos y estado de trabajo
         const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
         const estadoMaquinas = safeLocalGet('estado_maquinas', {});
-        const asignacionEst = asignacionesEstaciones[element.id];
-        const estadoMaquinaLS = estadoMaquinas[element.id];
+        const asignacionEst = asignacionesEstaciones[sid];
+        const estadoMaquinaLS = estadoMaquinas[sid];
 
         const modoSimultaneo = asignacionEst?.modoSimultaneo || estadoMaquinaLS?.modoSimultaneo;
         const procesosSimultaneos = estadoMaquinaLS?.procesosSimultaneos || [];
@@ -665,7 +743,7 @@ function actualizarEstacionesEnMapa() {
         // --- Operadores HTML ---
         let operadoresHTML = '';
         if (operadoresCount > 0) {
-            const estadoEst = estadoMaquinas[element.id];
+            const estadoEst = estadoMaquinas[sid];
             const piezasRealizadas = estadoEst?.piezasHoy || maquinaState.piezasHoy || 0;
             const pedidoAsignado = maquinaState.pedidoId ? supervisoraState.pedidosHoy.find(p => p.id === maquinaState.pedidoId) : null;
             const cantidadObjetivo = pedidoAsignado?.productos?.[0]?.cantidad || pedidoAsignado?.cantidad || 0;
@@ -686,7 +764,7 @@ function actualizarEstacionesEnMapa() {
                     <span class="operador-iniciales">${S(getIniciales(op.nombre))}</span>
                     <span class="operador-semaforo ${semaforo}"></span>
                     ${cantidadObjetivo > 0 ? `<div class="operador-mini-bar"><div class="operador-mini-fill" style="width:${avanceOp}%"></div></div>` : ''}
-                    <button class="remove-operador" onclick="event.stopPropagation(); removeOperadorFromEstacion('${S(element.id)}', ${op.id})" title="Quitar">&times;</button>
+                    <button class="remove-operador" onclick="event.stopPropagation(); removeOperadorFromEstacion('${S(sid)}', ${op.id})" title="Quitar">&times;</button>
                 </div>
             `).join('');
         } else {
@@ -2481,11 +2559,23 @@ function selectEstacion(estacionId) {
     document.querySelectorAll('.estacion-element.selected').forEach(el => {
         el.classList.remove('selected');
     });
+    document.querySelectorAll('.station-slot.selected').forEach(el => {
+        el.classList.remove('selected');
+    });
 
     supervisoraState.selectedEstacion = estacionId;
 
     if (estacionId) {
-        const el = document.getElementById('estacion-' + estacionId);
+        // Buscar elemento DOM: puede ser el element.id directo o un stationId dentro de un multi-station element
+        let el = document.getElementById('estacion-' + estacionId);
+        if (!el) {
+            // Buscar como stationId dentro de un multi-station slot
+            const slot = document.querySelector(`.station-slot[data-station-id="${estacionId}"]`);
+            if (slot) {
+                el = slot.closest('.estacion-element');
+                slot.classList.add('selected');
+            }
+        }
         if (el) el.classList.add('selected');
         showEstacionDetalle(estacionId);
     } else {
@@ -2506,7 +2596,9 @@ function showEstacionDetalle(estacionId) {
     const maquina = supervisoraState.maquinas[estacionId];
     if (!maquina) return;
 
-    const layoutElement = supervisoraState.layout?.elements.find(e => e.id === estacionId);
+    const layoutElement = supervisoraState.layout?.elements.find(e =>
+        e.id === estacionId || (e.stationIds && e.stationIds.includes(estacionId))
+    );
     const operadoresCount = maquina.operadores?.length || 0;
 
     // Obtener información de estado real de la estación

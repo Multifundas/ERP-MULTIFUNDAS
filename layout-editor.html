@@ -253,6 +253,16 @@
             margin-bottom: 2px;
         }
 
+        .element-station-count {
+            font-size: 0.6rem;
+            font-weight: 600;
+            background: #3b82f6;
+            color: white;
+            padding: 1px 4px;
+            border-radius: 3px;
+            margin-left: 3px;
+        }
+
         .element-name {
             font-size: 0.65rem;
             color: var(--text-muted);
@@ -858,7 +868,8 @@
                 height: config.height,
                 color: colors[editorState.elements.length % colors.length],
                 operadorId: null,
-                operadorNombre: ''
+                operadorNombre: '',
+                stationIds: [elementId]
             };
 
             editorState.elements.push(element);
@@ -884,8 +895,11 @@
             el.style.width = element.width + 'px';
             el.style.height = element.height + 'px';
 
+            const ids = element.stationIds || [element.id];
+            const idsLabel = ids.length > 1 ? `<span class="element-station-count" title="${ids.join(', ')}">${ids.length} pos.</span>` : '';
+
             el.innerHTML = `
-                <span class="element-id">${element.id}</span>
+                <span class="element-id">${element.id} ${idsLabel}</span>
                 <span class="element-name">${element.name}</span>
                 <div class="resize-handle se" data-handle="se"></div>
                 <div class="resize-handle sw" data-handle="sw"></div>
@@ -1095,6 +1109,18 @@
             const element = editorState.elements.find(el => el.id === elementId);
             if (!element) return;
 
+            // Asegurar que stationIds existe
+            if (!element.stationIds) element.stationIds = [element.id];
+
+            const stationIdsHtml = element.stationIds.map((sid, idx) => `
+                <div style="display:flex; gap:4px; align-items:center; margin-bottom:4px;">
+                    <input type="text" value="${sid}" style="flex:1"
+                        onchange="updateStationId('${element.id}', ${idx}, this.value)">
+                    ${element.stationIds.length > 1 ? `<button style="background:#ef4444; color:white; border:none; border-radius:4px; width:24px; height:24px; cursor:pointer; font-size:12px;"
+                        onclick="removeStationId('${element.id}', ${idx})" title="Quitar">×</button>` : ''}
+                </div>
+            `).join('');
+
             document.getElementById('propertiesContent').innerHTML = `
                 <div class="property-group">
                     <label>ID (unico)</label>
@@ -1114,6 +1140,18 @@
                         <option value="area" ${element.type === 'area' ? 'selected' : ''}>Area</option>
                         <option value="estacion" ${element.type === 'estacion' ? 'selected' : ''}>Estacion</option>
                     </select>
+                </div>
+
+                <div class="property-group">
+                    <label>IDs de Posicion (${element.stationIds.length})</label>
+                    <div id="stationIdsList">
+                        ${stationIdsHtml}
+                    </div>
+                    <button style="background:var(--primary, #3b82f6); color:white; border:none; border-radius:4px; padding:4px 10px; cursor:pointer; font-size:12px; margin-top:4px; width:100%;"
+                        onclick="addStationId('${element.id}')">
+                        <i class="fas fa-plus"></i> Agregar Posicion
+                    </button>
+                    <small style="color:#999; display:block; margin-top:4px;">Cada posicion permite asignar un operador independiente</small>
                 </div>
 
                 <div class="property-group">
@@ -1201,10 +1239,84 @@
             const oldEl = document.getElementById('el-' + oldId);
             if (oldEl) oldEl.remove();
 
+            // Actualizar stationIds: reemplazar el oldId si aparece, y actualizar prefijos
+            if (element.stationIds) {
+                element.stationIds = element.stationIds.map(sid => {
+                    if (sid === oldId) return newId;
+                    if (sid.startsWith(oldId + '-')) return newId + sid.substring(oldId.length);
+                    return sid;
+                });
+            }
+
             element.id = newId;
             renderElement(element);
             updateElementsList();
             selectElement(newId);
+        }
+
+        // ========================================
+        // STATION IDS (MULTI-POSICION)
+        // ========================================
+
+        function addStationId(elementId) {
+            const element = editorState.elements.find(el => el.id === elementId);
+            if (!element) return;
+            if (!element.stationIds) element.stationIds = [element.id];
+
+            // Generar nuevo ID basado en el ID del elemento
+            let counter = element.stationIds.length + 1;
+            let newId = element.id + '-' + counter;
+            while (editorState.elements.some(el => (el.stationIds || [el.id]).includes(newId))) {
+                counter++;
+                newId = element.id + '-' + counter;
+            }
+
+            element.stationIds.push(newId);
+            renderElement(element);
+            selectElement(elementId);
+            showToast(`Posicion ${newId} agregada`, 'success');
+        }
+
+        function removeStationId(elementId, index) {
+            const element = editorState.elements.find(el => el.id === elementId);
+            if (!element || !element.stationIds || element.stationIds.length <= 1) return;
+
+            const removed = element.stationIds.splice(index, 1);
+            renderElement(element);
+            selectElement(elementId);
+            showToast(`Posicion ${removed[0]} eliminada`, 'info');
+        }
+
+        function updateStationId(elementId, index, newValue) {
+            const element = editorState.elements.find(el => el.id === elementId);
+            if (!element || !element.stationIds) return;
+
+            newValue = newValue.trim();
+            if (!newValue) {
+                showToast('El ID no puede estar vacio', 'error');
+                showProperties(elementId);
+                return;
+            }
+
+            // Verificar unicidad global de station IDs
+            const allStationIds = [];
+            editorState.elements.forEach(el => {
+                (el.stationIds || [el.id]).forEach((sid, i) => {
+                    if (!(el.id === elementId && i === index)) {
+                        allStationIds.push(sid);
+                    }
+                });
+            });
+
+            if (allStationIds.includes(newValue)) {
+                showToast('Ese ID ya existe en otro elemento', 'error');
+                showProperties(elementId);
+                return;
+            }
+
+            element.stationIds[index] = newValue;
+            renderElement(element);
+            selectElement(elementId);
         }
 
         // ========================================
@@ -1244,12 +1356,14 @@
                 idNumber++;
             }
 
+            const newId = config.prefix + idNumber;
             const newElement = {
                 ...original,
-                id: config.prefix + idNumber,
+                id: newId,
                 name: original.name + ' (copia)',
                 x: original.x + 20,
-                y: original.y + 20
+                y: original.y + 20,
+                stationIds: [newId]
             };
 
             editorState.elements.push(newElement);
@@ -1365,7 +1479,11 @@
 
                 editorState.canvasWidth = data.canvasWidth || 1200;
                 editorState.canvasHeight = data.canvasHeight || 700;
-                editorState.elements = data.elements || [];
+                editorState.elements = (data.elements || []).map(el => {
+                    // Migrar elementos sin stationIds
+                    if (!el.stationIds) el.stationIds = [el.id];
+                    return el;
+                });
 
                 document.getElementById('canvasWidth').value = editorState.canvasWidth;
                 document.getElementById('canvasHeight').value = editorState.canvasHeight;
