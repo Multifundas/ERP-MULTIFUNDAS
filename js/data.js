@@ -1865,48 +1865,38 @@ async function limpiarTodosLosDatos() {
 
     // 0. Si Supabase está activo, eliminar datos de todas las tablas remotas
     if (typeof USE_SUPABASE !== 'undefined' && USE_SUPABASE && typeof SupabaseClient !== 'undefined') {
-        DEBUG_MODE && console.log('Eliminando datos de Supabase...');
-        const tablasSupabase = [
-            // Tablas dependientes primero (foreign keys)
-            'movimientos_inventario',
-            'articulos_frecuentes',
-            'pedido_productos',
-            'bom',
-            'inventario_piezas',
-            'auditoria',
-            'notificaciones',
-            'estado_operadores',
-            // Tablas principales
-            'pedidos',
-            'productos',
-            'clientes',
-            'personal',
-            'materiales',
-            'subfamilias',
-            'familias',
-            'procesos',
-            'estaciones',
-            'areas_planta',
-            'areas',
-            'config_sistema'
-        ];
-        const errores = [];
-        for (const tabla of tablasSupabase) {
-            try {
-                const ok = await SupabaseClient.deleteAll(tabla);
-                if (!ok) {
-                    errores.push(tabla);
-                    console.error(`  Supabase: FALLÓ al eliminar ${tabla}`);
-                } else {
-                    DEBUG_MODE && console.log(`  Supabase: eliminado ${tabla}`);
+        DEBUG_MODE && console.log('Eliminando datos de Supabase via RPC...');
+        try {
+            const result = await SupabaseClient.rpc('truncate_all_data');
+            if (result === null) {
+                // RPC falló (puede no existir aún), intentar deleteAll tabla por tabla como fallback
+                console.warn('RPC truncate_all_data no disponible, intentando deleteAll por tabla...');
+                const tablasSupabase = [
+                    'movimientos_inventario', 'articulos_frecuentes', 'pedido_productos',
+                    'bom', 'inventario_piezas', 'auditoria', 'notificaciones', 'estado_operadores',
+                    'pedidos', 'productos', 'clientes', 'personal', 'materiales',
+                    'subfamilias', 'familias', 'procesos', 'estaciones', 'areas_planta', 'areas',
+                    'config_sistema'
+                ];
+                const errores = [];
+                for (const tabla of tablasSupabase) {
+                    try {
+                        const ok = await SupabaseClient.deleteAll(tabla);
+                        if (!ok) errores.push(tabla);
+                    } catch (e) {
+                        errores.push(tabla);
+                    }
                 }
-            } catch (e) {
-                errores.push(tabla);
-                console.error(`  Supabase: error eliminando ${tabla}:`, e.message);
+                if (errores.length > 0) {
+                    alert('⚠️ No se pudieron eliminar estas tablas de Supabase:\n' + errores.join(', ') +
+                        '\n\nEjecuta sql/011_fix_rls_write_policies.sql en el SQL Editor de Supabase para corregir permisos.');
+                }
+            } else {
+                DEBUG_MODE && console.log('Supabase: todas las tablas eliminadas via RPC');
             }
-        }
-        if (errores.length > 0) {
-            alert('⚠️ No se pudieron eliminar estas tablas de Supabase:\n' + errores.join(', ') + '\n\nRevisa los permisos (RLS) en el dashboard de Supabase.');
+        } catch (e) {
+            console.error('Error limpiando Supabase:', e.message);
+            alert('⚠️ Error al limpiar Supabase: ' + e.message);
         }
     }
 
