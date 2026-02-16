@@ -2082,7 +2082,6 @@ async function limpiarTodosLosDatos() {
         // Sesión y UI
         'erp_multifundas_db',
         'lastBackup',
-        'tourCompleted',
         'theme',
         'supervisora_theme',
         'dev_mode',

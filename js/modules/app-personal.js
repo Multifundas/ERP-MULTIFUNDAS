@@ -1220,8 +1220,9 @@ function toggleCredencialesSection(rol) {
 function toggleAreaField(rol) {
     const areaField = document.getElementById('areaField');
     const posicionesField = document.getElementById('posicionesField');
-    if (areaField) areaField.style.display = rol === 'supervisora' ? 'none' : 'block';
-    if (posicionesField) posicionesField.style.display = rol === 'supervisora' ? 'none' : 'block';
+    const ocultarArea = (rol === 'supervisora' || rol === 'administrador');
+    if (areaField) areaField.style.display = ocultarArea ? 'none' : 'block';
+    if (posicionesField) posicionesField.style.display = ocultarArea ? 'none' : 'block';
 }
 
 function editEmpleado(id) {
@@ -1263,7 +1264,7 @@ function editEmpleado(id) {
                             <option value="administrador" ${empleado.rol === 'administrador' ? 'selected' : ''}>Administrador</option>
                         </select>
                     </div>
-                    <div class="form-group" id="areaFieldEdit" style="${empleado.rol === 'administrador' ? 'display:none' : ''}">
+                    <div class="form-group" id="areaFieldEdit" style="${(empleado.rol === 'administrador' || empleado.rol === 'supervisora') ? 'display:none' : ''}">
                         <label>Área (Procesos)</label>
                         <select name="areaId">
                             <option value="">Seleccionar...</option>
@@ -1421,7 +1422,7 @@ function editEmpleado(id) {
             </div>
 
             <!-- Sección: Permisos Específicos -->
-            <div class="form-section" id="permisosSectionEdit" style="${empleado.rol === 'administrador' ? 'display:none' : ''}">
+            <div class="form-section" id="permisosSectionEdit" style="${(empleado.rol === 'administrador' || empleado.rol === 'supervisora') ? 'display:none' : ''}">
                 <h4 class="form-section-title">
                     <i class="fas fa-shield-alt"></i> Permisos Específicos
                 </h4>
@@ -1472,7 +1473,7 @@ function editEmpleado(id) {
             </div>
 
             <!-- Sección: Posiciones en Planta -->
-            <div class="form-section" id="posicionesFieldEdit" style="${empleado.rol === 'administrador' ? 'display:none' : ''}">
+            <div class="form-section" id="posicionesFieldEdit" style="${(empleado.rol === 'administrador' || empleado.rol === 'supervisora') ? 'display:none' : ''}">
                 <h4 class="form-section-title">
                     <i class="fas fa-map-marker-alt"></i> Posiciones en Planta
                 </h4>
@@ -1637,9 +1638,10 @@ function guardarEdicionEmpleado(id) {
 // Funciones auxiliares para el formulario de edición
 function toggleAreaFieldEdit(rol) {
     const areaField = document.getElementById('areaFieldEdit');
-    if (areaField) {
-        areaField.style.display = (rol === 'administrador') ? 'none' : 'block';
-    }
+    const posicionesField = document.getElementById('posicionesFieldEdit');
+    const ocultarArea = (rol === 'supervisora' || rol === 'administrador');
+    if (areaField) areaField.style.display = ocultarArea ? 'none' : 'block';
+    if (posicionesField) posicionesField.style.display = ocultarArea ? 'none' : 'block';
 }
 
 function toggleCredencialesSectionEdit(rol) {
@@ -1651,7 +1653,7 @@ function toggleCredencialesSectionEdit(rol) {
         credencialesSection.style.display = (rol === 'operador' || rol === 'supervisora') ? 'block' : 'none';
     }
     if (permisosSection) {
-        permisosSection.style.display = (rol === 'operador' || rol === 'supervisora') ? 'block' : 'none';
+        permisosSection.style.display = (rol === 'operador') ? 'block' : 'none';
     }
     if (posicionesField) {
         posicionesField.style.display = (rol === 'operador') ? 'block' : 'none';
