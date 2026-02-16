@@ -1876,6 +1876,8 @@ function startTour() {
 
 function checkFirstVisit() {
     if (!localStorage.getItem('tourCompleted')) {
+        // Marcar como completado inmediatamente para que no vuelva a aparecer
+        localStorage.setItem('tourCompleted', 'true');
         setTimeout(() => {
             const startTourModal = `
                 <div style="text-align: center; padding: 20px;">
@@ -1888,7 +1890,7 @@ function checkFirstVisit() {
                         <button class="btn btn-primary" onclick="closeModal(); startTour();">
                             <i class="fas fa-play"></i> Iniciar Tour
                         </button>
-                        <button class="btn btn-secondary" onclick="localStorage.setItem('tourCompleted', 'true'); closeModal();">
+                        <button class="btn btn-secondary" onclick="closeModal();">
                             Explorar solo
                         </button>
                     </div>
