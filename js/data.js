@@ -1867,12 +1867,16 @@ async function limpiarTodosLosDatos() {
     if (typeof USE_SUPABASE !== 'undefined' && USE_SUPABASE && typeof SupabaseClient !== 'undefined') {
         DEBUG_MODE && console.log('Eliminando datos de Supabase...');
         const tablasSupabase = [
+            // Tablas dependientes primero (foreign keys)
+            'movimientos_inventario',
+            'articulos_frecuentes',
             'pedido_productos',
             'bom',
             'inventario_piezas',
             'auditoria',
             'notificaciones',
             'estado_operadores',
+            // Tablas principales
             'pedidos',
             'productos',
             'clientes',
@@ -1886,13 +1890,23 @@ async function limpiarTodosLosDatos() {
             'areas',
             'config_sistema'
         ];
+        const errores = [];
         for (const tabla of tablasSupabase) {
             try {
-                await SupabaseClient.deleteAll(tabla);
-                DEBUG_MODE && console.log(`  Supabase: eliminado ${tabla}`);
+                const ok = await SupabaseClient.deleteAll(tabla);
+                if (!ok) {
+                    errores.push(tabla);
+                    console.error(`  Supabase: FALLÓ al eliminar ${tabla}`);
+                } else {
+                    DEBUG_MODE && console.log(`  Supabase: eliminado ${tabla}`);
+                }
             } catch (e) {
-                DEBUG_MODE && console.log(`  Supabase: error eliminando ${tabla}:`, e.message);
+                errores.push(tabla);
+                console.error(`  Supabase: error eliminando ${tabla}:`, e.message);
             }
+        }
+        if (errores.length > 0) {
+            alert('⚠️ No se pudieron eliminar estas tablas de Supabase:\n' + errores.join(', ') + '\n\nRevisa los permisos (RLS) en el dashboard de Supabase.');
         }
     }
 

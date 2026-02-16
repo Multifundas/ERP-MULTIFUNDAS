@@ -134,7 +134,7 @@
             var result = await sbClient
                 .from(table)
                 .delete()
-                .neq('id', -1);
+                .not('id', 'is', null);
 
             if (result.error) {
                 console.error('[Supabase] Error deleteAll ' + table + ':', result.error.message);
