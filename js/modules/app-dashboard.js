@@ -1008,13 +1008,17 @@ function confirmarRenombrarEstacion(estacionIdActual, areaId) {
 
     // Si el ID cambió, necesitamos actualizar todas las referencias
     if (nuevoId !== estacionIdActual) {
-        // Actualizar en la lista de estaciones
-        const estaciones = db.data.estaciones;
-        const index = estaciones.findIndex(e => e.id === estacionIdActual);
-        if (index !== -1) {
-            estaciones[index].id = nuevoId;
-            estaciones[index].nombre = nuevoNombre || nuevoId;
-        }
+        // Cambio de ID: eliminar vieja y crear nueva en Supabase
+        const estacionVieja = db.getEstaciones().find(e => e.id === estacionIdActual);
+        const areaPlantaId = estacionVieja ? estacionVieja.areaPlantaId : areaId;
+        const operadorId = estacionVieja ? estacionVieja.operadorId : null;
+
+        // Eliminar la estación vieja del cache y Supabase
+        db.data.estaciones = (db.data.estaciones || []).filter(e => e.id !== estacionIdActual);
+        SupabaseClient.remove('estaciones', estacionIdActual);
+
+        // Crear la nueva con el nuevo ID
+        db.addEstacion({ id: nuevoId, nombre: nuevoNombre || nuevoId, areaPlantaId: areaPlantaId, operadorId: operadorId });
 
         // Actualizar en personal (posiciones asignadas)
         const personal = db.data.personal || [];
@@ -1023,31 +1027,30 @@ function confirmarRenombrarEstacion(estacionIdActual, areaId) {
                 const posIndex = emp.posiciones.indexOf(estacionIdActual);
                 if (posIndex !== -1) {
                     emp.posiciones[posIndex] = nuevoId;
+                    db.updateEmpleado(emp.id, { posiciones: emp.posiciones });
                 }
             }
         });
 
         // Actualizar en estadoOperadores
-        const estadoOps = db.data.estadoOperadores || [];
-        estadoOps.forEach(estado => {
-            if (estado.estacionId === estacionIdActual) {
-                estado.estacionId = nuevoId;
-            }
-        });
+        if (db.data.estadoOperadores) {
+            db.data.estadoOperadores.forEach(estado => {
+                if (estado.estacionId === estacionIdActual) {
+                    estado.estacionId = nuevoId;
+                    if (estado.operadorId) {
+                        db.updateEstadoOperador(estado.operadorId, { estacionId: nuevoId });
+                    }
+                }
+            });
+        }
 
         // Actualizar en localStorage de sincronización
         actualizarEstacionEnSincronizacion(estacionIdActual, nuevoId);
 
-        db.save();
         showToast(`Posición renombrada de "${estacionIdActual}" a "${nuevoId}"`, 'success');
     } else {
         // Solo cambió el nombre
-        const estaciones = db.data.estaciones;
-        const index = estaciones.findIndex(e => e.id === estacionIdActual);
-        if (index !== -1) {
-            estaciones[index].nombre = nuevoNombre || estacionIdActual;
-        }
-        db.save();
+        db.updateEstacion(estacionIdActual, { nombre: nuevoNombre || estacionIdActual });
         showToast('Nombre actualizado', 'success');
     }
 
@@ -1155,52 +1158,30 @@ function sincronizarEstadoOperadoresDB() {
                     ultimaActualizacion: new Date().toISOString()
                 };
 
-                if (existeIndex !== -1) {
-                    db.data.estadoOperadores[existeIndex] = nuevoEstado;
-                } else {
-                    db.data.estadoOperadores.push(nuevoEstado);
-                }
+                db.addEstadoOperador(nuevoEstado);
             }
         } else {
             // Si no hay operador, eliminar el estado de esa estación
             if (existeIndex !== -1) {
-                db.data.estadoOperadores.splice(existeIndex, 1);
+                db.deleteEstadoOperador(est.id);
             }
         }
     });
-
-    db.save();
 }
 
 function crearEstadoOperadorEnMapa(empleado, estacionId) {
-    // Crear estado en estadoOperadores de la DB
-    if (!db.data.estadoOperadores) {
-        db.data.estadoOperadores = [];
-    }
-
-    // Verificar si ya existe
-    const existeIndex = db.data.estadoOperadores.findIndex(e => e.estacionId === estacionId);
     const nuevoEstado = {
         estacionId: estacionId,
         operadorId: empleado.id,
         iniciales: getIniciales(empleado.nombre),
-        estado: 'inactivo', // inactivo, produciendo, pausa, alerta
+        estado: 'inactivo',
         efectividad: 0,
         piezasHoy: 0,
         tiempoActivo: 0,
         ultimaActualizacion: new Date().toISOString()
     };
 
-    if (existeIndex !== -1) {
-        // Actualizar registro existente manteniendo algunos datos
-        db.data.estadoOperadores[existeIndex].operadorId = empleado.id;
-        db.data.estadoOperadores[existeIndex].iniciales = getIniciales(empleado.nombre);
-        db.data.estadoOperadores[existeIndex].ultimaActualizacion = new Date().toISOString();
-    } else {
-        // Crear nuevo registro
-        db.data.estadoOperadores.push(nuevoEstado);
-    }
-    db.save();
+    db.addEstadoOperador(nuevoEstado);
 
     // También actualizar localStorage para sincronización inmediata
     const estadoMaquinas = safeLocalGet('estado_maquinas', {});
@@ -1219,13 +1200,7 @@ function crearEstadoOperadorEnMapa(empleado, estacionId) {
 
 function eliminarEstadoOperadorDeMapa(estacionId) {
     // Eliminar de estadoOperadores en la DB
-    if (db.data.estadoOperadores) {
-        const index = db.data.estadoOperadores.findIndex(e => e.estacionId === estacionId);
-        if (index !== -1) {
-            db.data.estadoOperadores.splice(index, 1);
-            db.save();
-        }
-    }
+    db.deleteEstadoOperador(estacionId);
 
     // Eliminar de localStorage
     const estadoMaquinas = safeLocalGet('estado_maquinas', {});

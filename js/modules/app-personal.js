@@ -189,13 +189,11 @@ function editAreaPlanta(areaId) {
 
     openModal('Editar Área', content, () => {
         const form = document.getElementById('editarAreaPlantaForm');
-        const index = db.data.areasPlanta.findIndex(a => a.id === areaId);
-        if (index !== -1) {
-            db.data.areasPlanta[index].nombre = form.querySelector('[name="nombre"]').value;
-            db.data.areasPlanta[index].color = form.querySelector('[name="color"]').value;
-            db.save();
-            loadProcesos();
-        }
+        db.updateAreaPlanta(areaId, {
+            nombre: form.querySelector('[name="nombre"]').value,
+            color: form.querySelector('[name="color"]').value
+        });
+        loadProcesos();
     });
 }
 

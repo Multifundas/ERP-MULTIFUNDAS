@@ -192,8 +192,8 @@ function sincronizarEstadoOperadoresAlInicio() {
                 const existeIndex = db.data.estadoOperadores.findIndex(e => e.estacionId === est.id);
 
                 if (existeIndex === -1) {
-                    // Crear nuevo registro
-                    db.data.estadoOperadores.push({
+                    // Crear nuevo registro usando el adapter
+                    db.addEstadoOperador({
                         estacionId: est.id,
                         operadorId: operador.id,
                         iniciales: getIniciales(operador.nombre),
@@ -207,13 +207,13 @@ function sincronizarEstadoOperadoresAlInicio() {
                     // Actualizar iniciales si faltaban
                     if (!db.data.estadoOperadores[existeIndex].iniciales) {
                         db.data.estadoOperadores[existeIndex].iniciales = getIniciales(operador.nombre);
+                        // Persist the update
+                        db.addEstadoOperador(db.data.estadoOperadores[existeIndex]);
                     }
                 }
             }
         }
     });
-
-    db.save();
 
     // Sincronizar con localStorage
     sincronizarEstacionesConPaneles();

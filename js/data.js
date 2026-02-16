@@ -2192,9 +2192,13 @@ function limpiarDatosProduccion() {
 // Función para limpiar notificaciones obsoletas
 function limpiarNotificacionesObsoletas() {
     // Limpiar notificaciones del objeto db
-    if (typeof db !== 'undefined' && db.data) {
-        db.data.notificaciones = [];
-        db.save();
+    if (typeof db !== 'undefined') {
+        if (typeof db.clearNotificaciones === 'function') {
+            db.clearNotificaciones();
+        } else if (db.data) {
+            db.data.notificaciones = [];
+            db.save();
+        }
         DEBUG_MODE && console.log('Notificaciones limpiadas');
     }
 }
@@ -2223,8 +2227,12 @@ setTimeout(() => {
 
         if (notificacionesValidas.length !== db.data.notificaciones.length) {
             DEBUG_MODE && console.log(`Limpiando ${db.data.notificaciones.length - notificacionesValidas.length} notificaciones obsoletas`);
-            db.data.notificaciones = notificacionesValidas;
-            db.save();
+            if (typeof db.setNotificaciones === 'function') {
+                db.setNotificaciones(notificacionesValidas);
+            } else {
+                db.data.notificaciones = notificacionesValidas;
+                db.save();
+            }
         }
     }
 }, 500);

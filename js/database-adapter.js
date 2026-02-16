@@ -780,6 +780,25 @@ class SupabaseDatabase {
         SupabaseClient.insert('notificaciones', { tipo, titulo, mensaje });
     }
 
+    clearNotificaciones() {
+        this.data.notificaciones = [];
+        SupabaseClient.deleteAll('notificaciones');
+    }
+
+    removeNotificacion(id) {
+        this.data.notificaciones = (this.data.notificaciones || []).filter(n => n.id !== id);
+        SupabaseClient.remove('notificaciones', id);
+    }
+
+    setNotificaciones(notificaciones) {
+        // Replace in-memory list and remove obsolete ones from Supabase
+        const removedIds = (this.data.notificaciones || [])
+            .filter(n => !notificaciones.find(v => v.id === n.id))
+            .map(n => n.id);
+        this.data.notificaciones = notificaciones;
+        removedIds.forEach(id => SupabaseClient.remove('notificaciones', id));
+    }
+
     // ========================================
     // ESTACIONES DE TRABAJO
     // ========================================
@@ -845,6 +864,20 @@ class SupabaseDatabase {
         return estacion;
     }
 
+    updateEstacion(estacionId, updates) {
+        const index = (this.data.estaciones || []).findIndex(e => e.id === estacionId);
+        if (index !== -1) {
+            this.data.estaciones[index] = { ...this.data.estaciones[index], ...updates };
+            const dbUpdates = {};
+            if (updates.nombre) dbUpdates.nombre = updates.nombre;
+            if (updates.areaPlantaId) dbUpdates.area_planta_id = updates.areaPlantaId;
+            if (updates.operadorId !== undefined) dbUpdates.operador_id = updates.operadorId;
+            SupabaseClient.update('estaciones', estacionId, dbUpdates);
+            return this.data.estaciones[index];
+        }
+        return null;
+    }
+
     deleteEstacion(estacionId) {
         const estacion = (this.data.estaciones || []).find(e => e.id === estacionId);
         if (!estacion) return false;
@@ -873,6 +906,39 @@ class SupabaseDatabase {
     // ========================================
     getEstadoOperadores() { return this.data.estadoOperadores || []; }
     getEstadoOperador(operadorId) { return (this.data.estadoOperadores || []).find(e => e.operadorId === operadorId); }
+
+    addEstadoOperador(estado) {
+        if (!this.data.estadoOperadores) this.data.estadoOperadores = [];
+        const existeIndex = this.data.estadoOperadores.findIndex(e => e.estacionId === estado.estacionId);
+        if (existeIndex !== -1) {
+            this.data.estadoOperadores[existeIndex] = { ...this.data.estadoOperadores[existeIndex], ...estado };
+            SupabaseClient.update('estado_operadores', estado.operadorId, {
+                estacion_id: estado.estacionId,
+                estado: estado.estado || 'inactivo',
+                iniciales: estado.iniciales || '',
+                ultimo_cambio: new Date().toISOString()
+            }, 'operador_id');
+        } else {
+            this.data.estadoOperadores.push(estado);
+            SupabaseClient.insert('estado_operadores', {
+                operador_id: estado.operadorId,
+                estacion_id: estado.estacionId,
+                estado: estado.estado || 'inactivo',
+                iniciales: estado.iniciales || '',
+                ultimo_cambio: new Date().toISOString()
+            });
+        }
+        return estado;
+    }
+
+    deleteEstadoOperador(estacionId) {
+        if (!this.data.estadoOperadores) return;
+        const estado = this.data.estadoOperadores.find(e => e.estacionId === estacionId);
+        this.data.estadoOperadores = this.data.estadoOperadores.filter(e => e.estacionId !== estacionId);
+        if (estado && estado.operadorId) {
+            SupabaseClient.remove('estado_operadores', estado.operadorId, 'operador_id');
+        }
+    }
 
     updateEstadoOperador(operadorId, updates) {
         const index = (this.data.estadoOperadores || []).findIndex(e => e.operadorId === operadorId);
