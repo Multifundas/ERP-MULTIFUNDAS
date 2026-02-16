@@ -1958,8 +1958,8 @@ function limpiarTodosLosDatos() {
         auditoria: []
     };
 
-    // Guardar DB vacía
-    localStorage.setItem('multifundas_db', JSON.stringify(dbVacia));
+    // Guardar DB vacía (usar DB_KEY correcto: 'erp_multifundas_db')
+    localStorage.setItem(DB_KEY, JSON.stringify(dbVacia));
 
     // 2. Limpiar claves de sincronización entre paneles
     const clavesALimpiar = [
