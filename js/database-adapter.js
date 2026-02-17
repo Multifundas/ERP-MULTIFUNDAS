@@ -271,7 +271,9 @@ class SupabaseDatabase {
         if (c.nombreComercial !== undefined) mapped.nombre_comercial = c.nombreComercial;
         if (c.razonSocial !== undefined) mapped.razon_social = c.razonSocial;
         if (c.rfc !== undefined) mapped.rfc = c.rfc;
-        if (c.tipo !== undefined) mapped.tipo = c.tipo;
+        // NOTA: 'tipo' se omite del mapping a DB porque la columna puede no existir aún.
+        // Ejecutar sql/012_add_tipo_column.sql para habilitarla.
+        // Una vez ejecutado, descomentar: if (c.tipo !== undefined) mapped.tipo = c.tipo;
         if (c.contacto !== undefined) mapped.contacto = c.contacto;
         if (c.telefono !== undefined) mapped.telefono = c.telefono;
         if (c.telefonoAlt !== undefined) mapped.telefono_alt = c.telefonoAlt;
