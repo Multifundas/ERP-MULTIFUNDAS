@@ -1003,12 +1003,16 @@ function loadDataFromERP() {
             if (m.operadores && m.operadores.length > 0) {
                 const antes = m.operadores.length;
                 m.operadores = m.operadores.filter(op => operadorIdsValidos.has(op.id));
-                if (m.operadores.length === 0 && m.estado === 'activo') {
+                if (m.operadores.length === 0 && m.estado !== 'inactivo') {
                     m.estado = 'inactivo';
                 }
                 if (m.operadores.length < antes) {
                     DEBUG_MODE && console.log(`[SUPERVISORA] Limpieza: ${antes - m.operadores.length} operador(es) fantasma removido(s) de ${m.id}`);
                 }
+            }
+            // También resetear estaciones sin operadores que tengan estado incorrecto
+            if ((!m.operadores || m.operadores.length === 0) && m.estado !== 'inactivo') {
+                m.estado = 'inactivo';
             }
         });
         saveEstadoMaquinas();
@@ -1260,17 +1264,20 @@ function loadEstacionesFromERP() {
 
                     // Sincronizar estado desde estadoOperadores del ERP
                     if (estadoOp) {
-                        // Mapear estados del ERP a estados de supervisora
-                        let estado = 'activo';
-                        if (estadoOp.estado === 'inactivo') estado = 'inactivo';
-                        else if (estadoOp.estado === 'retrasado' || estadoOp.estado === 'muy-retrasado') estado = 'retrasado';
-                        else if (estadoOp.estado === 'adelantado') estado = 'adelantado';
-                        else if (estadoOp.estado === 'pausado') estado = 'pausado';
+                        // Solo aplicar estado si el operador existe en el ERP
+                        const operadorExiste = estadoOp.operadorId && supervisoraState.operadores.some(o => o.id === estadoOp.operadorId);
 
-                        maquina.estado = estado;
+                        if (operadorExiste) {
+                            // Mapear estados del ERP a estados de supervisora
+                            let estado = 'activo';
+                            if (estadoOp.estado === 'inactivo') estado = 'inactivo';
+                            else if (estadoOp.estado === 'retrasado' || estadoOp.estado === 'muy-retrasado') estado = 'retrasado';
+                            else if (estadoOp.estado === 'adelantado') estado = 'adelantado';
+                            else if (estadoOp.estado === 'pausado') estado = 'pausado';
 
-                        // Si hay estadoOp, buscar el operador y agregarlo si no está ya
-                        if (estadoOp.operadorId) {
+                            maquina.estado = estado;
+
+                            // Agregar el operador si no está ya
                             const operador = supervisoraState.operadores.find(o => o.id === estadoOp.operadorId);
                             if (operador && !maquina.operadores.some(op => op.id === operador.id)) {
                                 maquina.operadores.push({
@@ -8236,9 +8243,10 @@ function actualizarDatosDeOperadoras() {
     Object.values(supervisoraState.maquinas).forEach(m => {
         if (m.operadores && m.operadores.length > 0) {
             m.operadores = m.operadores.filter(op => idsValidos.has(op.id));
-            if (m.operadores.length === 0 && m.estado === 'activo') {
-                m.estado = 'inactivo';
-            }
+        }
+        // Resetear estado si no tiene operadores válidos
+        if ((!m.operadores || m.operadores.length === 0) && m.estado !== 'inactivo') {
+            m.estado = 'inactivo';
         }
     });
 
