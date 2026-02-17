@@ -240,8 +240,10 @@ function renderLayoutInSupervisora(layout) {
     };
 
     // Primero renderizar las areas (fondo)
-    const areas = layout.elements.filter(e => e.type === 'area');
-    const estaciones = layout.elements.filter(e => e.type !== 'area');
+    // Un elemento tipo 'area' con stationIds personalizados es una estación de trabajo, no fondo
+    const tieneStationIds = (e) => e.stationIds && e.stationIds.length > 0 && !(e.stationIds.length === 1 && e.stationIds[0] === e.id);
+    const areas = layout.elements.filter(e => e.type === 'area' && !tieneStationIds(e));
+    const estaciones = layout.elements.filter(e => e.type !== 'area' || tieneStationIds(e));
 
     // Renderizar areas como zonas de fondo
     areas.forEach(element => {
@@ -624,7 +626,8 @@ function actualizarEstacionesEnMapa() {
     if (!container) return;
 
     // Verificar que el DOM ya tiene estaciones renderizadas
-    const estaciones = layout.elements.filter(e => e.type !== 'area');
+    const tieneStationIds = (e) => e.stationIds && e.stationIds.length > 0 && !(e.stationIds.length === 1 && e.stationIds[0] === e.id);
+    const estaciones = layout.elements.filter(e => e.type !== 'area' || tieneStationIds(e));
 
     // Fallback: si no hay estaciones en el layout o el contenedor está vacío, render completo
     if (estaciones.length === 0 || container.children.length === 0) {
@@ -1220,8 +1223,9 @@ function loadEstacionesFromERP() {
 
         // Sincronizar con el layout si existe
         if (supervisoraState.layout && supervisoraState.layout.elements) {
+            const tieneStationIdsERP = (e) => e.stationIds && e.stationIds.length > 0 && !(e.stationIds.length === 1 && e.stationIds[0] === e.id);
             supervisoraState.layout.elements.forEach(element => {
-                if (element.type !== 'area') {
+                if (element.type !== 'area' || tieneStationIdsERP(element)) {
                     // Buscar estacion correspondiente en el ERP
                     const estacionERP = findEstacionERP(element.id, element.name);
                     const estadoOp = estacionERP ?
