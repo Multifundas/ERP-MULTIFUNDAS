@@ -997,6 +997,22 @@ function loadDataFromERP() {
         // Cargar asignaciones existentes de localStorage
         cargarAsignacionesExistentes();
 
+        // Limpiar operadores fantasma: quitar de maquinas los operadores que ya no existen en el ERP
+        const operadorIdsValidos = new Set(supervisoraState.operadores.map(o => o.id));
+        Object.values(supervisoraState.maquinas).forEach(m => {
+            if (m.operadores && m.operadores.length > 0) {
+                const antes = m.operadores.length;
+                m.operadores = m.operadores.filter(op => operadorIdsValidos.has(op.id));
+                if (m.operadores.length === 0 && m.estado === 'activo') {
+                    m.estado = 'inactivo';
+                }
+                if (m.operadores.length < antes) {
+                    DEBUG_MODE && console.log(`[SUPERVISORA] Limpieza: ${antes - m.operadores.length} operador(es) fantasma removido(s) de ${m.id}`);
+                }
+            }
+        });
+        saveEstadoMaquinas();
+
         // Re-renderizar el layout con los datos sincronizados
         if (supervisoraState.layout) {
             renderLayoutInSupervisora(supervisoraState.layout);
@@ -8212,6 +8228,19 @@ function actualizarDatosDeOperadoras() {
 
     // 3.5 Actualizar dependencias después de verificar completados
     actualizarDependenciasProcesos();
+
+    // 3.6 Limpiar operadores fantasma (que ya no existen en el ERP)
+    if (supervisoraState.operadores.length > 0) {
+        const idsValidos = new Set(supervisoraState.operadores.map(o => o.id));
+        Object.values(supervisoraState.maquinas).forEach(m => {
+            if (m.operadores && m.operadores.length > 0) {
+                m.operadores = m.operadores.filter(op => idsValidos.has(op.id));
+                if (m.operadores.length === 0 && m.estado === 'activo') {
+                    m.estado = 'inactivo';
+                }
+            }
+        });
+    }
 
     // 4. Actualizar UI
     updateStats();
