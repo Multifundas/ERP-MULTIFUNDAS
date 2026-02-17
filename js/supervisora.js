@@ -2851,6 +2851,10 @@ function showEstacionDetalle(estacionId) {
             })()}
             <div class="info-row">
                 <label>Operadores (${operadoresCount}):</label>
+                <span>${operadoresCount > 0 ? maquina.operadores.map(op => {
+                    const opDB = supervisoraState.operadores.find(o => o.id === op.id);
+                    return S(opDB?.nombre || op.nombre || 'Operador');
+                }).join(', ') : 'Ninguno'}</span>
             </div>
             <div class="detalle-operadores-list">
                 ${operadoresListHTML}
