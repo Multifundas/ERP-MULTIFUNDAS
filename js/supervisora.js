@@ -339,9 +339,18 @@ function renderLayoutInSupervisora(layout) {
 
         const icono = tipoIconos[element.type] || 'fa-cog';
 
-        // Determinar estado general del elemento (activo si cualquier posicion esta activa)
-        const anyActive = stationIds.some(sid => supervisoraState.maquinas[sid]?.estado === 'activo');
-        const elementEstado = anyActive ? 'activo' : 'inactivo';
+        // Determinar estado general del elemento
+        // Solo mostrar activo si tiene al menos un operador asignado
+        const totalOpsElement = stationIds.reduce((sum, sid) => sum + (supervisoraState.maquinas[sid]?.operadores?.length || 0), 0);
+        let elementEstado = 'inactivo';
+        if (totalOpsElement > 0) {
+            // Usar el estado más relevante de las posiciones
+            const estados = stationIds.map(sid => supervisoraState.maquinas[sid]?.estado).filter(Boolean);
+            if (estados.includes('retrasado')) elementEstado = 'retrasado';
+            else if (estados.includes('activo')) elementEstado = 'activo';
+            else if (estados.includes('pausado')) elementEstado = 'pausado';
+            else if (estados.includes('adelantado')) elementEstado = 'adelantado';
+        }
 
         const el = document.createElement('div');
         el.className = `estacion-element ${element.type} ${elementEstado}${isMultiStation ? ' multi-station' : ''}`;
@@ -688,15 +697,16 @@ function actualizarEstacionesEnMapa() {
         const estaTrabajando = estadoMaquinaLS?.estado === 'trabajando' || estadoMaquinaLS?.procesoActivo;
         const operadoresCount = maquinaState.operadores?.length || 0;
 
-        // Recalcular clase completa del elemento
-        let newClassName = `estacion-element ${element.type} ${maquinaState.estado}`;
+        // Recalcular estado visual: forzar inactivo si no tiene operadores
+        const estadoVisual = operadoresCount > 0 ? maquinaState.estado : 'inactivo';
+        let newClassName = `estacion-element ${element.type} ${estadoVisual}`;
         if (operadoresCount > 1) newClassName += ' multi-operadores';
         if (tiempoMuertoActivo) newClassName += ' tiene-tiempo-muerto';
         if (el.className !== newClassName) {
             el.className = newClassName;
         }
-        if (oldEstado !== maquinaState.estado) {
-            el.setAttribute('data-estado', maquinaState.estado);
+        if (oldEstado !== estadoVisual) {
+            el.setAttribute('data-estado', estadoVisual);
         }
 
         // --- Recalcular progreso ---
@@ -718,7 +728,7 @@ function actualizarEstacionesEnMapa() {
         }
 
         // --- Indicador de actividad ---
-        const activityIndicator = maquinaState.estado === 'activo' ?
+        const activityIndicator = estadoVisual === 'activo' ?
             '<div class="activity-pulse"></div>' : '';
 
         // --- Tiempo muerto HTML ---
@@ -819,8 +829,8 @@ function actualizarEstacionesEnMapa() {
                 <div class="estacion-id-badge">${element.id}</div>
                 <div class="estacion-badges">
                     ${operadoresCount > 0 ? `<span class="operadores-count-badge">${operadoresCount}</span>` : ''}
-                    <div class="estacion-estado-indicator ${maquinaState.estado}">
-                        <i class="fas ${getEstadoIcon(maquinaState.estado)}"></i>
+                    <div class="estacion-estado-indicator ${estadoVisual}">
+                        <i class="fas ${getEstadoIcon(estadoVisual)}"></i>
                     </div>
                 </div>
             </div>
@@ -836,7 +846,7 @@ function actualizarEstacionesEnMapa() {
                 ` : ''}
             </div>
             ${progresoHTML}
-            <div class="estacion-glow ${maquinaState.estado}"></div>
+            <div class="estacion-glow ${estadoVisual}"></div>
         `;
     });
 
