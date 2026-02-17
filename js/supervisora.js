@@ -8150,6 +8150,7 @@ function actualizarDatosDeOperadoras() {
     });
 
     // 2. Leer estado de máquinas actualizado por operadoras
+    const idsValidosPolling = new Set(supervisoraState.operadores.map(o => o.id));
     const estadoMaquinas = safeLocalGet('estado_maquinas', {});
     Object.entries(estadoMaquinas).forEach(([estacionId, estado]) => {
         if (supervisoraState.maquinas[estacionId]) {
@@ -8174,7 +8175,7 @@ function actualizarDatosDeOperadoras() {
                 supervisoraState.maquinas[estacionId].estado = 'pausado';
                 supervisoraState.maquinas[estacionId].procesoSuspendido = estado.procesoSuspendido;
                 supervisoraState.maquinas[estacionId].piezasSuspendidas = estado.piezasSuspendidas;
-                if (estado.operadoraNombre) {
+                if (estado.operadoraNombre && idsValidosPolling.has(estado.operadoraId)) {
                     supervisoraState.maquinas[estacionId].operadores = [{
                         id: estado.operadoraId,
                         nombre: estado.operadoraNombre
@@ -8188,8 +8189,8 @@ function actualizarDatosDeOperadoras() {
                 if (estado.estado === 'trabajando') {
                     supervisoraState.maquinas[estacionId].estado = 'activo';
                 }
-                // Sincronizar operador desde estado_maquinas
-                if (estado.operadorNombre && estado.operadorId) {
+                // Sincronizar operador desde estado_maquinas (solo si existe en ERP)
+                if (estado.operadorNombre && estado.operadorId && idsValidosPolling.has(estado.operadorId)) {
                     if (!supervisoraState.maquinas[estacionId].operadores) {
                         supervisoraState.maquinas[estacionId].operadores = [];
                     }
@@ -8204,8 +8205,8 @@ function actualizarDatosDeOperadoras() {
                         });
                     }
                 }
-                // También manejar el formato antiguo
-                if (estado.operadoraNombre && estado.operadoraId) {
+                // También manejar el formato antiguo (solo si existe en ERP)
+                if (estado.operadoraNombre && estado.operadoraId && idsValidosPolling.has(estado.operadoraId)) {
                     if (!supervisoraState.maquinas[estacionId].operadores) {
                         supervisoraState.maquinas[estacionId].operadores = [];
                     }
@@ -8230,17 +8231,16 @@ function actualizarDatosDeOperadoras() {
     actualizarDependenciasProcesos();
 
     // 3.6 Limpiar operadores fantasma (que ya no existen en el ERP)
-    if (supervisoraState.operadores.length > 0) {
-        const idsValidos = new Set(supervisoraState.operadores.map(o => o.id));
-        Object.values(supervisoraState.maquinas).forEach(m => {
-            if (m.operadores && m.operadores.length > 0) {
-                m.operadores = m.operadores.filter(op => idsValidos.has(op.id));
-                if (m.operadores.length === 0 && m.estado === 'activo') {
-                    m.estado = 'inactivo';
-                }
+    // Si no hay operadores registrados, limpiar TODOS los operadores de las maquinas
+    const idsValidos = new Set(supervisoraState.operadores.map(o => o.id));
+    Object.values(supervisoraState.maquinas).forEach(m => {
+        if (m.operadores && m.operadores.length > 0) {
+            m.operadores = m.operadores.filter(op => idsValidos.has(op.id));
+            if (m.operadores.length === 0 && m.estado === 'activo') {
+                m.estado = 'inactivo';
             }
-        });
-    }
+        }
+    });
 
     // 4. Actualizar UI
     updateStats();
@@ -8729,6 +8729,9 @@ setTimeout(actualizarDatosDeOperadoras, 2000);
  * Lee el mapa de estaciones y estado_maquinas de localStorage
  */
 function sincronizarOperadoresDesdeAdmin() {
+    // Solo sincronizar si hay operadores registrados en el ERP
+    const idsValidosSync = new Set(supervisoraState.operadores.map(o => o.id));
+
     // Leer mapa de estaciones desde Admin
     const mapaEstaciones = safeLocalGet('mapa_estaciones_planta', {});
 
@@ -8739,8 +8742,8 @@ function sincronizarOperadoresDesdeAdmin() {
     Object.entries(mapaEstaciones).forEach(([estacionId, estacion]) => {
         // Si la estación existe en el layout de supervisora
         if (supervisoraState.maquinas[estacionId]) {
-            // Si tiene operador asignado
-            if (estacion.operadorId && estacion.operadorNombre) {
+            // Si tiene operador asignado Y el operador existe en el ERP
+            if (estacion.operadorId && estacion.operadorNombre && idsValidosSync.has(estacion.operadorId)) {
                 // Inicializar array de operadores si no existe
                 if (!supervisoraState.maquinas[estacionId].operadores) {
                     supervisoraState.maquinas[estacionId].operadores = [];
@@ -8761,8 +8764,8 @@ function sincronizarOperadoresDesdeAdmin() {
                 }
             }
         } else {
-            // La estación no existe en el layout, crear entrada en maquinas
-            if (estacion.operadorId) {
+            // La estación no existe en el layout, crear entrada en maquinas solo si operador es válido
+            if (estacion.operadorId && idsValidosSync.has(estacion.operadorId)) {
                 supervisoraState.maquinas[estacionId] = {
                     id: estacionId,
                     tipo: 'estacion',
@@ -8785,7 +8788,7 @@ function sincronizarOperadoresDesdeAdmin() {
 
     // También sincronizar desde estado_maquinas (datos más recientes)
     Object.entries(estadoMaquinas).forEach(([estacionId, estado]) => {
-        if (supervisoraState.maquinas[estacionId] && estado.operadorId) {
+        if (supervisoraState.maquinas[estacionId] && estado.operadorId && idsValidosSync.has(estado.operadorId)) {
             if (!supervisoraState.maquinas[estacionId].operadores) {
                 supervisoraState.maquinas[estacionId].operadores = [];
             }
