@@ -1150,7 +1150,7 @@ class SupabaseDatabase {
                 let iniciales = estadoOp?.iniciales || (operador ? getIniciales(operador.nombre) : null);
 
                 return {
-                    id: estacion.id, nombre: estacion.nombre,
+                    id: estacion.id, nombre: estacion.nombre || estacion.id,
                     operadorId: estacion.operadorId, operadorNombre: operador ? operador.nombre : null,
                     iniciales, estado: estadoOp ? estadoOp.estado : (operador ? 'inactivo' : 'empty'),
                     efectividad: estadoOp ? estadoOp.efectividad : 0

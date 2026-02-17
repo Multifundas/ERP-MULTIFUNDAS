@@ -1488,7 +1488,7 @@ function showKPIDetalle(tipo) {
 // ========================================
 // DETALLE DE POSICIÓN EN MAPA DE PLANTA
 // ========================================
-function showPosicionDetalle(estacionId) {
+async function showPosicionDetalle(estacionId) {
     DEBUG_MODE && console.log('[showPosicionDetalle] Iniciando para estación:', estacionId);
 
     try {
@@ -1504,7 +1504,8 @@ function showPosicionDetalle(estacionId) {
         const personal = db.getPersonal() || [];
         const estadoOps = db.getEstadoOperadores() || [];
         const produccionActiva = db.getProduccionActiva() || [];
-        const historialProduccion = (db.getHistorialProduccion && db.getHistorialProduccion()) || [];
+        const rawHistorial = db.getHistorialProduccion ? db.getHistorialProduccion() : [];
+        const historialProduccion = Array.isArray(rawHistorial) ? rawHistorial : (await rawHistorial || []);
         const pedidos = db.getPedidos() || [];
         const productos = db.getProductos() || [];
         const procesos = db.getProcesos() || [];

@@ -422,7 +422,8 @@ function loadPlantMap() {
             const estaTrabajando = estadoMaquina?.estado === 'trabajando' || estadoMaquina?.procesoActivo ||
                                    maquinaSupervisora?.estado === 'trabajando' || procesosActivos.some(p => p.estado === 'trabajando' || p.estado === 'en_proceso');
             const piezasHoy = estadoMaquina?.piezasHoy || maquinaSupervisora?.piezasCompletadas || 0;
-            const operadorNombre = asignacion?.operadoraNombre || estadoMaquina?.operadoraNombre || maquinaSupervisora?.operadoraNombre || pos.operadorNombre;
+            const _rawOpNombre = asignacion?.operadoraNombre || estadoMaquina?.operadoraNombre || maquinaSupervisora?.operadoraNombre || pos.operadorNombre;
+            const operadorNombre = (_rawOpNombre && _rawOpNombre !== 'undefined') ? _rawOpNombre : null;
 
             // Determinar estado visual
             let estado = pos.estado || 'empty';
@@ -459,11 +460,11 @@ function loadPlantMap() {
                 ? `${S(operadorNombre || 'Operador')} - ${S(procesoTooltip)}${piezasHoy > 0 ? ` (${piezasHoy} pzas)` : ''}`
                 : operadorNombre
                     ? `${S(operadorNombre)} - Sin proceso`
-                    : S(pos.nombre);
+                    : S(pos.nombre || pos.id);
 
             if (!operadorNombre && !tieneAsignacion) {
                 return `
-                    <div class="workstation empty clickable" data-tooltip="${S(pos.nombre)}" data-id="${pos.id}" onclick="showPosicionDetalle('${pos.id}')">
+                    <div class="workstation empty clickable" data-tooltip="${S(pos.nombre || pos.id)}" data-id="${pos.id}" onclick="showPosicionDetalle('${pos.id}')">
                         <span class="workstation-code">${pos.id}</span>
                     </div>
                 `;

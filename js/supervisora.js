@@ -2654,6 +2654,10 @@ function showEstacionDetalle(estacionId) {
     // Generar lista de operadores con proceso actual de la estación
     const operadoresListHTML = operadoresCount > 0
         ? maquina.operadores.map(op => {
+            // Buscar nombre completo desde la base de datos de personal
+            const operadorDB = supervisoraState.operadores.find(o => o.id === op.id);
+            const nombreCompleto = operadorDB?.nombre || op.nombre || 'Operador';
+
             // Usar el proceso de la estación (no cola individual del operador)
             const tieneProcesoActivo = procesoActualEstacion ? true : false;
 
@@ -2677,9 +2681,10 @@ function showEstacionDetalle(estacionId) {
             return `
             <div class="detalle-operador-item ${estadoOperador}">
                 <div class="detalle-op-main">
-                    <span class="detalle-op-avatar" style="border-color: ${colorEstado}">${getIniciales(op.nombre)}</span>
+                    <span class="detalle-op-avatar" style="border-color: ${colorEstado}">${getIniciales(nombreCompleto)}</span>
                     <div class="detalle-op-info">
-                        <span class="detalle-op-nombre">${S(op.nombre)}</span>
+                        <span class="detalle-op-nombre">${S(nombreCompleto)}</span>
+                        ${operadorDB?.numEmpleado ? `<span class="detalle-op-num" style="font-size:0.7rem;opacity:0.7">#${S(operadorDB.numEmpleado)}</span>` : ''}
                         ${tieneProcesoActivo ? `
                             <span class="detalle-op-proceso ${estadoOperador}">
                                 <i class="fas ${estaTrabajandoEstacion ? 'fa-play-circle' : 'fa-hourglass-half'}"></i>
