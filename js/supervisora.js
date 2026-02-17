@@ -3436,24 +3436,32 @@ function loadEstadoMaquinas() {
     if (saved) {
         try {
             const maquinas = JSON.parse(saved);
+            const idsOperadoresValidos = new Set(supervisoraState.operadores.map(o => o.id));
             // Merge preservando operadores del ERP
             for (const [id, savedMaquina] of Object.entries(maquinas)) {
                 if (supervisoraState.maquinas[id]) {
                     // Preservar operadores si ya fueron cargados del ERP
                     const erpOperadores = supervisoraState.maquinas[id].operadores || [];
                     Object.assign(supervisoraState.maquinas[id], savedMaquina);
-                    // Fusionar operadores del ERP con los guardados
-                    if (erpOperadores.length > 0) {
-                        const savedOps = savedMaquina.operadores || [];
-                        const fusionados = [...erpOperadores];
-                        savedOps.forEach(op => {
-                            if (!fusionados.some(e => e.id === op.id)) {
-                                fusionados.push(op);
-                            }
-                        });
-                        supervisoraState.maquinas[id].operadores = fusionados;
+                    // Fusionar operadores del ERP con los guardados, filtrando los inválidos
+                    const savedOps = (savedMaquina.operadores || []).filter(op => idsOperadoresValidos.has(op.id));
+                    const fusionados = [...erpOperadores];
+                    savedOps.forEach(op => {
+                        if (!fusionados.some(e => e.id === op.id)) {
+                            fusionados.push(op);
+                        }
+                    });
+                    supervisoraState.maquinas[id].operadores = fusionados;
+                    // Si no quedaron operadores válidos, forzar inactivo
+                    if (fusionados.length === 0 && supervisoraState.maquinas[id].estado !== 'inactivo') {
+                        supervisoraState.maquinas[id].estado = 'inactivo';
                     }
                 } else {
+                    // Estación guardada que no existe en layout actual — filtrar operadores
+                    savedMaquina.operadores = (savedMaquina.operadores || []).filter(op => idsOperadoresValidos.has(op.id));
+                    if (savedMaquina.operadores.length === 0 && savedMaquina.estado !== 'inactivo') {
+                        savedMaquina.estado = 'inactivo';
+                    }
                     supervisoraState.maquinas[id] = savedMaquina;
                 }
             }
