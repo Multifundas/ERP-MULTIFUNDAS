@@ -523,7 +523,7 @@ function renderLayoutInSupervisora(layout) {
             }
         }
 
-        const activityIndicator = anyActive ?
+        const activityIndicator = elementEstado === 'activo' ?
             '<div class="activity-pulse"></div>' : '';
 
         // Verificar si tiene tiempo muerto activo (usar element.id o primer stationId)
