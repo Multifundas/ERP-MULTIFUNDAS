@@ -188,7 +188,7 @@ function showNuevoMaterialModal() {
         </form>
     `;
 
-    openModal('Nuevo Material', content, () => {
+    openModal('Nuevo Material', content, async () => {
         const form = document.getElementById('nuevoMaterialForm');
         const material = {
             nombre: form.querySelector('[name="nombre"]').value,
@@ -197,7 +197,7 @@ function showNuevoMaterialModal() {
             proveedor: form.querySelector('[name="proveedor"]').value || ''
         };
 
-        db.addMaterial(material);
+        await db.addMaterial(material);
         loadCosteo();
     });
 }
@@ -1948,7 +1948,7 @@ function showNuevoMaterialEnhancedModal() {
         </form>
     `;
 
-    openModal('Nuevo Material', content, () => {
+    openModal('Nuevo Material', content, async () => {
         const form = document.getElementById('nuevoMaterialEnhancedForm');
         const formData = new FormData(form);
 
@@ -1961,7 +1961,7 @@ function showNuevoMaterialEnhancedModal() {
             stock: parseInt(formData.get('stock')) || 0
         };
 
-        db.addMaterial(material);
+        await db.addMaterial(material);
         loadCosteo();
         closeModal();
         showToast('Material agregado');

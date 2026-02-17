@@ -780,7 +780,7 @@ function updateProductoSubfamilias() {
     }
 }
 
-function saveProducto() {
+async function saveProducto() {
     const form = document.getElementById('nuevoProductoForm');
     const formData = new FormData(form);
 
@@ -846,7 +846,7 @@ function saveProducto() {
     producto.costosMO.total = producto.costosMO.corte + producto.costosMO.costura +
                               producto.costosMO.serigrafia + producto.costosMO.empaque;
 
-    const nuevoProducto = db.addProducto(producto);
+    const nuevoProducto = await db.addProducto(producto);
     loadProductos();
 
     // Preguntar si quiere configurar procesos
@@ -1421,7 +1421,7 @@ function duplicarProducto(id) {
         </form>
     `;
 
-    openModal('Duplicar Producto', content, () => {
+    openModal('Duplicar Producto', content, async () => {
         const form = document.getElementById('duplicarProductoForm');
 
         // Recolectar lista de materiales
@@ -1483,7 +1483,7 @@ function duplicarProducto(id) {
             version: 1
         };
 
-        db.addProducto(nuevoProducto);
+        await db.addProducto(nuevoProducto);
         showToast('Producto duplicado exitosamente', 'success');
         loadProductos();
     });

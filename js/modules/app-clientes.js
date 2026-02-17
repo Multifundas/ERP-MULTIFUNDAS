@@ -215,7 +215,7 @@ function showNuevoClienteModal() {
     }, 100);
 }
 
-function saveCliente() {
+async function saveCliente() {
     const form = document.getElementById('nuevoClienteForm');
     const formData = new FormData(form);
 
@@ -231,7 +231,7 @@ function saveCliente() {
         usuario: formData.get('usuario') || null
     };
 
-    db.addCliente(cliente);
+    await db.addCliente(cliente);
     loadClientes();
 }
 
@@ -527,7 +527,7 @@ function showNuevoClienteEnhancedModal() {
         </form>
     `;
 
-    openModal('Nuevo Cliente', content, () => {
+    openModal('Nuevo Cliente', content, async () => {
         const form = document.getElementById('nuevoClienteEnhancedForm');
         const formData = new FormData(form);
 
@@ -554,7 +554,7 @@ function showNuevoClienteEnhancedModal() {
             usuario: formData.get('usuario') || null
         };
 
-        db.addCliente(cliente);
+        await db.addCliente(cliente);
         loadClientes();
         closeModal();
         showToast('Cliente agregado correctamente');

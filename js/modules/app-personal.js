@@ -975,7 +975,7 @@ function showNuevoEmpleadoModal() {
     }, 100);
 }
 
-function guardarNuevoEmpleado() {
+async function guardarNuevoEmpleado() {
     const form = document.getElementById('nuevoEmpleadoForm');
     if (!form.checkValidity()) {
         form.reportValidity();
@@ -1050,7 +1050,7 @@ function guardarNuevoEmpleado() {
         permisos: permisos
     };
 
-    const nuevoEmpleado = db.addEmpleado(empleado);
+    const nuevoEmpleado = await db.addEmpleado(empleado);
 
     // Asignar estaciones y crear estado de operador
     posiciones.forEach(posId => {

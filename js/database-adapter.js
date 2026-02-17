@@ -395,28 +395,26 @@ class SupabaseDatabase {
         return this.data.clientes.find(c => c.id === id);
     }
 
-    addCliente(cliente) {
+    async addCliente(cliente) {
         const dbCliente = this._mapClienteToDB(cliente);
         dbCliente.fecha_alta = new Date().toISOString().split('T')[0];
 
-        // Write-through: actualizar cache inmediatamente con ID temporal
+        // Write-through: insertar en Supabase y obtener ID real
+        const result = await SupabaseClient.insert('clientes', dbCliente);
+        if (result) {
+            const mapped = this._mapClienteFromDB(result);
+            if (!mapped.articulosFrecuentes) mapped.articulosFrecuentes = [];
+            this.data.clientes.push(mapped);
+            this.addAuditoria('Nuevo cliente', `Cliente "${cliente.nombreComercial}" creado`, 'cliente', mapped.id);
+            return mapped;
+        }
+
+        // Fallback: si Supabase falla, guardar en cache con ID temporal
         const tempId = Math.max(...this.data.clientes.map(c => c.id), 0) + 1;
         const cached = { ...cliente, id: tempId, fechaAlta: dbCliente.fecha_alta };
         if (!cached.articulosFrecuentes) cached.articulosFrecuentes = [];
         this.data.clientes.push(cached);
-
-        // Async write a Supabase
-        SupabaseClient.insert('clientes', dbCliente).then(result => {
-            if (result) {
-                // Actualizar ID real
-                const idx = this.data.clientes.findIndex(c => c.id === tempId);
-                if (idx !== -1) {
-                    this.data.clientes[idx] = this._mapClienteFromDB(result);
-                }
-            }
-        });
-
-        this.addAuditoria('Nuevo cliente', `Cliente "${cliente.nombreComercial}" creado`, 'cliente', tempId);
+        console.error('[SupabaseDB] addCliente falló, usando ID temporal:', tempId);
         return cached;
     }
 
@@ -456,25 +454,25 @@ class SupabaseDatabase {
         return this.data.productos.find(p => p.id === idNum || p.id === id);
     }
 
-    addProducto(producto) {
+    async addProducto(producto) {
         const dbProducto = this._mapProductoToDB(producto);
         dbProducto.version = 1;
         dbProducto.activo = true;
 
+        // Write-through: insertar en Supabase y obtener ID real
+        const result = await SupabaseClient.insert('productos', dbProducto);
+        if (result) {
+            const mapped = { ...this._mapProductoFromDB(result), rutaProcesos: producto.rutaProcesos || [] };
+            this.data.productos.push(mapped);
+            this.addAuditoria('Nuevo producto', `Producto "${producto.nombre}" creado`, 'producto', mapped.id);
+            return mapped;
+        }
+
+        // Fallback: si Supabase falla, guardar en cache con ID temporal
         const tempId = Math.max(...this.data.productos.map(p => p.id), 0) + 1;
         const cached = { ...producto, id: tempId, version: 1, activo: true, rutaProcesos: producto.rutaProcesos || [] };
         this.data.productos.push(cached);
-
-        SupabaseClient.insert('productos', dbProducto).then(result => {
-            if (result) {
-                const idx = this.data.productos.findIndex(p => p.id === tempId);
-                if (idx !== -1) {
-                    this.data.productos[idx] = { ...this._mapProductoFromDB(result), rutaProcesos: cached.rutaProcesos };
-                }
-            }
-        });
-
-        this.addAuditoria('Nuevo producto', `Producto "${producto.nombre}" creado`, 'producto', tempId);
+        console.error('[SupabaseDB] addProducto falló, usando ID temporal:', tempId);
         return cached;
     }
 
@@ -531,38 +529,40 @@ class SupabaseDatabase {
         return this.data.pedidos.filter(p => p.clienteId === clienteId);
     }
 
-    addPedido(pedido) {
+    async addPedido(pedido) {
         const dbPedido = this._mapPedidoToDB(pedido);
         dbPedido.estado = 'pendiente';
         dbPedido.fecha_carga = new Date().toISOString().split('T')[0];
 
+        const result = await SupabaseClient.insert('pedidos', dbPedido);
+        if (result) {
+            const mapped = { ...this._mapPedidoFromDB(result), productos: pedido.productos || [] };
+            this.data.pedidos.push(mapped);
+
+            // Insertar productos del pedido con el ID real
+            if (mapped.productos && mapped.productos.length > 0) {
+                const dbProds = mapped.productos.map(pp => ({
+                    pedido_id: result.id,
+                    producto_id: pp.productoId,
+                    producto_nombre: pp.productoNombre || pp.nombre,
+                    cantidad: pp.cantidad,
+                    completadas: pp.completadas || 0,
+                    precio_unitario: pp.precioUnitario || 0,
+                    notas: pp.notas,
+                    avance_procesos: pp.avanceProcesos || []
+                }));
+                await SupabaseClient.insertMany('pedido_productos', dbProds);
+            }
+
+            this.addAuditoria('Nuevo pedido', `Pedido #${mapped.id} creado para cliente ${pedido.clienteId}`, 'pedido', mapped.id);
+            return mapped;
+        }
+
+        // Fallback: si Supabase falla, guardar en cache con ID temporal
         const tempId = Math.max(...this.data.pedidos.map(p => p.id), 0) + 1;
         const cached = { ...pedido, id: tempId, estado: 'pendiente', fechaCarga: dbPedido.fecha_carga, productos: pedido.productos || [] };
         this.data.pedidos.push(cached);
-
-        SupabaseClient.insert('pedidos', dbPedido).then(async result => {
-            if (result) {
-                const idx = this.data.pedidos.findIndex(p => p.id === tempId);
-                if (idx !== -1) {
-                    this.data.pedidos[idx] = { ...this._mapPedidoFromDB(result), productos: cached.productos };
-                    // Insertar productos del pedido
-                    if (cached.productos && cached.productos.length > 0) {
-                        const dbProds = cached.productos.map(pp => ({
-                            pedido_id: result.id,
-                            producto_id: pp.productoId,
-                            producto_nombre: pp.productoNombre || pp.nombre,
-                            cantidad: pp.cantidad,
-                            completadas: pp.completadas || 0,
-                            precio_unitario: pp.precioUnitario || 0,
-                            notas: pp.notas,
-                            avance_procesos: pp.avanceProcesos || []
-                        }));
-                        await SupabaseClient.insertMany('pedido_productos', dbProds);
-                    }
-                }
-            }
-        });
-
+        console.error('[SupabaseDB] addPedido falló, usando ID temporal:', tempId);
         this.addAuditoria('Nuevo pedido', `Pedido #${tempId} creado para cliente ${pedido.clienteId}`, 'pedido', tempId);
         return cached;
     }
@@ -730,23 +730,27 @@ class SupabaseDatabase {
     getPersonalByRol(rol) { return this.data.personal.filter(p => p.rol === rol && p.activo); }
     getEmpleado(id) { return this.data.personal.find(p => p.id === id); }
 
-    addEmpleado(empleado) {
+    async addEmpleado(empleado) {
+        const dbEmpleado = { ...this._mapPersonalToDB(empleado), activo: true };
+        const result = await SupabaseClient.insert('personal', dbEmpleado);
+        if (result) {
+            const mapped = { ...this._mapPersonalFromDB(result) };
+            this.data.personal.push(mapped);
+
+            // Hash PIN via server-side RPC
+            if (empleado.pin) {
+                SupabaseClient.rpc('set_pin', { p_empleado_id: result.id, p_new_pin: empleado.pin });
+            }
+
+            this.addAuditoria('Nuevo empleado', `Empleado "${empleado.nombre}" agregado`, 'personal', mapped.id);
+            return mapped;
+        }
+
+        // Fallback: si Supabase falla, guardar en cache con ID temporal
         const tempId = Math.max(...this.data.personal.map(p => p.id), 0) + 1;
         const cached = { ...empleado, id: tempId, activo: true };
         this.data.personal.push(cached);
-
-        SupabaseClient.insert('personal', { ...this._mapPersonalToDB(empleado), activo: true }).then(result => {
-            if (result) {
-                const idx = this.data.personal.findIndex(p => p.id === tempId);
-                if (idx !== -1) this.data.personal[idx] = this._mapPersonalFromDB(result);
-
-                // Hash PIN via server-side RPC
-                if (empleado.pin) {
-                    SupabaseClient.rpc('set_pin', { p_empleado_id: result.id, p_new_pin: empleado.pin });
-                }
-            }
-        });
-
+        console.error('[SupabaseDB] addEmpleado falló, usando ID temporal:', tempId);
         this.addAuditoria('Nuevo empleado', `Empleado "${empleado.nombre}" agregado`, 'personal', tempId);
         return cached;
     }
@@ -773,18 +777,21 @@ class SupabaseDatabase {
     getMateriales() { return this.data.materiales; }
     getMaterial(id) { return this.data.materiales.find(m => m.id === id); }
 
-    addMaterial(material) {
+    async addMaterial(material) {
+        const dbMaterial = this._mapMaterialToDB(material);
+        const result = await SupabaseClient.insert('materiales', dbMaterial);
+        if (result) {
+            const mapped = this._mapMaterialFromDB(result);
+            this.data.materiales.push(mapped);
+            this.addAuditoria('Nuevo material', `Material "${material.nombre}" agregado`, 'material', mapped.id);
+            return mapped;
+        }
+
+        // Fallback: si Supabase falla, guardar en cache con ID temporal
         const tempId = Math.max(...this.data.materiales.map(m => m.id), 0) + 1;
         const cached = { ...material, id: tempId };
         this.data.materiales.push(cached);
-
-        SupabaseClient.insert('materiales', this._mapMaterialToDB(material)).then(result => {
-            if (result) {
-                const idx = this.data.materiales.findIndex(m => m.id === tempId);
-                if (idx !== -1) this.data.materiales[idx] = this._mapMaterialFromDB(result);
-            }
-        });
-
+        console.error('[SupabaseDB] addMaterial falló, usando ID temporal:', tempId);
         this.addAuditoria('Nuevo material', `Material "${material.nombre}" agregado`, 'material', tempId);
         return cached;
     }

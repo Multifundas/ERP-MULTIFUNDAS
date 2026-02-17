@@ -387,7 +387,7 @@ function ampliarImagen(src) {
     document.body.appendChild(overlay);
 }
 
-function savePedido() {
+async function savePedido() {
     const form = document.getElementById('nuevoPedidoForm');
     const formData = new FormData(form);
 
@@ -462,7 +462,7 @@ function savePedido() {
     // Limpiar imágenes después de guardar
     imagenesApoyoPedido = [];
 
-    const nuevoPedido = db.addPedido(pedido);
+    const nuevoPedido = await db.addPedido(pedido);
     DEBUG_MODE && console.log('[savePedido] Pedido creado:', nuevoPedido);
 
     closeModal();

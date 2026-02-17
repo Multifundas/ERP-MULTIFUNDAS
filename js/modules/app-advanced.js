@@ -2037,7 +2037,7 @@ function parseCSV(text) {
     }).filter(row => Object.values(row).some(v => v));
 }
 
-function executeImport(tipo) {
+async function executeImport(tipo) {
     const data = window.importData;
     if (!data || data.length === 0) {
         showToast('No hay datos para importar', 'error');
@@ -2047,11 +2047,11 @@ function executeImport(tipo) {
     let imported = 0;
     let errors = 0;
 
-    data.forEach(row => {
+    for (const row of data) {
         try {
             switch(tipo) {
                 case 'clientes':
-                    db.addCliente({
+                    await db.addCliente({
                         razonSocial: row.razonSocial || row['Razón Social'] || '',
                         nombreComercial: row.nombreComercial || row['Nombre Comercial'] || row.razonSocial || '',
                         tipo: row.tipo || 'externo',
@@ -2065,7 +2065,7 @@ function executeImport(tipo) {
                     break;
 
                 case 'productos':
-                    db.addProducto({
+                    await db.addProducto({
                         nombre: row.nombre || '',
                         clienteId: parseInt(row.clienteId) || null,
                         medidas: row.medidas || '',
@@ -2077,7 +2077,7 @@ function executeImport(tipo) {
                     break;
 
                 case 'personal':
-                    db.addPersonal({
+                    await db.addEmpleado({
                         nombre: row.nombre || '',
                         rol: row.rol || 'operador',
                         areaId: parseInt(row.areaId) || null,
@@ -2091,7 +2091,7 @@ function executeImport(tipo) {
                     break;
 
                 case 'materiales':
-                    db.addMaterial({
+                    await db.addMaterial({
                         nombre: row.nombre || '',
                         unidad: row.unidad || 'pieza',
                         costo: parseFloat(row.costo) || 0,
@@ -2104,7 +2104,7 @@ function executeImport(tipo) {
             console.error('Error importando:', row, e);
             errors++;
         }
-    });
+    }
 
     window.importData = null;
     loadSectionContent(app.currentSection);
