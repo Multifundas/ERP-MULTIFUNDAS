@@ -1305,7 +1305,9 @@ function loadEstacionesFromERP() {
                         supervisoraState.operadores.find(o => o.id === estacion.operadorId) : null;
 
                     let estado = 'inactivo';
-                    if (estadoOp) {
+                    // Solo aplicar estado de estadoOp si el operador existe en el ERP
+                    const operadorExisteEnERP = estadoOp && estadoOp.operadorId && supervisoraState.operadores.some(o => o.id === estadoOp.operadorId);
+                    if (estadoOp && operadorExisteEnERP) {
                         if (estadoOp.estado === 'retrasado' || estadoOp.estado === 'muy-retrasado') estado = 'retrasado';
                         else if (estadoOp.estado === 'adelantado') estado = 'adelantado';
                         else if (estadoOp.estado === 'inactivo') estado = 'inactivo';
