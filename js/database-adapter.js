@@ -492,6 +492,30 @@ class SupabaseDatabase {
         return null;
     }
 
+    // Eliminar producto: hard-delete si no está en ningún pedido, soft-delete (activo=false) si sí
+    deleteProducto(id) {
+        const producto = this.data.productos.find(p => p.id === id);
+        if (!producto) return { deleted: false, reason: 'not_found' };
+
+        const enPedido = this.data.pedidos.some(ped =>
+            ped.productos && ped.productos.some(pp => pp.productoId === id)
+        );
+
+        if (enPedido) {
+            // Soft-delete: inhabilitar
+            producto.activo = false;
+            SupabaseClient.update('productos', id, { activo: false });
+            this.addAuditoria('Producto inhabilitado', `Producto "${producto.nombre}" inhabilitado (tiene pedidos asociados)`, 'producto', id);
+            return { deleted: false, disabled: true, reason: 'has_pedidos' };
+        } else {
+            // Hard-delete
+            this.data.productos = this.data.productos.filter(p => p.id !== id);
+            SupabaseClient.remove('productos', id);
+            this.addAuditoria('Producto eliminado', `Producto "${producto.nombre}" eliminado`, 'producto', id);
+            return { deleted: true };
+        }
+    }
+
     // ========================================
     // PEDIDOS
     // ========================================
@@ -548,6 +572,27 @@ class SupabaseDatabase {
         if (index !== -1) {
             this.data.pedidos[index] = { ...this.data.pedidos[index], ...updates };
             SupabaseClient.update('pedidos', id, this._mapPedidoToDB(updates));
+
+            // Sync pedido_productos if productos changed
+            if (updates.productos) {
+                // Delete existing pedido_productos and re-insert
+                window.supabaseInstance.from('pedido_productos').delete().eq('pedido_id', id).then(async () => {
+                    if (updates.productos.length > 0) {
+                        const dbProds = updates.productos.map(pp => ({
+                            pedido_id: id,
+                            producto_id: pp.productoId,
+                            producto_nombre: pp.productoNombre || (db.getProducto(pp.productoId) || {}).nombre || '',
+                            cantidad: pp.cantidad,
+                            completadas: pp.completadas || 0,
+                            precio_unitario: pp.precioUnitario || 0,
+                            notas: pp.notas,
+                            avance_procesos: pp.avanceProcesos || []
+                        }));
+                        await SupabaseClient.insertMany('pedido_productos', dbProds);
+                    }
+                });
+            }
+
             this.addAuditoria('Pedido actualizado', `Pedido #${id} modificado`, 'pedido', id);
             return this.data.pedidos[index];
         }

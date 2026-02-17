@@ -13663,6 +13663,38 @@ kbd {
     text-align: center;
 }
 
+/* Edición de pedido - productos con campos expandibles */
+.producto-pedido-row .producto-edit-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+}
+
+.producto-pedido-row .producto-edit-fields {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding-top: 8px;
+}
+
+.producto-pedido-row .producto-edit-fields .form-group.inline {
+    margin-bottom: 0;
+}
+
+.producto-pedido-row .producto-edit-fields .form-group.inline label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+    display: block;
+}
+
+.pedido-productos-edit .producto-pedido-row {
+    flex-direction: column;
+    align-items: stretch;
+}
+
 /* Sección de presupuesto estimado */
 .presupuesto-estimado-section {
     margin-top: 15px;

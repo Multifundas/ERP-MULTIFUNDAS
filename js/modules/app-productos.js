@@ -470,6 +470,7 @@ function renderProductos(productos, clientes, familias, subfamilias) {
                         <button class="btn-icon-small" onclick="duplicarProducto(${producto.id})" title="Duplicar"><i class="fas fa-copy"></i></button>
                         <button class="btn-icon-small" onclick="editRutaProcesos(${producto.id})" title="Ruta de Procesos"><i class="fas fa-route"></i></button>
                         <button class="btn-icon-small inventario-btn" onclick="gestionarInventarioPiezas(${producto.id})" title="Inventario Piezas"><i class="fas fa-cubes"></i></button>
+                        <button class="btn-icon-small danger" onclick="confirmarDeleteProducto(${producto.id})" title="Eliminar"><i class="fas fa-trash"></i></button>
                     </div>
                 </div>
             </div>
@@ -1532,11 +1533,41 @@ function addDupDescripcionItem() {
     container.appendChild(newRow);
 }
 
+// Confirmar eliminación de producto
+function confirmarDeleteProducto(id) {
+    const producto = db.getProducto(id);
+    if (!producto) return;
+
+    // Verificar si tiene pedidos asociados
+    const pedidos = db.getPedidos();
+    const enPedido = pedidos.some(ped =>
+        ped.productos && ped.productos.some(pp => pp.productoId === id)
+    );
+
+    let mensaje;
+    if (enPedido) {
+        mensaje = `El producto "${producto.nombre}" tiene pedidos asociados y no puede eliminarse.\n\n¿Desea inhabilitarlo en su lugar? (quedará marcado como Inactivo)`;
+    } else {
+        mensaje = `¿Está seguro de que desea eliminar el producto "${producto.nombre}"?\n\nEsta acción no se puede deshacer.`;
+    }
+
+    if (confirm(mensaje)) {
+        const result = db.deleteProducto(id);
+        if (result.deleted) {
+            showToast('Producto eliminado correctamente', 'success');
+        } else if (result.disabled) {
+            showToast('Producto inhabilitado (tiene pedidos asociados)', 'warning');
+        }
+        loadProductos();
+    }
+}
+
 // Exponer funciones a window
 window.duplicarProducto = duplicarProducto;
 window.updateDupSubfamilias = updateDupSubfamilias;
 window.addDupMaterialItem = addDupMaterialItem;
 window.addDupDescripcionItem = addDupDescripcionItem;
+window.confirmarDeleteProducto = confirmarDeleteProducto;
 
 // ========================================
 // INVENTARIO GENERAL DE PIEZAS

@@ -497,6 +497,9 @@ window.loadPedidosPendientes = loadPedidosPendientes;
 window.previsualizarImagenes = previsualizarImagenes;
 window.eliminarImagenPreview = eliminarImagenPreview;
 window.ampliarImagen = ampliarImagen;
+window.updateProductosEditPedido = updateProductosEditPedido;
+window.renderEditProductos = renderEditProductos;
+window.toggleEditProductoFields = toggleEditProductoFields;
 
 function viewPedido(id) {
     const pedido = db.getPedido(id);
@@ -808,16 +811,22 @@ function showEditarPedido(id) {
     const pedido = db.getPedido(id);
     if (!pedido) return;
 
-    const cliente = db.getCliente(pedido.clienteId);
-    const productos = db.getProductos();
+    const clientes = db.getClientes();
+    const allProductos = db.getProductos();
+
+    // IDs de productos ya en el pedido
+    const productosEnPedido = pedido.productos.map(p => p.productoId);
 
     const content = `
         <form id="editarPedidoForm">
+            <div class="form-group">
+                <label>Cliente *</label>
+                <select name="clienteId" required onchange="updateProductosEditPedido(this.value, ${id})">
+                    <option value="">Seleccionar cliente...</option>
+                    ${clientes.map(c => `<option value="${c.id}" ${pedido.clienteId === c.id ? 'selected' : ''}>${c.nombreComercial}</option>`).join('')}
+                </select>
+            </div>
             <div class="form-row">
-                <div class="form-group">
-                    <label>Cliente</label>
-                    <input type="text" value="${cliente ? cliente.nombreComercial : 'N/A'}" disabled>
-                </div>
                 <div class="form-group">
                     <label>Prioridad</label>
                     <select name="prioridad">
@@ -826,12 +835,12 @@ function showEditarPedido(id) {
                         <option value="alta" ${pedido.prioridad === 'alta' ? 'selected' : ''}>Alta</option>
                     </select>
                 </div>
-            </div>
-            <div class="form-row">
                 <div class="form-group">
                     <label>Fecha de Entrega</label>
                     <input type="date" name="fechaEntrega" value="${pedido.fechaEntrega}">
                 </div>
+            </div>
+            <div class="form-row">
                 <div class="form-group">
                     <label>Estado</label>
                     <select name="estado">
@@ -844,34 +853,8 @@ function showEditarPedido(id) {
             </div>
 
             <h4 class="mb-1 mt-2">Productos del Pedido</h4>
-            <div class="pedido-productos-edit">
-                ${pedido.productos.map((p, idx) => {
-                    const prod = productos.find(pr => pr.id === p.productoId);
-                    return `
-                        <div class="producto-edit-row">
-                            <div class="producto-edit-info">
-                                <strong>${prod ? prod.nombre : 'N/A'}</strong>
-                            </div>
-                            <div class="producto-edit-fields">
-                                <div class="form-group inline">
-                                    <label>Cantidad</label>
-                                    <input type="number" name="cantidad_${idx}" value="${p.cantidad}" min="1">
-                                </div>
-                                <div class="form-group inline">
-                                    <label>Completadas</label>
-                                    <input type="number" name="completadas_${idx}" value="${p.completadas}" min="0">
-                                </div>
-                                <div class="form-group inline">
-                                    <label>Precio Unit.</label>
-                                    <input type="number" name="precio_${idx}" value="${p.precioUnitario || 0}" step="0.01" min="0">
-                                </div>
-                            </div>
-                            <input type="hidden" name="productoId_${idx}" value="${p.productoId}">
-                        </div>
-                    `;
-                }).join('')}
+            <div id="editProductosContainer" class="pedido-productos-edit">
             </div>
-            <input type="hidden" name="numProductos" value="${pedido.productos.length}">
 
             <div class="form-group mt-2">
                 <label>Notas</label>
@@ -895,19 +878,42 @@ function showEditarPedido(id) {
         const form = document.getElementById('editarPedidoForm');
         const formData = new FormData(form);
 
-        const numProductos = parseInt(formData.get('numProductos'));
+        const clienteId = parseInt(formData.get('clienteId'));
+        if (!clienteId) {
+            alert('Seleccione un cliente');
+            return;
+        }
+
+        // Recoger productos del contenedor dinámico
+        const container = document.getElementById('editProductosContainer');
+        const rows = container.querySelectorAll('.producto-pedido-row');
         const productosActualizados = [];
 
-        for (let i = 0; i < numProductos; i++) {
-            productosActualizados.push({
-                productoId: parseInt(formData.get(`productoId_${i}`)),
-                cantidad: parseInt(formData.get(`cantidad_${i}`)),
-                completadas: parseInt(formData.get(`completadas_${i}`)),
-                precioUnitario: parseFloat(formData.get(`precio_${i}`)) || 0
-            });
+        rows.forEach(row => {
+            const checkbox = row.querySelector('input[type="checkbox"]');
+            const cantidadInput = row.querySelector('input[name^="edit_cantidad_"]');
+            const completadasInput = row.querySelector('input[name^="edit_completadas_"]');
+            const precioInput = row.querySelector('input[name^="edit_precio_"]');
+            const prodId = parseInt(checkbox.dataset.productoid);
+            const cantidad = parseInt(cantidadInput.value) || 0;
+
+            if (checkbox.checked && cantidad > 0) {
+                productosActualizados.push({
+                    productoId: prodId,
+                    cantidad: cantidad,
+                    completadas: parseInt(completadasInput.value) || 0,
+                    precioUnitario: parseFloat(precioInput.value) || 0
+                });
+            }
+        });
+
+        if (productosActualizados.length === 0) {
+            alert('Seleccione al menos un producto con cantidad');
+            return;
         }
 
         const updates = {
+            clienteId: clienteId,
             prioridad: formData.get('prioridad'),
             fechaEntrega: formData.get('fechaEntrega'),
             estado: formData.get('estado'),
@@ -937,6 +943,89 @@ function showEditarPedido(id) {
 
         showToast('Pedido actualizado correctamente');
     });
+
+    // Después de abrir el modal, renderizar los productos del cliente con los datos existentes
+    setTimeout(() => {
+        renderEditProductos(pedido.clienteId, pedido);
+    }, 50);
+}
+
+// Renderiza los productos del cliente en el formulario de edición de pedido
+// marcando los que ya están en el pedido y mostrando sus cantidades/completadas/precios
+function renderEditProductos(clienteId, pedido) {
+    const container = document.getElementById('editProductosContainer');
+    if (!container) return;
+
+    if (!clienteId) {
+        container.innerHTML = '<p class="text-muted">Seleccione un cliente para ver sus productos</p>';
+        return;
+    }
+
+    const productos = db.getProductosByCliente(parseInt(clienteId));
+
+    if (productos.length === 0) {
+        container.innerHTML = '<p class="text-muted">Este cliente no tiene productos registrados</p>';
+        return;
+    }
+
+    const pedidoProds = pedido ? pedido.productos || [] : [];
+
+    container.innerHTML = productos.map(p => {
+        const enPedido = pedidoProds.find(pp => pp.productoId === p.id);
+        const checked = enPedido ? 'checked' : '';
+        const cantidad = enPedido ? enPedido.cantidad : '';
+        const completadas = enPedido ? enPedido.completadas : 0;
+        const precio = enPedido ? (enPedido.precioUnitario || 0) : (p.precioVenta || 0);
+
+        return `
+            <div class="producto-pedido-row">
+                <div class="producto-edit-check">
+                    <input type="checkbox" id="edit_prod_${p.id}" ${checked}
+                           data-productoid="${p.id}" data-precio="${p.precioVenta || 0}"
+                           onchange="toggleEditProductoFields(this)">
+                    <label for="edit_prod_${p.id}" class="producto-pedido-label">
+                        <strong>${S(p.nombre)}</strong>
+                        <span class="producto-precio">$${(p.precioVenta || 0).toFixed(2)}</span>
+                    </label>
+                </div>
+                <div class="producto-edit-fields" style="${enPedido ? '' : 'display:none'}">
+                    <div class="form-group inline">
+                        <label>Cantidad</label>
+                        <input type="number" name="edit_cantidad_${p.id}" value="${cantidad}" min="1" class="cantidad-input">
+                    </div>
+                    <div class="form-group inline">
+                        <label>Completadas</label>
+                        <input type="number" name="edit_completadas_${p.id}" value="${completadas}" min="0" class="cantidad-input">
+                    </div>
+                    <div class="form-group inline">
+                        <label>Precio Unit.</label>
+                        <input type="number" name="edit_precio_${p.id}" value="${precio}" step="0.01" min="0" class="cantidad-input">
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Muestra/oculta campos de un producto al marcar/desmarcar en edición de pedido
+function toggleEditProductoFields(checkbox) {
+    const row = checkbox.closest('.producto-pedido-row');
+    const fields = row.querySelector('.producto-edit-fields');
+    if (fields) {
+        fields.style.display = checkbox.checked ? '' : 'none';
+        if (checkbox.checked) {
+            const cantInput = fields.querySelector('input[name^="edit_cantidad_"]');
+            if (cantInput && !cantInput.value) cantInput.value = 1;
+        }
+    }
+}
+
+// Cuando cambia el cliente en edición, recargar productos (pierde datos anteriores)
+function updateProductosEditPedido(clienteId, pedidoId) {
+    const pedido = db.getPedido(pedidoId);
+    // Si el cliente cambió, no preservar productos anteriores
+    const pedidoParaRender = parseInt(clienteId) === pedido.clienteId ? pedido : null;
+    renderEditProductos(clienteId, pedidoParaRender);
 }
 
 function viewTimeline(id) {
