@@ -97,6 +97,21 @@
             return result.data || [];
         },
 
+        // UPSERT (INSERT o UPDATE si ya existe)
+        upsertMany: async function(table, records, conflictColumn) {
+            conflictColumn = conflictColumn || 'id';
+            var result = await sbClient
+                .from(table)
+                .upsert(records, { onConflict: conflictColumn })
+                .select();
+
+            if (result.error) {
+                console.error('[Supabase] Error upsertMany ' + table + ':', result.error.message);
+                return [];
+            }
+            return result.data || [];
+        },
+
         // UPDATE tabla SET ... WHERE id = ?
         update: async function(table, id, updates, idColumn) {
             idColumn = idColumn || 'id';

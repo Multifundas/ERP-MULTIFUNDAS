@@ -566,8 +566,58 @@ class SupabaseDatabase {
     // ========================================
     // ÁREAS Y PROCESOS
     // ========================================
-    getAreas() { return this.data.areas; }
-    getArea(id) { return this.data.areas.find(a => a.id === id); }
+    getAreas() {
+        const areas = this.data.areas || [];
+        if (areas.length === 0) {
+            this._seedDefaultAreas();
+            return this.data.areas;
+        }
+        return areas;
+    }
+    getArea(id) { return (this.data.areas || []).find(a => a.id === id); }
+
+    // Seed default process areas when table is empty (e.g. after truncate_all_data)
+    _seedDefaultAreas() {
+        const defaults = [
+            { id: 1, nombre: 'Corte Volumen', activa: true, color: '#3b82f6' },
+            { id: 2, nombre: 'Corte a Medida', activa: true, color: '#10b981' },
+            { id: 3, nombre: 'Serigrafía', activa: true, color: '#f59e0b' },
+            { id: 4, nombre: 'Corte Cierre', activa: true, color: '#8b5cf6' },
+            { id: 5, nombre: 'Corte Bies', activa: true, color: '#ec4899' },
+            { id: 6, nombre: 'Costura Fundas', activa: true, color: '#06b6d4' },
+            { id: 7, nombre: 'Costura Volumen', activa: true, color: '#14b8a6' },
+            { id: 8, nombre: 'Calidad y Empaque', activa: true, color: '#f97316' }
+        ];
+        this.data.areas = defaults;
+        // Persist to Supabase in background (upsert to avoid duplicate key errors)
+        SupabaseClient.upsertMany('areas', defaults, 'id');
+        DEBUG_MODE && console.log('[SupabaseDB] Seeded default process areas:', defaults.length);
+    }
+
+    addArea(area) {
+        if (!this.data.areas) this.data.areas = [];
+        const id = area.id || (Math.max(...this.data.areas.map(a => a.id), 0) + 1);
+        const entry = { id, nombre: area.nombre, activa: true, color: area.color || '#6b7280' };
+        this.data.areas.push(entry);
+        SupabaseClient.insert('areas', entry);
+        return entry;
+    }
+
+    updateArea(id, updates) {
+        const index = (this.data.areas || []).findIndex(a => a.id === id);
+        if (index !== -1) {
+            this.data.areas[index] = { ...this.data.areas[index], ...updates };
+            SupabaseClient.update('areas', id, updates);
+            return this.data.areas[index];
+        }
+        return null;
+    }
+
+    deleteArea(id) {
+        this.data.areas = (this.data.areas || []).filter(a => a.id !== id);
+        SupabaseClient.remove('areas', id);
+    }
+
     getProcesos() { return this.data.procesos; }
     getProcesosByArea(areaId) { return this.data.procesos.filter(p => p.areaId === areaId); }
     getProceso(id) { return this.data.procesos.find(p => p.id === id); }
