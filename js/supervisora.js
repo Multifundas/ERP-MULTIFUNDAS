@@ -1551,7 +1551,7 @@ function renderPedidosList() {
                     <div class="pedido-prioridad-indicator ${pedido.prioridad}"></div>
                     <div class="pedido-card-content">
                         <div class="pedido-card-top">
-                            <span class="pedido-number">#${pedido.id}</span>
+                            <span class="pedido-number">#${pedido.codigo || pedido.id}</span>
                             <span class="pedido-badge ${pedido.prioridad}">${pedido.prioridad}</span>
                             ${esListoEntrega ? '<span class="pedido-badge listo-entrega-badge"><i class="fas fa-check-circle"></i> Listo</span>' : ''}
                             ${renderPedidoRiesgo(pedido, avancePedido)}

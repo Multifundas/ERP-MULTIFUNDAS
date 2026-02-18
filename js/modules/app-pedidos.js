@@ -197,12 +197,18 @@ function showNuevoPedidoModal() {
 
     const content = `
         <form id="nuevoPedidoForm">
-            <div class="form-group">
-                <label>Cliente *</label>
-                <select name="clienteId" required onchange="updateProductosCliente(this.value)">
-                    <option value="">Seleccionar cliente...</option>
-                    ${clientes.map(c => `<option value="${c.id}">${c.nombreComercial}</option>`).join('')}
-                </select>
+            <div class="form-row">
+                <div class="form-group">
+                    <label># Pedido *</label>
+                    <input type="text" name="codigo" required placeholder="Ej: 1520" style="font-weight:bold;">
+                </div>
+                <div class="form-group" style="flex:2">
+                    <label>Cliente *</label>
+                    <select name="clienteId" required onchange="updateProductosCliente(this.value)">
+                        <option value="">Seleccionar cliente...</option>
+                        ${clientes.map(c => `<option value="${c.id}">${c.nombreComercial}</option>`).join('')}
+                    </select>
+                </div>
             </div>
             <div class="form-group">
                 <label>Productos</label>
@@ -446,7 +452,14 @@ async function savePedido() {
         }
     });
 
+    const codigo = formData.get('codigo')?.trim();
+    if (!codigo) {
+        alert('Ingrese el # de pedido');
+        return;
+    }
+
     const pedido = {
+        codigo,
         clienteId,
         productos,
         prioridad: formData.get('prioridad'),
@@ -480,7 +493,7 @@ async function savePedido() {
     }
 
     if (typeof showToast === 'function') {
-        showToast('Pedido #' + nuevoPedido.id + ' creado correctamente', 'success');
+        showToast('Pedido #' + (nuevoPedido.codigo || nuevoPedido.id) + ' creado correctamente', 'success');
     }
 }
 
@@ -735,7 +748,7 @@ function viewPedido(id) {
         ${generarSeccionImagenesApoyo(pedido)}
     `;
 
-    openModal(`Pedido #${id}`, content, null);
+    openModal(`Pedido #${pedido.codigo || id}`, content, null);
     document.getElementById('modalFooter').style.display = 'none';
 }
 
@@ -820,12 +833,18 @@ function showEditarPedido(id) {
 
     const content = `
         <form id="editarPedidoForm">
-            <div class="form-group">
-                <label>Cliente *</label>
-                <select name="clienteId" required onchange="updateProductosEditPedido(this.value, ${id})">
-                    <option value="">Seleccionar cliente...</option>
-                    ${clientes.map(c => `<option value="${c.id}" ${pedido.clienteId === c.id ? 'selected' : ''}>${c.nombreComercial}</option>`).join('')}
-                </select>
+            <div class="form-row">
+                <div class="form-group">
+                    <label># Pedido</label>
+                    <input type="text" name="codigo" value="${pedido.codigo || ''}" placeholder="Ej: 1520" style="font-weight:bold;">
+                </div>
+                <div class="form-group" style="flex:2">
+                    <label>Cliente *</label>
+                    <select name="clienteId" required onchange="updateProductosEditPedido(this.value, ${id})">
+                        <option value="">Seleccionar cliente...</option>
+                        ${clientes.map(c => `<option value="${c.id}" ${pedido.clienteId === c.id ? 'selected' : ''}>${c.nombreComercial}</option>`).join('')}
+                    </select>
+                </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
@@ -875,7 +894,7 @@ function showEditarPedido(id) {
         </form>
     `;
 
-    openModal(`Editar Pedido #${id}`, content, () => {
+    openModal(`Editar Pedido #${pedido.codigo || id}`, content, () => {
         const form = document.getElementById('editarPedidoForm');
         const formData = new FormData(form);
 
@@ -914,6 +933,7 @@ function showEditarPedido(id) {
         }
 
         const updates = {
+            codigo: formData.get('codigo')?.trim() || null,
             clienteId: clienteId,
             prioridad: formData.get('prioridad'),
             fechaEntrega: formData.get('fechaEntrega'),
@@ -1169,7 +1189,7 @@ function loadPedidosEnhanced() {
                                 data-fecha="${pedido.fechaEntrega}"
                                 class="${atrasado ? 'row-atrasado' : ''}">
                                 <td>
-                                    <strong class="pedido-number">#${pedido.id}</strong>
+                                    <strong class="pedido-number">#${pedido.codigo || pedido.id}</strong>
                                     <small class="pedido-fecha-carga">${formatDate(pedido.fechaCarga)}</small>
                                 </td>
                                 <td>
@@ -1458,7 +1478,7 @@ function viewPedidoTimeline(id) {
         ${pedido.notas ? `<div class="pedido-notas mt-2"><strong>Notas:</strong> ${pedido.notas}</div>` : ''}
     `;
 
-    openModal(`Timeline Pedido #${id}`, content, null);
+    openModal(`Timeline Pedido #${pedido.codigo || id}`, content, null);
     document.getElementById('modalFooter').style.display = 'none';
 }
 
