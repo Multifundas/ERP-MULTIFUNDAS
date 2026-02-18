@@ -2793,11 +2793,13 @@ function generarProcesoEditItem(proc, index, getAreasOptions, rutaProcesos) {
                     </div>
                     <div>
                         <label>Capacidad/hr</label>
-                        <input type="number" name="capacidad_${index}" value="${proc.capacidadHora || 20}" min="1">
+                        <input type="number" name="capacidad_${index}" value="${proc.capacidadHora || 20}" min="1"
+                               oninput="syncCapacidadTiempo(this, 'capacidad', ${index})">
                     </div>
                     <div>
                         <label>Tiempo (min)</label>
-                        <input type="number" name="tiempo_${index}" value="${proc.tiempoEstandar || 2}" step="0.1" min="0.1">
+                        <input type="number" name="tiempo_${index}" value="${proc.tiempoEstandar || 2}" step="0.1" min="0.1"
+                               oninput="syncCapacidadTiempo(this, 'tiempo', ${index})">
                     </div>
                 </div>
 
@@ -3102,11 +3104,13 @@ function addNuevoProceso() {
                 </div>
                 <div>
                     <label>Capacidad/hr</label>
-                    <input type="number" name="capacidad_${newIndex}" value="20" min="1">
+                    <input type="number" name="capacidad_${newIndex}" value="20" min="1"
+                           oninput="syncCapacidadTiempo(this, 'capacidad', ${newIndex})">
                 </div>
                 <div>
                     <label>Tiempo (min)</label>
-                    <input type="number" name="tiempo_${newIndex}" value="2.0" step="0.1" min="0.1">
+                    <input type="number" name="tiempo_${newIndex}" value="3.0" step="0.1" min="0.1"
+                           oninput="syncCapacidadTiempo(this, 'tiempo', ${newIndex})">
                 </div>
             </div>
 
@@ -3181,6 +3185,21 @@ function removeProceso(index) {
     }
 }
 
+
+// Auto-calcular Tiempo (min) <-> Capacidad/hr: tiempo = 60 / capacidad
+function syncCapacidadTiempo(input, campo, index) {
+    const val = parseFloat(input.value);
+    if (!val || val <= 0) return;
+    const parent = input.closest('.proceso-edit-item') || input.closest('.proceso-edit-numbers')?.closest('.proceso-edit-item');
+    if (!parent) return;
+    if (campo === 'capacidad') {
+        const tiempoInput = parent.querySelector(`[name="tiempo_${index}"]`);
+        if (tiempoInput) tiempoInput.value = parseFloat((60 / val).toFixed(2));
+    } else {
+        const capInput = parent.querySelector(`[name="capacidad_${index}"]`);
+        if (capInput) capInput.value = Math.round(60 / val);
+    }
+}
 
 function loadProductosEnhanced() {
     const section = document.getElementById('section-productos');
