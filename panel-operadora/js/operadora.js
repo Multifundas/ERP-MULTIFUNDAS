@@ -666,6 +666,32 @@ function cargarPedidoAsignado() {
 
     DEBUG_MODE && console.log('[OPERADORA] ✅ Pedido encontrado:', pedido.id, '-', pedido.producto || pedido.descripcion);
 
+    // Enriquecer pedido con datos completos de la DB (notas, codigo, ficha técnica, etc.)
+    if (typeof db !== 'undefined' && typeof db.getPedidos === 'function') {
+        const pedidoDB = db.getPedidos().find(p => p.id == pedido.id);
+        if (pedidoDB) {
+            // Mergear datos de DB sobre el pedido, priorizando DB para campos que faltan
+            pedido.codigo = pedido.codigo || pedidoDB.codigo;
+            pedido.notas = pedido.notas || pedidoDB.notas;
+            pedido.descripcion = pedido.descripcion || pedidoDB.descripcion;
+            pedido.imagenesApoyo = pedido.imagenesApoyo || pedidoDB.imagenesApoyo;
+            pedido.cliente = pedido.cliente || pedidoDB.clienteNombre;
+            pedido.fechaEntrega = pedido.fechaEntrega || pedidoDB.fechaEntrega;
+            pedido.prioridad = pedido.prioridad || pedidoDB.prioridad;
+            // Productos con detalle completo
+            if (pedidoDB.productos && pedidoDB.productos.length > 0 && (!pedido.productos || pedido.productos.length === 0)) {
+                pedido.productos = pedidoDB.productos;
+            }
+            // Producir info de producto para ficha técnica
+            if (pedidoDB.productos && pedidoDB.productos.length > 0) {
+                const primerProd = pedidoDB.productos[0];
+                pedido.productoId = pedido.productoId || primerProd.productoId;
+                pedido.cantidad = pedido.cantidad || primerProd.cantidad;
+            }
+            DEBUG_MODE && console.log('[OPERADORA] Pedido enriquecido con datos de DB');
+        }
+    }
+
     // 3. Configurar estado y mostrar pedido
     operadoraState.pedidoActual = pedido;
     operadoraState.procesoActual = miAsignacion;
@@ -703,7 +729,7 @@ function mostrarPedido(pedido, asignacion) {
     document.getElementById('pedidoCard').style.display = 'block';
     document.getElementById('sinPedido').style.display = 'none';
 
-    document.getElementById('pedidoId').textContent = `#${pedido.id}`;
+    document.getElementById('pedidoId').textContent = `#${pedido.codigo || pedido.id}`;
     document.getElementById('pedidoCliente').innerHTML = `
         <i class="fas fa-building"></i>
         <span>${S(pedido.cliente || 'Cliente')}</span>
@@ -2509,7 +2535,7 @@ function mostrarInstrucciones() {
         <div class="instrucciones-content">
             <div class="instruccion-header">
                 <h4>${S(pedido.producto || pedido.nombre || 'Producto')}</h4>
-                <span class="pedido-badge">#${pedido.id}</span>
+                <span class="pedido-badge">#${pedido.codigo || pedido.id}</span>
             </div>
 
             <div class="instruccion-seccion">

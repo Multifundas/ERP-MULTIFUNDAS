@@ -371,6 +371,7 @@ function renderLayoutInSupervisora(layout) {
         if (!isMultiStation) {
             el.setAttribute('ondragover', 'allowDrop(event)');
             el.setAttribute('ondrop', `dropOnEstacion(event, '${stationIds[0]}')`);
+            el.setAttribute('data-station-id', stationIds[0]);
         }
 
         const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
@@ -3112,6 +3113,120 @@ function dropOnEstacion(event, estacionId) {
         DEBUG_MODE && console.log('[SUPERVISORA] Drop proceso:', procesoId, 'pedido:', pedidoId, 'estacion:', estacionId);
         assignProcesoToEstacion(procesoId, pedidoId, estacionId);
     }
+}
+
+// ========================================
+// TOUCH DRAG-AND-DROP (Tablets/Móviles)
+// ========================================
+let touchDragData = null;
+let touchDragGhost = null;
+
+function initTouchDragDrop() {
+    document.addEventListener('touchstart', function(e) {
+        const draggable = e.target.closest('[draggable="true"]');
+        if (!draggable) return;
+
+        const touch = e.touches[0];
+        touchDragData = {
+            startX: touch.clientX,
+            startY: touch.clientY,
+            isDragging: false,
+            element: draggable
+        };
+
+        // Extraer datos del drag según tipo
+        const ondragstart = draggable.getAttribute('ondragstart') || '';
+        if (ondragstart.includes('dragProceso')) {
+            const match = ondragstart.match(/dragProceso\(event,\s*['"]([^'"]+)['"]\s*,\s*(\d+)\)/);
+            if (match) {
+                touchDragData.type = 'proceso';
+                touchDragData.procesoId = match[1];
+                touchDragData.pedidoId = parseInt(match[2]);
+            }
+        } else if (ondragstart.includes('dragOperador')) {
+            const match = ondragstart.match(/dragOperador\(event,\s*(\d+)\)/);
+            if (match) {
+                touchDragData.type = 'operador';
+                touchDragData.operadorId = parseInt(match[1]);
+            }
+        } else if (ondragstart.includes('dragPedido')) {
+            const match = ondragstart.match(/dragPedido\(event,\s*(\d+)\)/);
+            if (match) {
+                touchDragData.type = 'pedido';
+                touchDragData.pedidoId = parseInt(match[1]);
+            }
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function(e) {
+        if (!touchDragData) return;
+        const touch = e.touches[0];
+        const dx = touch.clientX - touchDragData.startX;
+        const dy = touch.clientY - touchDragData.startY;
+
+        if (!touchDragData.isDragging && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
+            touchDragData.isDragging = true;
+            touchDragData.element.classList.add('dragging');
+
+            // Crear ghost element
+            touchDragGhost = document.createElement('div');
+            touchDragGhost.className = 'touch-drag-ghost';
+            touchDragGhost.textContent = touchDragData.type === 'proceso' ? 'Proceso' : touchDragData.type === 'operador' ? 'Operador' : 'Pedido';
+            document.body.appendChild(touchDragGhost);
+        }
+
+        if (touchDragData.isDragging) {
+            e.preventDefault();
+            if (touchDragGhost) {
+                touchDragGhost.style.left = (touch.clientX - 30) + 'px';
+                touchDragGhost.style.top = (touch.clientY - 30) + 'px';
+            }
+            // Highlight estación bajo el dedo
+            const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+            document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+            const estacion = elementBelow?.closest('.estacion-element, .station-slot');
+            if (estacion) estacion.classList.add('drop-target');
+        }
+    }, { passive: false });
+
+    document.addEventListener('touchend', function(e) {
+        if (!touchDragData || !touchDragData.isDragging) {
+            touchDragData = null;
+            return;
+        }
+
+        const touch = e.changedTouches[0];
+        const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+        const estacion = elementBelow?.closest('.estacion-element, .station-slot');
+
+        document.querySelectorAll('.drop-target').forEach(el => el.classList.remove('drop-target'));
+        touchDragData.element.classList.remove('dragging');
+
+        if (touchDragGhost) {
+            touchDragGhost.remove();
+            touchDragGhost = null;
+        }
+
+        if (estacion) {
+            const estacionId = estacion.dataset.stationId || estacion.dataset.id;
+            if (estacionId && touchDragData.type) {
+                if (touchDragData.type === 'operador') {
+                    assignOperadorToEstacion(touchDragData.operadorId, estacionId);
+                } else if (touchDragData.type === 'pedido') {
+                    assignPedidoToEstacion(touchDragData.pedidoId, estacionId);
+                } else if (touchDragData.type === 'proceso') {
+                    assignProcesoToEstacion(touchDragData.procesoId, touchDragData.pedidoId, estacionId);
+                }
+            }
+        }
+
+        touchDragData = null;
+    }, { passive: true });
+}
+
+// Iniciar touch drag-and-drop al cargar
+if ('ontouchstart' in window) {
+    document.addEventListener('DOMContentLoaded', initTouchDragDrop);
 }
 
 function assignOperadorToEstacion(operadorId, estacionId) {
