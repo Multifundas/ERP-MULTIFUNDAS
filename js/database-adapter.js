@@ -170,7 +170,8 @@ class SupabaseDatabase {
             medidas: p.medidas, mtsPorPieza: parseFloat(p.mts_por_pieza || 0),
             comentarios: p.comentarios, listaMateriales: p.lista_materiales || [],
             descripcionTecnica: p.descripcion_tecnica, costosMO: p.costos_mo || {},
-            rutaProcesos: []
+            rutaProcesos: p.ruta_procesos || [],
+            tiempoTotal: parseFloat(p.tiempo_total || 0)
         };
     }
 
@@ -308,6 +309,8 @@ class SupabaseDatabase {
         if (p.listaMateriales !== undefined) mapped.lista_materiales = p.listaMateriales;
         if (p.descripcionTecnica !== undefined) mapped.descripcion_tecnica = p.descripcionTecnica;
         if (p.costosMO !== undefined) mapped.costos_mo = p.costosMO;
+        if (p.rutaProcesos !== undefined) mapped.ruta_procesos = p.rutaProcesos;
+        if (p.tiempoTotal !== undefined) mapped.tiempo_total = p.tiempoTotal;
         return mapped;
     }
 
