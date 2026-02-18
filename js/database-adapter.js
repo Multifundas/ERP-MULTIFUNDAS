@@ -206,6 +206,7 @@ class SupabaseDatabase {
             notas: p.notas, presupuestoEstimado: parseFloat(p.presupuesto_estimado || 0),
             costoReal: parseFloat(p.costo_real || 0), imagen: p.imagen,
             imagenesApoyo: p.imagenes_apoyo || [],
+            visibleSupervisora: p.visible_supervisora !== false,
             productos: []
         };
     }
@@ -357,6 +358,7 @@ class SupabaseDatabase {
         if (p.costoReal !== undefined) mapped.costo_real = p.costoReal;
         if (p.imagen !== undefined) mapped.imagen = p.imagen;
         if (p.imagenesApoyo !== undefined) mapped.imagenes_apoyo = p.imagenesApoyo;
+        if (p.visibleSupervisora !== undefined) mapped.visible_supervisora = p.visibleSupervisora;
         return mapped;
     }
 

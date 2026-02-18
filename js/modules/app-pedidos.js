@@ -493,6 +493,7 @@ window.viewPedido = viewPedido;
 window.editPedido = editPedido;
 window.showEditarPedido = showEditarPedido;
 window.toggleEtapasPedido = toggleEtapasPedido;
+window.toggleVisibleSupervisora = toggleVisibleSupervisora;
 window.loadPedidosPendientes = loadPedidosPendientes;
 window.previsualizarImagenes = previsualizarImagenes;
 window.eliminarImagenPreview = eliminarImagenPreview;
@@ -1218,6 +1219,9 @@ function loadPedidosEnhanced() {
                                 </td>
                                 <td>
                                     <div class="acciones-cell">
+                                        <button class="btn-icon-small" style="${pedido.visibleSupervisora === false ? 'opacity:0.4' : ''}" onclick="toggleVisibleSupervisora(${pedido.id})" title="${pedido.visibleSupervisora === false ? 'Oculto en Supervisora - Click para mostrar' : 'Visible en Supervisora - Click para ocultar'}">
+                                            <i class="fas ${pedido.visibleSupervisora === false ? 'fa-eye-slash' : 'fa-broadcast-tower'}"></i>
+                                        </button>
                                         <button class="btn-icon-small" onclick="viewPedidoTimeline(${pedido.id})" title="Ver Timeline">
                                             <i class="fas fa-clock"></i>
                                         </button>
@@ -1456,6 +1460,16 @@ function viewPedidoTimeline(id) {
 
     openModal(`Timeline Pedido #${id}`, content, null);
     document.getElementById('modalFooter').style.display = 'none';
+}
+
+// Toggle visibilidad del pedido en la supervisora
+function toggleVisibleSupervisora(id) {
+    const pedido = db.getPedido(id);
+    if (!pedido) return;
+    const nuevoValor = pedido.visibleSupervisora === false ? true : false;
+    db.updatePedido(id, { visibleSupervisora: nuevoValor });
+    loadPedidos();
+    showToast(nuevoValor ? 'Pedido visible en Supervisora' : 'Pedido oculto en Supervisora');
 }
 
 // Eliminar pedido

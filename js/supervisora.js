@@ -923,6 +923,8 @@ function loadDataFromERP() {
 
         supervisoraState.pedidosHoy = pedidos
             .filter(p => {
+                // Excluir pedidos ocultos para supervisora
+                if (p.visibleSupervisora === false) return false;
                 const estadoNormalizado = (p.estado || '').toLowerCase().trim();
                 const esActivo = estadosActivos.includes(estadoNormalizado);
                 DEBUG_MODE && console.log('[SUPERVISORA] Pedido', p.id, '- estado:', p.estado, '- incluido:', esActivo);
@@ -3460,12 +3462,24 @@ function loadEstadoMaquinas() {
         try {
             const maquinas = JSON.parse(saved);
             const idsOperadoresValidos = new Set(supervisoraState.operadores.map(o => o.id));
+            const asignacionesReales = safeLocalGet('asignaciones_estaciones', {});
             // Merge preservando operadores del ERP
             for (const [id, savedMaquina] of Object.entries(maquinas)) {
                 if (supervisoraState.maquinas[id]) {
                     // Preservar operadores si ya fueron cargados del ERP
                     const erpOperadores = supervisoraState.maquinas[id].operadores || [];
                     Object.assign(supervisoraState.maquinas[id], savedMaquina);
+
+                    // Limpiar datos de proceso/pedido fantasma si no hay asignación real
+                    if (!asignacionesReales[id]) {
+                        supervisoraState.maquinas[id].procesoId = null;
+                        supervisoraState.maquinas[id].procesoNombre = '';
+                        supervisoraState.maquinas[id].pedidoId = null;
+                        supervisoraState.maquinas[id].pedidoCodigo = '';
+                        supervisoraState.maquinas[id].productoNombre = '';
+                        supervisoraState.maquinas[id].colaProcesos = [];
+                    }
+
                     // Fusionar operadores del ERP con los guardados, filtrando los inválidos
                     const savedOps = (savedMaquina.operadores || []).filter(op => idsOperadoresValidos.has(op.id));
                     const fusionados = [...erpOperadores];
@@ -3484,6 +3498,15 @@ function loadEstadoMaquinas() {
                     savedMaquina.operadores = (savedMaquina.operadores || []).filter(op => idsOperadoresValidos.has(op.id));
                     if (savedMaquina.operadores.length === 0 && savedMaquina.estado !== 'inactivo') {
                         savedMaquina.estado = 'inactivo';
+                    }
+                    // Limpiar datos fantasma también en estaciones fuera del layout
+                    if (!asignacionesReales[id]) {
+                        savedMaquina.procesoId = null;
+                        savedMaquina.procesoNombre = '';
+                        savedMaquina.pedidoId = null;
+                        savedMaquina.pedidoCodigo = '';
+                        savedMaquina.productoNombre = '';
+                        savedMaquina.colaProcesos = [];
                     }
                     supervisoraState.maquinas[id] = savedMaquina;
                 }
