@@ -1019,22 +1019,14 @@ document.addEventListener('DOMContentLoaded', () => {
     ocultarPanel();
 
     dbReady.then(() => {
-        // Si viene por navegación directa (no refresh), forzar login
-        var navType = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
-        var esNavegacion = navType && navType.type === 'navigate';
-
-        // Verificar si hay sesión activa (solo permitir auto-restore en reload/back)
-        if (!esNavegacion && verificarSesionActiva()) {
+        // Verificar si hay sesión activa (mismo día, < 8hrs, operadora válida)
+        if (verificarSesionActiva()) {
             ocultarLogin();
             mostrarPanel();
             if (typeof initPanelOperadora === 'function') {
                 initPanelOperadora();
             }
         } else {
-            // Si es navegación directa (desde landing), limpiar sesión y pedir login
-            if (esNavegacion) {
-                localStorage.removeItem('sesion_operadora');
-            }
             mostrarLogin();
             ocultarPanel();
         }
