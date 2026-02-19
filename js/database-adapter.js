@@ -178,7 +178,7 @@ class SupabaseDatabase {
     _mapPersonalFromDB(p) {
         return {
             id: p.id, numEmpleado: p.num_empleado, nombre: p.nombre, rol: p.rol,
-            areaId: p.area_id, // PIN ya no se expone (hash en DB, validación via RPC)
+            areaId: p.area_id, pinHash: p.pin_hash || null,
             horaEntrada: p.hora_entrada, horaSalida: p.hora_salida,
             foto: p.foto, activo: p.activo, bloqueado: p.bloqueado,
             permisos: p.permisos || {},

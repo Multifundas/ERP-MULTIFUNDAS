@@ -1547,7 +1547,7 @@ function sincronizarOperadorasParaLogin() {
         .map(p => ({
             id: p.id,
             numEmpleado: p.numEmpleado || String(100 + p.id),
-            // PIN ya no se expone aquí - validación via Supabase RPC
+            pinHash: p.pinHash || p.pin || null,
             nombre: p.nombre,
             area: obtenerNombreAreaParaSync(p.areaId),
             foto: p.foto || null,
