@@ -707,7 +707,7 @@ function verificarSesionActiva() {
 
     try {
         const sesion = JSON.parse(sesionGuardada);
-        console.log('[AUTH] Sesión encontrada:', JSON.stringify(sesion));
+        console.log('[AUTH] Sesión encontrada, operadoraId:', sesion.operadoraId);
         const fechaSesion = new Date(sesion.fecha).toDateString();
         const hoy = new Date().toDateString();
 
@@ -718,7 +718,7 @@ function verificarSesionActiva() {
             return false;
         }
 
-        // FASE 4.2: Verificar expiración de sesión (8 horas máximo)
+        // Verificar expiración de sesión (8 horas máximo)
         const SESSION_EXPIRY_MS = 8 * 60 * 60 * 1000;
         const tiempoSesion = Date.now() - new Date(sesion.fecha).getTime();
         if (tiempoSesion > SESSION_EXPIRY_MS) {
@@ -727,15 +727,42 @@ function verificarSesionActiva() {
             return false;
         }
 
-        // Verificar que la operadora existe (usar == para evitar mismatch string/number)
-        const operadoras = getOperadorasDB();
-        console.log('[AUTH] operadoras_db tiene', operadoras.length, 'registros, buscando id:', sesion.operadoraId, typeof sesion.operadoraId);
-        const operadora = operadoras.find(op => op.id == sesion.operadoraId);
+        // Restaurar operadora: primero intentar desde datos guardados en sesión,
+        // luego fallback a operadoras_db
+        var operadora = null;
+
+        // Fuente 1: datos completos guardados en la sesión misma
+        if (sesion.operadoraData && sesion.operadoraData.id) {
+            operadora = sesion.operadoraData;
+            console.log('[AUTH] Operadora restaurada desde sesión:', operadora.nombre);
+        }
+
+        // Fuente 2: buscar en operadoras_db (fallback para sesiones antiguas)
+        if (!operadora) {
+            const operadoras = getOperadorasDB();
+            console.log('[AUTH] Buscando en operadoras_db (' + operadoras.length + ' registros), id:', sesion.operadoraId);
+            operadora = operadoras.find(op => op.id == sesion.operadoraId);
+            if (operadora) {
+                console.log('[AUTH] Operadora encontrada en operadoras_db:', operadora.nombre);
+            }
+        }
 
         if (!operadora) {
-            console.warn('[AUTH] Operadora no encontrada en operadoras_db. IDs disponibles:', operadoras.map(o => o.id + '(' + typeof o.id + ')'));
-            localStorage.removeItem('sesion_operadora');
-            return false;
+            // Fuente 3: crear objeto mínimo desde los datos de la sesión
+            // para que al menos no haga logout
+            if (sesion.operadoraId) {
+                operadora = {
+                    id: sesion.operadoraId,
+                    nombre: 'Operador(a)',
+                    numEmpleado: '',
+                    rol: 'operador'
+                };
+                console.warn('[AUTH] Operadora no encontrada, usando datos mínimos');
+            } else {
+                console.warn('[AUTH] No se pudo restaurar operadora');
+                localStorage.removeItem('sesion_operadora');
+                return false;
+            }
         }
 
         // Restaurar sesión
@@ -743,7 +770,7 @@ function verificarSesionActiva() {
         authState.sesionActiva = true;
         authState.inicioTurno = new Date(sesion.inicioTurno);
 
-        console.log('[AUTH] Sesión restaurada exitosamente para:', operadora.nombre);
+        console.log('[AUTH] Sesión restaurada OK para:', operadora.nombre);
         return true;
     } catch (e) {
         console.error('[AUTH] Error verificando sesión:', e);
@@ -755,6 +782,7 @@ function verificarSesionActiva() {
 function guardarSesion() {
     const sesion = {
         operadoraId: authState.operadoraActual.id,
+        operadoraData: authState.operadoraActual,
         inicioTurno: authState.inicioTurno.toISOString(),
         estacionId: CONFIG_ESTACION.id,
         fecha: new Date().toISOString()
