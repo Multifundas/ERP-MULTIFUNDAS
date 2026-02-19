@@ -701,16 +701,19 @@ function verificarSesionActiva() {
     const sesionGuardada = localStorage.getItem('sesion_operadora');
 
     if (!sesionGuardada) {
+        console.log('[AUTH] No hay sesion_operadora en localStorage');
         return false;
     }
 
     try {
         const sesion = JSON.parse(sesionGuardada);
+        console.log('[AUTH] Sesión encontrada:', JSON.stringify(sesion));
         const fechaSesion = new Date(sesion.fecha).toDateString();
         const hoy = new Date().toDateString();
 
         // Verificar que la sesión sea del mismo día
         if (fechaSesion !== hoy) {
+            console.log('[AUTH] Sesión de otro día:', fechaSesion, 'vs', hoy);
             localStorage.removeItem('sesion_operadora');
             return false;
         }
@@ -724,11 +727,13 @@ function verificarSesionActiva() {
             return false;
         }
 
-        // Verificar que la operadora existe
+        // Verificar que la operadora existe (usar == para evitar mismatch string/number)
         const operadoras = getOperadorasDB();
-        const operadora = operadoras.find(op => op.id === sesion.operadoraId);
+        console.log('[AUTH] operadoras_db tiene', operadoras.length, 'registros, buscando id:', sesion.operadoraId, typeof sesion.operadoraId);
+        const operadora = operadoras.find(op => op.id == sesion.operadoraId);
 
         if (!operadora) {
+            console.warn('[AUTH] Operadora no encontrada en operadoras_db. IDs disponibles:', operadoras.map(o => o.id + '(' + typeof o.id + ')'));
             localStorage.removeItem('sesion_operadora');
             return false;
         }
@@ -738,8 +743,10 @@ function verificarSesionActiva() {
         authState.sesionActiva = true;
         authState.inicioTurno = new Date(sesion.inicioTurno);
 
+        console.log('[AUTH] Sesión restaurada exitosamente para:', operadora.nombre);
         return true;
     } catch (e) {
+        console.error('[AUTH] Error verificando sesión:', e);
         localStorage.removeItem('sesion_operadora');
         return false;
     }
@@ -1014,12 +1021,37 @@ function guardarConfigEstacion() {
 // ========================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Mostrar login inmediatamente mientras carga DB
-    mostrarLogin();
-    ocultarPanel();
+    console.log('[AUTH] DOMContentLoaded - iniciando verificación de sesión');
+
+    // Verificar sesión ANTES de dbReady (usa localStorage, no necesita DB)
+    // Esto evita el flash de login innecesario
+    const tieneSesionLocal = localStorage.getItem('sesion_operadora');
+    if (!tieneSesionLocal) {
+        // No hay sesión guardada, mostrar login de inmediato
+        mostrarLogin();
+        ocultarPanel();
+    }
+    // Si hay sesión, no mostrar nada aún (evitar flash)
 
     dbReady.then(() => {
+        console.log('[AUTH] dbReady resuelto, verificando sesión...');
         // Verificar si hay sesión activa (mismo día, < 8hrs, operadora válida)
+        if (verificarSesionActiva()) {
+            console.log('[AUTH] Sesión válida, restaurando panel');
+            ocultarLogin();
+            mostrarPanel();
+            if (typeof initPanelOperadora === 'function') {
+                initPanelOperadora();
+            }
+        } else {
+            console.log('[AUTH] Sesión NO válida, mostrando login');
+            mostrarLogin();
+            ocultarPanel();
+            setTimeout(() => enfocarCampo('numEmpleado'), 100);
+        }
+    }).catch((err) => {
+        console.error('[AUTH] dbReady falló:', err);
+        // Si dbReady falla, intentar verificar sesión de todas formas
         if (verificarSesionActiva()) {
             ocultarLogin();
             mostrarPanel();
@@ -1029,14 +1061,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             mostrarLogin();
             ocultarPanel();
+            setTimeout(() => enfocarCampo('numEmpleado'), 100);
         }
-
-        // Enfocar primer campo
-        setTimeout(() => enfocarCampo('numEmpleado'), 100);
-    }).catch(() => {
-        // Si dbReady falla, igualmente mostrar login
-        mostrarLogin();
-        ocultarPanel();
-        setTimeout(() => enfocarCampo('numEmpleado'), 100);
     });
 });
