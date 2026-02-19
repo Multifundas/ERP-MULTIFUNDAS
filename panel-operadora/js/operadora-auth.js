@@ -1021,47 +1021,37 @@ function guardarConfigEstacion() {
 // ========================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('[AUTH] DOMContentLoaded - iniciando verificación de sesión');
+    console.log('[AUTH] DOMContentLoaded - verificando sesión INMEDIATO (sin esperar DB)');
 
-    // Verificar sesión ANTES de dbReady (usa localStorage, no necesita DB)
-    // Esto evita el flash de login innecesario
-    const tieneSesionLocal = localStorage.getItem('sesion_operadora');
-    if (!tieneSesionLocal) {
-        // No hay sesión guardada, mostrar login de inmediato
+    // Verificar sesión INMEDIATAMENTE — usa solo localStorage, NO necesita Supabase
+    if (verificarSesionActiva()) {
+        console.log('[AUTH] Sesión válida, restaurando panel de inmediato');
+        ocultarLogin();
+        mostrarPanel();
+
+        // Inicializar panel: si dbReady existe, esperar; si no, iniciar directo
+        if (typeof dbReady !== 'undefined' && dbReady && typeof dbReady.then === 'function') {
+            dbReady.then(() => {
+                console.log('[AUTH] dbReady resuelto, inicializando panel completo');
+                if (typeof initPanelOperadora === 'function') {
+                    initPanelOperadora();
+                }
+            }).catch((err) => {
+                console.warn('[AUTH] dbReady falló, inicializando panel sin DB:', err);
+                if (typeof initPanelOperadora === 'function') {
+                    initPanelOperadora();
+                }
+            });
+        } else {
+            // dbReady no existe (localStorage mode)
+            if (typeof initPanelOperadora === 'function') {
+                initPanelOperadora();
+            }
+        }
+    } else {
+        console.log('[AUTH] No hay sesión válida, mostrando login');
         mostrarLogin();
         ocultarPanel();
+        setTimeout(() => enfocarCampo('numEmpleado'), 100);
     }
-    // Si hay sesión, no mostrar nada aún (evitar flash)
-
-    dbReady.then(() => {
-        console.log('[AUTH] dbReady resuelto, verificando sesión...');
-        // Verificar si hay sesión activa (mismo día, < 8hrs, operadora válida)
-        if (verificarSesionActiva()) {
-            console.log('[AUTH] Sesión válida, restaurando panel');
-            ocultarLogin();
-            mostrarPanel();
-            if (typeof initPanelOperadora === 'function') {
-                initPanelOperadora();
-            }
-        } else {
-            console.log('[AUTH] Sesión NO válida, mostrando login');
-            mostrarLogin();
-            ocultarPanel();
-            setTimeout(() => enfocarCampo('numEmpleado'), 100);
-        }
-    }).catch((err) => {
-        console.error('[AUTH] dbReady falló:', err);
-        // Si dbReady falla, intentar verificar sesión de todas formas
-        if (verificarSesionActiva()) {
-            ocultarLogin();
-            mostrarPanel();
-            if (typeof initPanelOperadora === 'function') {
-                initPanelOperadora();
-            }
-        } else {
-            mostrarLogin();
-            ocultarPanel();
-            setTimeout(() => enfocarCampo('numEmpleado'), 100);
-        }
-    });
 });
