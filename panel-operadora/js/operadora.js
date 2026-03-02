@@ -1289,7 +1289,8 @@ function renderizarColaProcesosOperadora(asignacion) {
             const motivoBloqueo = verificacion.motivo;
 
             // Si está bloqueado, no permitir selección en modo simultáneo
-            const puedeSeleccionar = operadoraState.modoSimultaneo && !estaBloqueado && proceso.simultaneo;
+            // Permitir seleccionar cualquier proceso no bloqueado (el operador decide cuáles hacer juntos)
+            const puedeSeleccionar = operadoraState.modoSimultaneo && !estaBloqueado;
 
             html += `
                 <div class="proceso-operadora-wrapper">
