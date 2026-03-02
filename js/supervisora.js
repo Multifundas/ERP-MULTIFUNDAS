@@ -12,6 +12,8 @@ var _lastStationHashes = {};  // { stationId: hashString } para diff updates
 var _lastProcesosHTML = '';   // Hash de procesosActivos para evitar reflows
 var _lastAlertasHTML = '';    // Hash de alertasList para evitar reflows
 var _lastPedidosHTML = '';    // Hash de pedidosList para evitar reflows
+var _cachedEstadoMaquinasRender = {};  // Cache de estado_maquinas para renderProcesoItem
+var _cachedAsignacionesRender = {};    // Cache de asignaciones_estaciones para renderProcesoItem
 
 function _markInteracting() {
     _userInteracting = true;
@@ -1750,6 +1752,10 @@ function renderPedidosList() {
     const container = document.getElementById('pedidosList');
     const countEl = document.getElementById('pedidosCount');
 
+    // Refrescar cache de localStorage una sola vez antes de renderizar todos los procesos
+    _cachedEstadoMaquinasRender = safeLocalGet('estado_maquinas', {});
+    _cachedAsignacionesRender = safeLocalGet('asignaciones_estaciones', {});
+
     if (supervisoraState.pedidosHoy.length === 0) {
         var emptyHTML = '<p class="empty-text">No hay pedidos activos</p>';
         if (_lastPedidosHTML !== emptyHTML) {
@@ -1931,9 +1937,9 @@ function renderProcesoItem(proceso, pedidoId) {
     const estacionesAsignadas = estacionesConProceso.map(([id, m]) => id);
     const cantidadAsignadas = estacionesAsignadas.length;
 
-    // Obtener estado de máquinas y asignaciones para verificar procesos simultáneos
-    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
-    const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
+    // Usar caches de localStorage (refrescados una vez en renderPedidosList)
+    const estadoMaquinas = _cachedEstadoMaquinasRender;
+    const asignacionesEstaciones = _cachedAsignacionesRender;
 
     // Verificar si alguna estación está trabajando activamente en este proceso
     // Un operador está "trabajando" si:
@@ -1952,9 +1958,16 @@ function renderProcesoItem(proceso, pedidoId) {
         const asignacionEstacion = asignacionesEstaciones[id];
         const estadoEstacion = estadoMaquinas[id];
 
+        const procesoNombreLower = (proceso.nombre || '').toLowerCase().trim();
         const enProcesosSimultaneos = (
-            (asignacionEstacion?.procesosSimultaneosActivos && asignacionEstacion.procesosSimultaneosActivos.includes(proceso.id)) ||
-            (estadoEstacion?.procesosSimultaneos && estadoEstacion.procesosSimultaneos.some(p => p.procesoId === proceso.id))
+            (asignacionEstacion?.procesosSimultaneosActivos && (
+                asignacionEstacion.procesosSimultaneosActivos.includes(proceso.id) ||
+                asignacionEstacion.procesosSimultaneosActivos.includes(String(proceso.id))
+            )) ||
+            (estadoEstacion?.procesosSimultaneos && estadoEstacion.procesosSimultaneos.some(p =>
+                p.procesoId == proceso.id ||
+                (p.procesoNombre || '').toLowerCase().trim() === procesoNombreLower
+            ))
         );
 
         // Si está en procesos simultáneos activos, está trabajándose
@@ -9020,7 +9033,9 @@ function verificarProcesosCompletados() {
             renderPedidosList();
 
             if (supervisoraState.layout) {
-                renderLayoutInSupervisora(supervisoraState.layout);
+                // Usar actualizarEstacionesEnMapa (actualización incremental con anti-flicker)
+                // en vez de renderLayoutInSupervisora (rebuild completo del DOM que causa parpadeo)
+                actualizarEstacionesEnMapa();
             }
         }
 

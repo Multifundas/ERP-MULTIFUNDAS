@@ -2720,6 +2720,7 @@ function iniciarProceso() {
     // *** Notificar inicio a supervisora ***
     const estadoMaquinasInicio = safeLocalGet('estado_maquinas', {});
     estadoMaquinasInicio[CONFIG_ESTACION.id] = {
+        ...(estadoMaquinasInicio[CONFIG_ESTACION.id] || {}),  // Preservar modoSimultaneo, procesosSimultaneos, etc.
         estado: 'trabajando',
         operadoraId: authState.operadoraActual?.id,
         operadoraNombre: authState.operadoraActual?.nombre,
