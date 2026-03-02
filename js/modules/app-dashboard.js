@@ -341,27 +341,46 @@ function loadDashboard() {
 // ========================================
 // MAPA DE PLANTA
 // ========================================
-function loadPlantMap() {
+async function loadPlantMap() {
     const container = document.getElementById('plantMapContainer');
     if (!container) return;
 
-    // Usar el mismo layout visual de la supervisora (planta_layout)
-    const savedLayout = localStorage.getItem('planta_layout');
-    if (!savedLayout) {
-        container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:40px;">No hay layout configurado. <a href="layout-editor.html">Configúralo aquí</a></p>';
-        return;
+    let layout = null;
+
+    // Intentar cargar desde Supabase primero (compartido entre computadoras)
+    try {
+        if (window.SupabaseClient) {
+            const rows = await SupabaseClient.getAll('planta_layout', {
+                filter: { activo: true },
+                order: { column: 'updated_at', ascending: false },
+                limit: 1
+            });
+            if (rows && rows.length > 0) {
+                const row = rows[0];
+                layout = {
+                    version: row.version || '1.0',
+                    canvasWidth: row.canvas_width || 1200,
+                    canvasHeight: row.canvas_height || 700,
+                    elements: row.elements || []
+                };
+                // Actualizar cache local
+                localStorage.setItem('planta_layout', JSON.stringify(layout));
+            }
+        }
+    } catch (e) {
+        console.error('[Dashboard] Error cargando layout desde Supabase:', e);
     }
 
-    let layout;
-    try {
-        layout = JSON.parse(savedLayout);
-    } catch (e) {
-        container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:40px;">Error cargando layout</p>';
-        return;
+    // Fallback a localStorage
+    if (!layout) {
+        const savedLayout = localStorage.getItem('planta_layout');
+        if (savedLayout) {
+            try { layout = JSON.parse(savedLayout); } catch (e) { /* ignore */ }
+        }
     }
 
     if (!layout || !layout.elements || layout.elements.length === 0) {
-        container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:40px;">Layout vacío</p>';
+        container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:40px;">No hay layout configurado. <a href="layout-editor.html">Configúralo aquí</a></p>';
         return;
     }
 

@@ -65,9 +65,9 @@ const MOTIVOS_TIEMPO_MUERTO = [
 // ========================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    dbReady.then(() => {
+    dbReady.then(async () => {
         loadThemePreference();
-        loadLayoutFromEditor();
+        await loadLayoutFromEditor();
         loadDataFromERP();
         initRefreshInterval();
         initKeyboardShortcuts();
@@ -191,23 +191,52 @@ function initSyncIndicator() {
 // Layout por defecto de la planta
 const DEFAULT_LAYOUT = {"version":"1.0","canvasWidth":1200,"canvasHeight":700,"elements":[{"id":"AC1","type":"mesa","name":"Mesa Corte Volumen","x":840,"y":540,"width":320,"height":80,"color":"#3b82f6","operadorId":null,"operadorNombre":""},{"id":"AC2","type":"mesa","name":"Mesa Corte Fundas","x":840,"y":440,"width":320,"height":80,"color":"#10b981","operadorId":null,"operadorNombre":""},{"id":"DF1","type":"mesa","name":"DOBLADO FUNDAS","x":840,"y":280,"width":160,"height":140,"color":"#f59e0b","operadorId":null,"operadorNombre":""},{"id":"B1","type":"area","name":"CORTE DE BIES","x":1020,"y":280,"width":150,"height":100,"color":"#ef4444","operadorId":null,"operadorNombre":""},{"id":"EX1","type":"area","name":"EX1","x":500,"y":20,"width":260,"height":40,"color":"#8b5cf6","operadorId":null,"operadorNombre":""},{"id":"C1","type":"costura","name":"C1","x":720,"y":580,"width":80,"height":80,"color":"#ec4899","operadorId":null,"operadorNombre":""},{"id":"C2","type":"costura","name":"C2","x":720,"y":480,"width":80,"height":80,"color":"#06b6d4","operadorId":null,"operadorNombre":""},{"id":"C3","type":"costura","name":"C3","x":720,"y":380,"width":80,"height":80,"color":"#64748b","operadorId":null,"operadorNombre":""},{"id":"C4","type":"costura","name":"C4","x":720,"y":280,"width":80,"height":80,"color":"#3b82f6","operadorId":null,"operadorNombre":""},{"id":"C5","type":"costura","name":"C5","x":720,"y":180,"width":80,"height":80,"color":"#10b981","operadorId":null,"operadorNombre":""},{"id":"C6","type":"costura","name":"C6","x":600,"y":580,"width":80,"height":80,"color":"#f59e0b","operadorId":null,"operadorNombre":""},{"id":"C7","type":"costura","name":"C7","x":600,"y":480,"width":80,"height":80,"color":"#ef4444","operadorId":null,"operadorNombre":""},{"id":"C8","type":"costura","name":"C8","x":600,"y":380,"width":80,"height":80,"color":"#8b5cf6","operadorId":null,"operadorNombre":""},{"id":"C9","type":"costura","name":"C9","x":600,"y":280,"width":80,"height":80,"color":"#ec4899","operadorId":null,"operadorNombre":""},{"id":"C10","type":"costura","name":"C10","x":600,"y":180,"width":80,"height":80,"color":"#06b6d4","operadorId":null,"operadorNombre":""},{"id":"C12","type":"costura","name":"C12","x":480,"y":580,"width":80,"height":80,"color":"#3b82f6","operadorId":null,"operadorNombre":""},{"id":"C13","type":"costura","name":"C13","x":480,"y":480,"width":80,"height":80,"color":"#10b981","operadorId":null,"operadorNombre":""},{"id":"C14","type":"costura","name":"C14","x":480,"y":380,"width":80,"height":80,"color":"#f59e0b","operadorId":null,"operadorNombre":""},{"id":"C15","type":"costura","name":"C15","x":480,"y":280,"width":80,"height":80,"color":"#ef4444","operadorId":null,"operadorNombre":""},{"id":"C16","type":"costura","name":"C16","x":480,"y":180,"width":80,"height":80,"color":"#8b5cf6","operadorId":null,"operadorNombre":""},{"id":"C17","type":"costura","name":"C17","x":480,"y":80,"width":80,"height":80,"color":"#ec4899","operadorId":null,"operadorNombre":""},{"id":"S1","type":"area","name":"SERIGRAFIA","x":20,"y":520,"width":240,"height":160,"color":"#06b6d4","operadorId":null,"operadorNombre":""},{"id":"E1","type":"mesa","name":"Mesa 4","x":40,"y":100,"width":100,"height":400,"color":"#64748b","operadorId":null,"operadorNombre":""},{"id":"C18","type":"costura","name":"C18","x":600,"y":80,"width":80,"height":80,"color":"#3b82f6","operadorId":null,"operadorNombre":""},{"id":"MA1","type":"area","name":"M1","x":40,"y":20,"width":100,"height":60,"color":"#3b82f6","operadorId":null,"operadorNombre":""}]};
 
-function loadLayoutFromEditor() {
-    let saved = localStorage.getItem('planta_layout');
+async function loadLayoutFromEditor() {
+    let data = null;
 
-    if (!saved) {
-        // Usar layout por defecto y guardarlo en localStorage
-        localStorage.setItem('planta_layout', JSON.stringify(DEFAULT_LAYOUT));
-        saved = JSON.stringify(DEFAULT_LAYOUT);
-    }
-
+    // Intentar cargar desde Supabase primero (compartido entre computadoras)
     try {
-        supervisoraState.layout = JSON.parse(saved);
-        // El renderizado se hace despues de cargar los datos del ERP
-        // para que las estaciones muestren los operadores asignados
+        if (window.SupabaseClient) {
+            const rows = await SupabaseClient.getAll('planta_layout', {
+                filter: { activo: true },
+                order: { column: 'updated_at', ascending: false },
+                limit: 1
+            });
+            if (rows && rows.length > 0) {
+                const row = rows[0];
+                data = {
+                    version: row.version || '1.0',
+                    canvasWidth: row.canvas_width || 1200,
+                    canvasHeight: row.canvas_height || 700,
+                    elements: row.elements || []
+                };
+                // Actualizar cache local
+                localStorage.setItem('planta_layout', JSON.stringify(data));
+            }
+        }
     } catch (e) {
-        console.error('Error cargando layout:', e);
-        showNoLayoutMessage();
+        console.error('[Supervisora] Error cargando layout desde Supabase:', e);
     }
+
+    // Fallback a localStorage
+    if (!data) {
+        let saved = localStorage.getItem('planta_layout');
+        if (!saved) {
+            localStorage.setItem('planta_layout', JSON.stringify(DEFAULT_LAYOUT));
+            saved = JSON.stringify(DEFAULT_LAYOUT);
+        }
+        try {
+            data = JSON.parse(saved);
+        } catch (e) {
+            console.error('Error cargando layout:', e);
+            showNoLayoutMessage();
+            return;
+        }
+    }
+
+    supervisoraState.layout = data;
+    // El renderizado se hace despues de cargar los datos del ERP
+    // para que las estaciones muestren los operadores asignados
 }
 
 function showNoLayoutMessage() {
