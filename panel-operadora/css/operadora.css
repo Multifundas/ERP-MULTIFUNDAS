@@ -2234,7 +2234,7 @@ body {
     }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
     html, body {
         overflow-y: auto;
         height: auto;
@@ -3635,7 +3635,26 @@ body {
    ======================================== */
 
 /* Layout compacto para tablets en landscape */
-@media (min-width: 768px) and (max-height: 900px) {
+@media (min-width: 1025px) and (max-height: 900px) {
+    html, body {
+        overflow-y: auto;
+        height: auto;
+    }
+
+    .panel-operadora {
+        height: auto;
+        min-height: 100vh;
+    }
+
+    .panel-main {
+        overflow-y: visible;
+        overflow-x: hidden;
+    }
+
+    .panel-column {
+        overflow-y: auto;
+    }
+
     .panel-header {
         padding: 8px 16px;
     }
@@ -3923,7 +3942,7 @@ body {
 }
 
 /* Ultra compacto para tablets pequeñas landscape */
-@media (min-width: 768px) and (max-height: 700px) {
+@media (min-width: 1025px) and (max-height: 700px) {
     .panel-main {
         grid-template-columns: 0.9fr 1.3fr 0.8fr;
     }

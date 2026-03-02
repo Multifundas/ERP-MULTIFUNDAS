@@ -4,6 +4,27 @@
 
 // Estado global
 var DEBUG_MODE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+// --- Guard: pausar actualizaciones DOM durante interacción del usuario ---
+var _userInteracting = false;
+var _interactionTimer = null;
+var _lastStationHashes = {};  // { stationId: hashString } para diff updates
+
+function _markInteracting() {
+    _userInteracting = true;
+    clearTimeout(_interactionTimer);
+    _interactionTimer = setTimeout(function() { _userInteracting = false; }, 2000);
+}
+// Escuchar eventos globales de interacción
+document.addEventListener('mousedown', _markInteracting, true);
+document.addEventListener('touchstart', _markInteracting, true);
+document.addEventListener('dragstart', _markInteracting, true);
+document.addEventListener('focusin', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
+        _markInteracting();
+    }
+}, true);
+
 const supervisoraState = {
     layout: null,
     maquinas: {},
@@ -822,8 +843,8 @@ function actualizarEstacionesEnMapa() {
             `;
         }
 
-        // --- Actualizar innerHTML del elemento (preserva event listeners en el propio el) ---
-        el.innerHTML = `
+        // --- Construir nuevo HTML y solo actualizar si cambió (evita lag/flicker) ---
+        var newHTML = `
             ${tiempoMuertoHTML}
             ${activityIndicator}
             <div class="estacion-header-new">
@@ -852,6 +873,14 @@ function actualizarEstacionesEnMapa() {
             ${progresoHTML}
             <div class="estacion-glow ${estadoVisual}"></div>
         `;
+
+        // Solo reemplazar DOM si el contenido realmente cambió
+        var htmlKey = element.id;
+        var htmlTrimmed = newHTML.replace(/\s+/g, ' ').trim();
+        if (_lastStationHashes[htmlKey] !== htmlTrimmed) {
+            _lastStationHashes[htmlKey] = htmlTrimmed;
+            el.innerHTML = newHTML;
+        }
     });
 
     // Actualizar estadísticas de zonas
@@ -1486,7 +1515,7 @@ function renderPedidosList() {
 
     if (countEl) countEl.textContent = pedidosFiltrados.length;
 
-    container.innerHTML = pedidosFiltrados.map(pedido => {
+    var newPedidosHTML = pedidosFiltrados.map(pedido => {
         const cliente = typeof db !== 'undefined' ? db.getCliente(pedido.clienteId) : null;
         const clienteNombre = cliente?.nombreComercial || pedido.clienteNombre || 'N/A';
         const prod = pedido.productos?.[0];
@@ -1600,6 +1629,14 @@ function renderPedidosList() {
             </div>
         `;
     }).join('');
+
+    // Solo actualizar DOM si el contenido cambió (evita lag/flicker)
+    if (container.innerHTML !== newPedidosHTML) {
+        // Preservar scroll position
+        var scrollTop = container.scrollTop;
+        container.innerHTML = newPedidosHTML;
+        container.scrollTop = scrollTop;
+    }
 }
 
 // Obtener procesos desde la base de datos si existe
@@ -8424,9 +8461,9 @@ function actualizarDatosDeOperadoras() {
     // 4. Actualizar UI
     updateStats();
 
-    // Solo re-renderizar si no hay modal abierto
+    // Solo re-renderizar si no hay modal abierto Y el usuario no está interactuando
     const modalVisible = document.getElementById('modalOverlay')?.style.display === 'flex';
-    if (!modalVisible) {
+    if (!modalVisible && !_userInteracting) {
         // Actualizar lista de pedidos (menú lateral)
         renderPedidosList();
 
