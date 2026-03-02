@@ -707,6 +707,9 @@ function cargarPedidoAsignado() {
         operadoraState.historialPausas = datos.historialPausas || [];
         DEBUG_MODE && console.log('[OPERADORA] Restaurando proceso suspendido:', datos.piezasCapturadas, 'piezas,', formatearTiempo(datos.tiempoAcumulado || 0));
 
+        // Persistir las capturas restauradas para que sobrevivan futuros recargas
+        guardarDatos();
+
         // Limpiar flag de reanudación de la asignación
         const asignTemp = safeLocalGet('asignaciones_estaciones', {});
         if (asignTemp[estacionIdUsada]) {
@@ -714,6 +717,10 @@ function cargarPedidoAsignado() {
             delete asignTemp[estacionIdUsada].datosSuspendidos;
             localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignTemp));
         }
+    } else if (operadoraState.piezasCapturadas > 0 && operadoraState.capturasDia.length > 0 &&
+               operadoraState.capturasDia.some(c => c.procesoId == miAsignacion.procesoId || c.procesoNombre === miAsignacion.procesoNombre)) {
+        // Ya hay piezas capturadas del MISMO proceso (polling recargó) - NO resetear
+        DEBUG_MODE && console.log('[OPERADORA] Mismo proceso con', operadoraState.piezasCapturadas, 'piezas activas - no resetear');
     } else {
         // Resetear piezas capturadas para el nuevo proceso
         operadoraState.piezasCapturadas = 0;
