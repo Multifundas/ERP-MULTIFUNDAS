@@ -9,6 +9,9 @@ var DEBUG_MODE = window.location.hostname === 'localhost' || window.location.hos
 var _userInteracting = false;
 var _interactionTimer = null;
 var _lastStationHashes = {};  // { stationId: hashString } para diff updates
+var _lastProcesosHTML = '';   // Hash de procesosActivos para evitar reflows
+var _lastAlertasHTML = '';    // Hash de alertasList para evitar reflows
+var _lastPedidosHTML = '';    // Hash de pedidosList para evitar reflows
 
 function _markInteracting() {
     _userInteracting = true;
@@ -149,7 +152,7 @@ function initKeyboardShortcuts() {
             selectEstacion(null);
         }
         if (e.key === 'r' && !e.ctrlKey) {
-            refreshData();
+            refreshData(true);
         }
         if (e.key === 'f' && !e.ctrlKey) {
             toggleFullscreen();
@@ -1638,7 +1641,11 @@ function renderPedidosList() {
     const countEl = document.getElementById('pedidosCount');
 
     if (supervisoraState.pedidosHoy.length === 0) {
-        container.innerHTML = '<p class="empty-text">No hay pedidos activos</p>';
+        var emptyHTML = '<p class="empty-text">No hay pedidos activos</p>';
+        if (_lastPedidosHTML !== emptyHTML) {
+            _lastPedidosHTML = emptyHTML;
+            container.innerHTML = emptyHTML;
+        }
         if (countEl) countEl.textContent = '0';
         return;
     }
@@ -1775,9 +1782,10 @@ function renderPedidosList() {
         `;
     }).join('');
 
-    // Solo actualizar DOM si el contenido cambió (evita lag/flicker)
-    if (container.innerHTML !== newPedidosHTML) {
-        // Preservar scroll position
+    // Comparar con hash en memoria (evita leer innerHTML del DOM que fuerza reflow)
+    var trimmed = newPedidosHTML.replace(/\s+/g, ' ').trim();
+    if (_lastPedidosHTML !== trimmed) {
+        _lastPedidosHTML = trimmed;
         var scrollTop = container.scrollTop;
         container.innerHTML = newPedidosHTML;
         container.scrollTop = scrollTop;
@@ -2634,7 +2642,10 @@ function renderProcesosActivos() {
         `).join('');
     }
 
-    if (container.innerHTML !== newHTML) {
+    // Comparar con hash en memoria (evita leer innerHTML del DOM que fuerza reflow)
+    var trimmed = newHTML.replace(/\s+/g, ' ').trim();
+    if (_lastProcesosHTML !== trimmed) {
+        _lastProcesosHTML = trimmed;
         container.innerHTML = newHTML;
     }
 }
@@ -2778,7 +2789,10 @@ function renderAlertas() {
         `).join('');
     }
 
-    if (container.innerHTML !== newHTML) {
+    // Comparar con hash en memoria (evita leer innerHTML del DOM que fuerza reflow)
+    var trimmed = newHTML.replace(/\s+/g, ' ').trim();
+    if (_lastAlertasHTML !== trimmed) {
+        _lastAlertasHTML = trimmed;
         container.innerHTML = newHTML;
     }
 }
@@ -3903,8 +3917,11 @@ function updateStats() {
         _lastStats.eficiencia = eficiencia;
     }
 
-    renderProcesosActivos();
-    renderAlertas();
+    // Solo actualizar sidebar si el usuario no está interactuando
+    if (!_userInteracting) {
+        renderProcesosActivos();
+        renderAlertas();
+    }
 }
 
 // ========================================
@@ -4060,15 +4077,19 @@ function resaltarFlujoPedido(pedidoId) {
 // UTILIDADES
 // ========================================
 
-function refreshData() {
+function refreshData(manual) {
     loadDataFromERP();
     loadEstadoMaquinas();
 
-    if (supervisoraState.layout) {
+    // Solo actualizar DOM del mapa si el usuario no está interactuando
+    if (supervisoraState.layout && !_userInteracting) {
         actualizarEstacionesEnMapa();
     }
 
-    showToast('Datos actualizados', 'success');
+    // Solo mostrar toast si fue llamado manualmente (tecla R, botón, etc.)
+    if (manual) {
+        showToast('Datos actualizados', 'success');
+    }
 }
 
 function toggleFullscreen() {
@@ -7402,7 +7423,7 @@ function confirmarAsignacionPedido(estacionId) {
 
     // Refrescar vista
     if (typeof refreshData === 'function') {
-        refreshData();
+        refreshData(true);
     }
 }
 
@@ -8630,20 +8651,21 @@ function actualizarDatosDeOperadoras() {
         }
     });
 
-    // 4. Actualizar UI
-    updateStats();
+    // 4. Actualizar UI — agrupar todas las escrituras DOM en un solo frame
+    requestAnimationFrame(function() {
+        updateStats();
 
-    // Solo re-renderizar si no hay modal abierto Y el usuario no está interactuando
-    const modalVisible = document.getElementById('modalOverlay')?.style.display === 'flex';
-    if (!modalVisible && !_userInteracting) {
-        // Actualizar lista de pedidos (menú lateral)
-        renderPedidosList();
+        // Solo re-renderizar si no hay modal abierto Y el usuario no está interactuando
+        var modalEl = document.getElementById('modalOverlay');
+        var modalVisible = modalEl && modalEl.classList.contains('active');
+        if (!modalVisible && !_userInteracting) {
+            renderPedidosList();
 
-        // Actualizar mapa de planta (diff-based, sin reconstruir DOM)
-        if (supervisoraState.layout) {
-            actualizarEstacionesEnMapa();
+            if (supervisoraState.layout) {
+                actualizarEstacionesEnMapa();
+            }
         }
-    }
+    });
 }
 
 /**
@@ -8876,20 +8898,21 @@ function verificarProcesosCompletados() {
         DEBUG_MODE && console.log('[SUPERVISORA] Hubo cambios en procesos, actualizando UI...');
     }
 
-    // SIEMPRE re-renderizar para mostrar piezas actualizadas
-    // (Solo evitar si hay modal abierto para no interrumpir al usuario)
-    const modalVisible = document.getElementById('modalOverlay')?.style.display === 'flex';
-    if (!modalVisible) {
-        renderPedidosList();
+    // Re-renderizar para mostrar piezas actualizadas
+    // Agrupar DOM writes en un frame, respetar interacción del usuario
+    requestAnimationFrame(function() {
+        var modalEl = document.getElementById('modalOverlay');
+        var modalVisible = modalEl && modalEl.classList.contains('active');
+        if (!modalVisible && !_userInteracting) {
+            renderPedidosList();
 
-        // Actualizar mapa de planta
-        if (supervisoraState.layout) {
-            renderLayoutInSupervisora(supervisoraState.layout);
+            if (supervisoraState.layout) {
+                renderLayoutInSupervisora(supervisoraState.layout);
+            }
         }
-    }
 
-    // Actualizar estadísticas siempre
-    updateStats();
+        updateStats();
+    });
 
     // Guardar estado
     saveEstadoMaquinas();
