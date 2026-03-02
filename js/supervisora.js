@@ -1209,6 +1209,26 @@ function loadDataFromERP() {
         // Filtrar por estados activos (incluir variantes con guion y guion bajo)
         const estadosActivos = ['produccion', 'en-proceso', 'en_proceso', 'pendiente', 'activo', 'en proceso'];
 
+        // Preservar piezas/estado actuales antes de reconstruir (evita parpadeo de barras de progreso)
+        const _piezasPrevias = {};
+        if (supervisoraState.pedidosHoy && supervisoraState.pedidosHoy.length > 0) {
+            supervisoraState.pedidosHoy.forEach(function(p) {
+                if (p.procesos) {
+                    p.procesos.forEach(function(proc) {
+                        var key = p.id + '-' + (proc.nombre || '').toLowerCase().trim();
+                        _piezasPrevias[key] = {
+                            piezas: proc.piezas || 0,
+                            estado: proc.estado,
+                            operadoraId: proc.operadoraId,
+                            operadoraNombre: proc.operadoraNombre,
+                            estacionId: proc.estacionId,
+                            ultimaActualizacion: proc.ultimaActualizacion
+                        };
+                    });
+                }
+            });
+        }
+
         supervisoraState.pedidosHoy = pedidos
             .filter(p => {
                 // Excluir pedidos ocultos para supervisora
@@ -1285,6 +1305,24 @@ function loadDataFromERP() {
                     procesos: procesos
                 };
             });
+
+        // Restaurar piezas/estado previos que tenían valores mayores (evita reset a 0 entre ciclos de sync)
+        supervisoraState.pedidosHoy.forEach(function(p) {
+            if (p.procesos) {
+                p.procesos.forEach(function(proc) {
+                    var key = p.id + '-' + (proc.nombre || '').toLowerCase().trim();
+                    var prev = _piezasPrevias[key];
+                    if (prev && prev.piezas > (proc.piezas || 0)) {
+                        proc.piezas = prev.piezas;
+                        proc.estado = prev.estado || proc.estado;
+                        if (prev.operadoraId) proc.operadoraId = prev.operadoraId;
+                        if (prev.operadoraNombre) proc.operadoraNombre = prev.operadoraNombre;
+                        if (prev.estacionId) proc.estacionId = prev.estacionId;
+                        if (prev.ultimaActualizacion) proc.ultimaActualizacion = prev.ultimaActualizacion;
+                    }
+                });
+            }
+        });
 
         // Cargar operadores
         const personal = db.getPersonal();
