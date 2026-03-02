@@ -1137,7 +1137,8 @@ function loadDataFromERP() {
                                         estado: 'pendiente',
                                         productoId: prod.productoId,
                                         productoNombre: productoCompleto.nombre,
-                                        pedidoId: pedido.id
+                                        pedidoId: pedido.id,
+                                        areaPlantaId: proc.areaPlantaId || null
                                     });
                                 }
                             });
@@ -1289,7 +1290,8 @@ function formatearProcesoParaSupervisora(proc, pedidoId, prodIdx, procIdx) {
         tipo: tipo,
         estado: estado,
         piezas: proc.completadas || proc.piezas || 0,
-        orden: proc.procesoOrden || proc.orden || procIdx + 1
+        orden: proc.procesoOrden || proc.orden || procIdx + 1,
+        areaPlantaId: proc.areaPlantaId || null
     };
 }
 
@@ -9110,7 +9112,7 @@ function esEstacionExtrasId(estacionId) {
 function esEstacionManualId(estacionId) {
     if (!estacionId) return false;
     const id = estacionId.toUpperCase().trim();
-    return /^M\d+$/i.test(id) || id.includes('MANUAL');
+    return /^MA?\d+$/i.test(id) || id.includes('MANUAL');
 }
 
 /**
@@ -9119,7 +9121,10 @@ function esEstacionManualId(estacionId) {
  */
 function esProcesoExtras(proceso) {
     if (!proceso) return false;
-    if (proceso.areaPlantaId && proceso.areaPlantaId.toLowerCase() === 'extras') return true;
+    if (proceso.areaPlantaId) {
+        const areaId = proceso.areaPlantaId.toLowerCase();
+        if (areaId === 'extras' || areaId.startsWith('extras')) return true;
+    }
     const nombre = (proceso.nombre || '').toLowerCase();
     return nombre.includes('extra') && !nombre.includes('extracción');
 }
@@ -9129,7 +9134,10 @@ function esProcesoExtras(proceso) {
  */
 function esProcesoManual(proceso) {
     if (!proceso) return false;
-    if (proceso.areaPlantaId && proceso.areaPlantaId.toLowerCase() === 'manual') return true;
+    if (proceso.areaPlantaId) {
+        const areaId = proceso.areaPlantaId.toLowerCase();
+        if (areaId === 'manual' || areaId.startsWith('manual')) return true;
+    }
     const nombre = (proceso.nombre || '').toLowerCase();
     return nombre === 'manual' || nombre.includes('proceso manual');
 }
