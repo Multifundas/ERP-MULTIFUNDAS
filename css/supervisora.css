@@ -53,7 +53,7 @@ body {
     font-size: 14px;
     padding: 4px 8px;
     border-radius: 6px;
-    transition: all 0.2s;
+    transition: background 0.15s, color 0.15s;
 }
 
 .back-link:hover {
@@ -84,6 +84,7 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     animation: pulse-badge 2s infinite;
+    will-change: opacity;
 }
 
 @keyframes pulse-badge {
@@ -145,7 +146,7 @@ body {
     color: #8b9dc3;
     border-radius: 6px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background 0.15s, color 0.15s;
     font-size: 12px;
 }
 
@@ -161,7 +162,7 @@ body {
     cursor: pointer;
     font-size: 0.75rem;
     font-weight: 500;
-    transition: all 0.2s;
+    transition: background 0.15s, color 0.15s, transform 0.15s, box-shadow 0.15s;
     display: flex;
     align-items: center;
     gap: 5px;
@@ -201,7 +202,7 @@ body {
     display: flex;
     align-items: center;
     gap: 5px;
-    transition: all 0.2s;
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
 .btn-inventario:hover {
@@ -3133,7 +3134,7 @@ body {
 .theme-icon-moon {
     font-size: 0.75rem;
     z-index: 1;
-    transition: all 0.3s;
+    transition: color 0.3s, opacity 0.3s;
 }
 
 .theme-icon-sun {
@@ -3151,7 +3152,7 @@ body {
     background: linear-gradient(145deg, #fff, #e2e8f0);
     border-radius: 50%;
     left: 3px;
-    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    transition: left 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), background 0.4s, box-shadow 0.4s;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
