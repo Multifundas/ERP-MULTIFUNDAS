@@ -246,6 +246,8 @@ function renderLayoutInSupervisora(layout) {
         'empaque': { bg: 'rgba(16, 185, 129, 0.08)', border: '#10b981', label: 'EMPAQUE' },
         'calidad': { bg: 'rgba(245, 158, 11, 0.08)', border: '#f59e0b', label: 'CALIDAD' },
         'almacen': { bg: 'rgba(139, 92, 246, 0.08)', border: '#8b5cf6', label: 'ALMACEN' },
+        'extras': { bg: 'rgba(245, 158, 11, 0.08)', border: '#f59e0b', label: 'EXTRAS' },
+        'manual': { bg: 'rgba(148, 163, 184, 0.08)', border: '#94a3b8', label: 'MANUAL' },
         'default': { bg: 'rgba(107, 114, 128, 0.08)', border: '#6b7280', label: 'AREA' }
     };
 
@@ -666,12 +668,8 @@ function actualizarEstacionesEnMapa() {
         }
     }
 
-    // Multi-station elements requieren full render para mantener los slots internos sincronizados
-    const hasMultiStation = estaciones.some(e => e.stationIds && e.stationIds.length > 1);
-    if (hasMultiStation) {
-        renderLayoutInSupervisora(layout);
-        return;
-    }
+    // Multi-station elements: actualizar slots in-place en vez de full render
+    // (full render causa lag severo cada 5 segundos)
 
     // Iconos por tipo (mismos que en renderLayoutInSupervisora)
     const tipoIconos = {
@@ -684,9 +682,14 @@ function actualizarEstacionesEnMapa() {
         'calidad': 'fa-check-circle'
     };
 
-    // Actualizar cada estación in-place (solo para single-station elements)
+    // Cache localStorage reads una sola vez (no por estación)
+    const _cachedAsignaciones = safeLocalGet('asignaciones_estaciones', {});
+    const _cachedEstadoMaquinas = safeLocalGet('estado_maquinas', {});
+
+    // Actualizar cada estación in-place
     estaciones.forEach(element => {
         const stationIds = element.stationIds || [element.id];
+        const isMultiStation = stationIds.length > 1;
         const sid = stationIds[0];
 
         // Asegurar que existe el estado
@@ -707,15 +710,115 @@ function actualizarEstacionesEnMapa() {
 
         const icono = tipoIconos[element.type] || 'fa-cog';
 
+        // --- Para multi-station: actualizar slots individuales ---
+        if (isMultiStation) {
+            // Recalcular estado general
+            const totalOpsElement = stationIds.reduce((sum, s) => sum + (supervisoraState.maquinas[s]?.operadores?.length || 0), 0);
+            let elementEstado = 'inactivo';
+            if (totalOpsElement > 0) {
+                const estados = stationIds.map(s => supervisoraState.maquinas[s]?.estado).filter(Boolean);
+                if (estados.includes('retrasado')) elementEstado = 'retrasado';
+                else if (estados.includes('activo')) elementEstado = 'activo';
+                else if (estados.includes('pausado')) elementEstado = 'pausado';
+                else if (estados.includes('adelantado')) elementEstado = 'adelantado';
+            }
+
+            let newClassName = `estacion-element ${element.type} ${elementEstado} multi-station`;
+            const tiempoMuertoActivo = supervisoraState.tiemposMuertos.activos[element.id] || supervisoraState.tiemposMuertos.activos[sid];
+            if (tiempoMuertoActivo) newClassName += ' tiene-tiempo-muerto';
+            if (el.className !== newClassName) el.className = newClassName;
+            el.setAttribute('data-estado', elementEstado);
+
+            // Generar slotsHTML
+            let slotsHTML = '<div class="station-slots">';
+            stationIds.forEach((slotSid, idx) => {
+                const slotMaquina = supervisoraState.maquinas[slotSid];
+                const slotOps = slotMaquina?.operadores || [];
+                const slotEstadoMaq = _cachedEstadoMaquinas[slotSid];
+                const slotEstaTrabajando = slotEstadoMaq?.estado === 'trabajando' || slotEstadoMaq?.procesoActivo;
+
+                let slotOpHTML = '';
+                if (slotOps.length > 0) {
+                    slotOpHTML = slotOps.map(op => `
+                        <div class="operador-chip" data-operador-id="${op.id}" title="${S(op.nombre)}">
+                            <span class="operador-iniciales">${S(getIniciales(op.nombre))}</span>
+                            <button class="remove-operador" onclick="event.stopPropagation(); removeOperadorFromEstacion('${S(slotSid)}', ${op.id})" title="Quitar">&times;</button>
+                        </div>
+                    `).join('');
+                } else {
+                    slotOpHTML = '<span class="sin-operador"><i class="fas fa-user-plus"></i></span>';
+                }
+
+                const slotActivo = slotMaquina?.estado === 'activo' ? 'activo' : 'inactivo';
+                slotsHTML += `
+                    <div class="station-slot ${slotActivo}" data-station-id="${slotSid}"
+                         ondragover="allowDrop(event)" ondrop="dropOnEstacion(event, '${slotSid}')"
+                         onclick="event.stopPropagation(); selectEstacion('${slotSid}')"
+                         ondblclick="event.stopPropagation(); openEstacionModal('${slotSid}')">
+                        <div class="slot-id">${slotSid}</div>
+                        <div class="slot-operadores">${slotOpHTML}</div>
+                        ${slotMaquina?.procesoNombre ? `<div class="slot-proceso"><i class="fas fa-cog ${slotEstaTrabajando ? 'fa-spin' : ''}"></i> ${S(slotMaquina.procesoNombre)}</div>` : ''}
+                    </div>
+                `;
+            });
+            slotsHTML += '</div>';
+
+            const activityIndicator = elementEstado === 'activo' ? '<div class="activity-pulse"></div>' : '';
+
+            let tiempoMuertoHTML = '';
+            if (tiempoMuertoActivo) {
+                const inicio = new Date(tiempoMuertoActivo.inicio);
+                const ahora = new Date();
+                const duracionMin = Math.floor((ahora - inicio) / 60000);
+                tiempoMuertoHTML = `
+                    <div class="estacion-tiempo-muerto" style="border-color: ${tiempoMuertoActivo.motivoColor}">
+                        <div class="tm-indicator" style="background: ${tiempoMuertoActivo.motivoColor}">
+                            <i class="fas ${tiempoMuertoActivo.motivoIcono}"></i>
+                        </div>
+                        <div class="tm-info">
+                            <span class="tm-motivo">${tiempoMuertoActivo.motivoNombre}</span>
+                            <span class="tm-tiempo">${duracionMin} min</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            var newHTML = `
+                ${tiempoMuertoHTML}
+                ${activityIndicator}
+                <div class="estacion-header-new">
+                    <div class="estacion-icon"><i class="fas ${icono}"></i></div>
+                    <div class="estacion-id-badge">${element.id} <span class="multi-station-badge">${stationIds.length} pos.</span></div>
+                    <div class="estacion-badges">
+                        ${totalOpsElement > 0 ? `<span class="operadores-count-badge">${totalOpsElement}</span>` : ''}
+                        <div class="estacion-estado-indicator ${elementEstado}">
+                            <i class="fas ${getEstadoIcon(elementEstado)}"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="estacion-body-new">
+                    ${slotsHTML}
+                </div>
+                <div class="estacion-glow ${elementEstado}"></div>
+            `;
+
+            var htmlKey = element.id;
+            var htmlTrimmed = newHTML.replace(/\s+/g, ' ').trim();
+            if (_lastStationHashes[htmlKey] !== htmlTrimmed) {
+                _lastStationHashes[htmlKey] = htmlTrimmed;
+                el.innerHTML = newHTML;
+            }
+            return; // Procesado, siguiente estación
+        }
+
+        // --- SINGLE STATION: lógica original ---
         // --- Actualizar clases del elemento raíz ---
         const oldEstado = el.getAttribute('data-estado');
         const tiempoMuertoActivo = supervisoraState.tiemposMuertos.activos[sid];
 
-        // Obtener info de procesos simultáneos y estado de trabajo
-        const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
-        const estadoMaquinas = safeLocalGet('estado_maquinas', {});
-        const asignacionEst = asignacionesEstaciones[sid];
-        const estadoMaquinaLS = estadoMaquinas[sid];
+        // Obtener info de procesos simultáneos y estado de trabajo (desde cache)
+        const asignacionEst = _cachedAsignaciones[sid];
+        const estadoMaquinaLS = _cachedEstadoMaquinas[sid];
 
         const modoSimultaneo = asignacionEst?.modoSimultaneo || estadoMaquinaLS?.modoSimultaneo;
         const procesosSimultaneos = estadoMaquinaLS?.procesosSimultaneos || [];
@@ -778,7 +881,7 @@ function actualizarEstacionesEnMapa() {
         // --- Operadores HTML ---
         let operadoresHTML = '';
         if (operadoresCount > 0) {
-            const estadoEst = estadoMaquinas[sid];
+            const estadoEst = _cachedEstadoMaquinas[sid];
             const piezasRealizadas = estadoEst?.piezasHoy || maquinaState.piezasHoy || 0;
             const pedidoAsignado = maquinaState.pedidoId ? supervisoraState.pedidosHoy.find(p => p.id === maquinaState.pedidoId) : null;
             const cantidadObjetivo = pedidoAsignado?.productos?.[0]?.cantidad || pedidoAsignado?.cantidad || 0;
@@ -909,6 +1012,8 @@ function detectAreaType(name) {
     if (nameLower.includes('empaque') || nameLower.includes('pack')) return 'empaque';
     if (nameLower.includes('calidad') || nameLower.includes('qa')) return 'calidad';
     if (nameLower.includes('almacen') || nameLower.includes('bodega')) return 'almacen';
+    if (nameLower.includes('extras') || nameLower.includes('extra')) return 'extras';
+    if (nameLower.includes('manual')) return 'manual';
     return 'default';
 }
 
@@ -2472,21 +2577,26 @@ function obtenerSugerenciaAsignacion(op) {
 
 function renderProcesosActivos() {
     const container = document.getElementById('procesosActivos');
+    if (!container) return;
 
     const activos = Object.values(supervisoraState.maquinas).filter(m => m.estado === 'activo' && m.procesoNombre);
 
+    var newHTML;
     if (activos.length === 0) {
-        container.innerHTML = '<p class="empty-text">No hay procesos activos</p>';
-        return;
+        newHTML = '<p class="empty-text">No hay procesos activos</p>';
+    } else {
+        newHTML = activos.map(m => `
+            <div class="proceso-item">
+                <span class="proceso-estacion">${m.id}</span>
+                <span class="proceso-nombre">${S(m.procesoNombre)}</span>
+                <span class="proceso-piezas">${m.piezasHoy} pzas</span>
+            </div>
+        `).join('');
     }
 
-    container.innerHTML = activos.map(m => `
-        <div class="proceso-item">
-            <span class="proceso-estacion">${m.id}</span>
-            <span class="proceso-nombre">${S(m.procesoNombre)}</span>
-            <span class="proceso-piezas">${m.piezasHoy} pzas</span>
-        </div>
-    `).join('');
+    if (container.innerHTML !== newHTML) {
+        container.innerHTML = newHTML;
+    }
 }
 
 // Alertas descartadas por la supervisora en esta sesión
@@ -2606,27 +2716,31 @@ function renderAlertas() {
         return (now - dismissedAt) > ALERTA_EXPIRY_MS;
     });
 
+    var newHTML;
     if (alertasVisibles.length === 0) {
-        container.innerHTML = `
+        newHTML = `
             <div class="empty-text success">
                 <i class="fas fa-check-circle"></i>
                 <span>Todo en orden</span>
             </div>`;
-        return;
+    } else {
+        newHTML = alertasVisibles.map(a => `
+            <div class="alerta-item ${a.tipo}">
+                <i class="fas ${a.icono}"></i>
+                <div class="alerta-content">
+                    <span class="alerta-mensaje">${S(a.mensaje)}</span>
+                    ${a.detalle ? `<span class="alerta-detalle">${S(a.detalle)}</span>` : ''}
+                </div>
+                <button class="alerta-dismiss" onclick="descartarAlertaSup('${a.key}')" title="Descartar">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `).join('');
     }
 
-    container.innerHTML = alertasVisibles.map(a => `
-        <div class="alerta-item ${a.tipo}">
-            <i class="fas ${a.icono}"></i>
-            <div class="alerta-content">
-                <span class="alerta-mensaje">${S(a.mensaje)}</span>
-                ${a.detalle ? `<span class="alerta-detalle">${S(a.detalle)}</span>` : ''}
-            </div>
-            <button class="alerta-dismiss" onclick="descartarAlertaSup('${a.key}')" title="Descartar">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-    `).join('');
+    if (container.innerHTML !== newHTML) {
+        container.innerHTML = newHTML;
+    }
 }
 
 // ========================================
@@ -3718,6 +3832,7 @@ function cargarAsignacionesExistentes() {
 // ESTADISTICAS
 // ========================================
 
+var _lastStats = {};
 function updateStats() {
     const maquinas = Object.values(supervisoraState.maquinas);
 
@@ -3726,10 +3841,27 @@ function updateStats() {
     const piezasHoy = maquinas.reduce((sum, m) => sum + (m.piezasHoy || 0), 0);
     const eficiencia = maquinas.length > 0 ? Math.round((activos / maquinas.length) * 100) : 0;
 
-    document.getElementById('statActivos').textContent = activos;
-    document.getElementById('statInactivos').textContent = inactivos;
-    document.getElementById('statPiezasHoy').textContent = piezasHoy.toLocaleString();
-    document.getElementById('statEficiencia').textContent = eficiencia + '%';
+    // Solo actualizar DOM si los valores cambiaron
+    if (_lastStats.activos !== activos) {
+        var el = document.getElementById('statActivos');
+        if (el) el.textContent = activos;
+        _lastStats.activos = activos;
+    }
+    if (_lastStats.inactivos !== inactivos) {
+        var el = document.getElementById('statInactivos');
+        if (el) el.textContent = inactivos;
+        _lastStats.inactivos = inactivos;
+    }
+    if (_lastStats.piezasHoy !== piezasHoy) {
+        var el = document.getElementById('statPiezasHoy');
+        if (el) el.textContent = piezasHoy.toLocaleString();
+        _lastStats.piezasHoy = piezasHoy;
+    }
+    if (_lastStats.eficiencia !== eficiencia) {
+        var el = document.getElementById('statEficiencia');
+        if (el) el.textContent = eficiencia + '%';
+        _lastStats.eficiencia = eficiencia;
+    }
 
     renderProcesosActivos();
     renderAlertas();
@@ -8930,8 +9062,298 @@ setInterval(verificarAsignacionAutomaticaCalidadEmpaque, 10000);
 // Primera ejecución después de 3 segundos
 setTimeout(verificarAsignacionAutomaticaCalidadEmpaque, 3000);
 
-// Polling cada 5 segundos para datos de operadoras (más frecuente para ver piezas en tiempo real)
-setInterval(actualizarDatosDeOperadoras, 5000);
+// ========================================
+// AUTO-ASIGNACIÓN: PROCESOS EXTRAS → MANUAL
+// ========================================
+
+/**
+ * Detecta si una estación pertenece al área EXTRAS (EX1, EX2, etc.)
+ */
+function esEstacionExtrasId(estacionId) {
+    if (!estacionId) return false;
+    const id = estacionId.toUpperCase().trim();
+    return /^EX\d+$/i.test(id) || id.includes('EXTRA');
+}
+
+/**
+ * Detecta si una estación pertenece al área MANUAL (M1, etc.)
+ */
+function esEstacionManualId(estacionId) {
+    if (!estacionId) return false;
+    const id = estacionId.toUpperCase().trim();
+    return /^M\d+$/i.test(id) || id.includes('MANUAL');
+}
+
+/**
+ * Detecta si un proceso pertenece al área EXTRAS
+ * Verifica por areaPlantaId o por nombre del proceso
+ */
+function esProcesoExtras(proceso) {
+    if (!proceso) return false;
+    if (proceso.areaPlantaId && proceso.areaPlantaId.toLowerCase() === 'extras') return true;
+    const nombre = (proceso.nombre || '').toLowerCase();
+    return nombre.includes('extra') && !nombre.includes('extracción');
+}
+
+/**
+ * Detecta si un proceso pertenece al área MANUAL
+ */
+function esProcesoManual(proceso) {
+    if (!proceso) return false;
+    if (proceso.areaPlantaId && proceso.areaPlantaId.toLowerCase() === 'manual') return true;
+    const nombre = (proceso.nombre || '').toLowerCase();
+    return nombre === 'manual' || nombre.includes('proceso manual');
+}
+
+/**
+ * Auto-asigna procesos del área EXTRAS a estaciones EX1/EX2.
+ * Cuando un proceso EXTRAS se completa, asigna automáticamente al área Manual (M1).
+ */
+function verificarAsignacionAutomaticaExtras() {
+    // 1. Obtener estaciones EXTRAS y MANUAL del state
+    const estacionesExtras = [];
+    const estacionesManual = [];
+
+    Object.keys(supervisoraState.maquinas).forEach(estacionId => {
+        if (esEstacionExtrasId(estacionId)) estacionesExtras.push(estacionId);
+        if (esEstacionManualId(estacionId)) estacionesManual.push(estacionId);
+    });
+
+    if (estacionesExtras.length === 0) return;
+
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
+    let asignacionesModificadas = false;
+
+    // 2. Buscar procesos EXTRAS pendientes en pedidos y auto-asignarlos
+    supervisoraState.pedidosHoy.forEach(pedido => {
+        if (!pedido.procesos || pedido.procesos.length === 0) return;
+
+        pedido.procesos.forEach(proceso => {
+            if (!esProcesoExtras(proceso)) return;
+            if (proceso.estado === 'completado' || proceso.estado === 'terminado') return;
+            if (proceso.estado === 'en-proceso' || proceso.estado === 'en_proceso') return;
+
+            // Verificar si ya está asignado a alguna estación EXTRAS
+            let yaAsignado = false;
+            Object.entries(asignaciones).forEach(([estId, asig]) => {
+                if (asig.pedidoId == pedido.id && asig.procesoId == proceso.id) {
+                    yaAsignado = true;
+                }
+            });
+            // También verificar en maquinas del state
+            Object.values(supervisoraState.maquinas).forEach(m => {
+                if (m.pedidoId == pedido.id && m.procesoId == proceso.id) {
+                    yaAsignado = true;
+                }
+            });
+
+            if (yaAsignado) return;
+
+            // Buscar estación EXTRAS disponible (sin proceso activo o con menor cola)
+            let mejorEstacion = null;
+            let menorCola = Infinity;
+            estacionesExtras.forEach(estId => {
+                const maquina = supervisoraState.maquinas[estId];
+                if (!maquina) return;
+                const colaLen = (maquina.colaProcesos || []).length;
+                if (!maquina.procesoId && colaLen === 0) {
+                    // Estación libre, asignar directamente
+                    if (menorCola > -1) {
+                        mejorEstacion = estId;
+                        menorCola = -1;
+                    }
+                } else if (colaLen < menorCola) {
+                    mejorEstacion = estId;
+                    menorCola = colaLen;
+                }
+            });
+
+            if (!mejorEstacion) return;
+
+            const maquina = supervisoraState.maquinas[mejorEstacion];
+            const producto = pedido.productos && pedido.productos[0] ? pedido.productos[0] : {};
+            const cantidadPedido = producto.cantidad || pedido.cantidad || 100;
+
+            const procesoData = {
+                procesoId: proceso.id,
+                procesoNombre: proceso.nombre,
+                procesoTipo: proceso.tipo || 'extras',
+                pedidoId: pedido.id,
+                pedidoCodigo: pedido.codigo || `PED-${pedido.id}`,
+                clienteNombre: pedido.cliente || pedido.clienteNombre || 'Cliente',
+                productoNombre: producto.nombre || pedido.nombre || 'Producto',
+                productoImagen: producto.imagen || '',
+                meta: cantidadPedido,
+                cantidadTotal: cantidadPedido,
+                piezasCompletadas: 0,
+                prioridad: pedido.prioridad || 'normal',
+                fechaEntrega: pedido.fechaEntrega || null,
+                fechaAsignacion: new Date().toISOString(),
+                estado: 'pendiente',
+                autoAsignado: true,
+                areaPlantaId: 'extras',
+                orden: proceso.orden || 0
+            };
+
+            if (!maquina.procesoId) {
+                // Asignar directamente
+                maquina.procesoId = proceso.id;
+                maquina.procesoNombre = proceso.nombre;
+                maquina.pedidoId = pedido.id;
+                procesoData.estado = 'en_progreso';
+                if (maquina.operadores && maquina.operadores.length > 0) {
+                    maquina.estado = 'activo';
+                }
+                asignaciones[mejorEstacion] = {
+                    ...procesoData,
+                    estado: 'asignado',
+                    asignadoPor: 'Auto-EXTRAS'
+                };
+                asignaciones[mejorEstacion].colaProcesos = maquina.colaProcesos || [];
+            } else {
+                // Agregar a cola
+                if (!maquina.colaProcesos) maquina.colaProcesos = [];
+                maquina.colaProcesos.push(procesoData);
+                if (asignaciones[mejorEstacion]) {
+                    asignaciones[mejorEstacion].colaProcesos = maquina.colaProcesos;
+                }
+            }
+
+            proceso.estado = 'en-proceso';
+            asignacionesModificadas = true;
+            DEBUG_MODE && console.log('[SUPERVISORA] Auto-asignación EXTRAS:', proceso.nombre, '→', mejorEstacion, 'Pedido:', pedido.codigo);
+            showToast(`"${proceso.nombre}" auto-asignado a ${mejorEstacion} (EXTRAS)`, 'info');
+        });
+    });
+
+    // 3. Verificar procesos EXTRAS completados → asignar siguiente proceso a MANUAL
+    supervisoraState.pedidosHoy.forEach(pedido => {
+        if (!pedido.procesos || pedido.procesos.length === 0) return;
+
+        // Ordenar procesos por orden
+        const procesosOrdenados = [...pedido.procesos].sort((a, b) => (a.orden || 0) - (b.orden || 0));
+
+        procesosOrdenados.forEach((proceso, idx) => {
+            if (!esProcesoExtras(proceso)) return;
+            if (proceso.estado !== 'completado' && proceso.estado !== 'terminado') return;
+
+            // Buscar el siguiente proceso en secuencia
+            const siguienteProceso = procesosOrdenados[idx + 1];
+            if (!siguienteProceso) return;
+            if (siguienteProceso.estado === 'completado' || siguienteProceso.estado === 'terminado') return;
+            if (siguienteProceso.estado === 'en-proceso' || siguienteProceso.estado === 'en_proceso') return;
+
+            // Verificar si el siguiente proceso va a Manual o es el siguiente en secuencia
+            const debeIrAManual = esProcesoManual(siguienteProceso) ||
+                                  (siguienteProceso.areaPlantaId && siguienteProceso.areaPlantaId.toLowerCase() === 'manual');
+
+            // Determinar estación destino
+            const estacionesDestino = debeIrAManual ? estacionesManual : estacionesManual; // Por defecto EXTRAS→Manual
+
+            if (estacionesDestino.length === 0) return;
+
+            // Verificar si ya está asignado
+            let yaAsignado = false;
+            Object.entries(asignaciones).forEach(([estId, asig]) => {
+                if (asig.pedidoId == pedido.id && asig.procesoId == siguienteProceso.id) {
+                    yaAsignado = true;
+                }
+            });
+            Object.values(supervisoraState.maquinas).forEach(m => {
+                if (m.pedidoId == pedido.id && m.procesoId == siguienteProceso.id) {
+                    yaAsignado = true;
+                }
+            });
+
+            if (yaAsignado) return;
+
+            // Asignar a la mejor estación Manual disponible
+            let mejorEstacion = null;
+            let menorCola = Infinity;
+            estacionesDestino.forEach(estId => {
+                const maquina = supervisoraState.maquinas[estId];
+                if (!maquina) return;
+                const colaLen = (maquina.colaProcesos || []).length;
+                if (!maquina.procesoId && colaLen === 0) {
+                    if (menorCola > -1) {
+                        mejorEstacion = estId;
+                        menorCola = -1;
+                    }
+                } else if (colaLen < menorCola) {
+                    mejorEstacion = estId;
+                    menorCola = colaLen;
+                }
+            });
+
+            if (!mejorEstacion) return;
+
+            const maquina = supervisoraState.maquinas[mejorEstacion];
+            const producto = pedido.productos && pedido.productos[0] ? pedido.productos[0] : {};
+            const cantidadPedido = producto.cantidad || pedido.cantidad || 100;
+
+            const procesoData = {
+                procesoId: siguienteProceso.id,
+                procesoNombre: siguienteProceso.nombre,
+                procesoTipo: siguienteProceso.tipo || 'manual',
+                pedidoId: pedido.id,
+                pedidoCodigo: pedido.codigo || `PED-${pedido.id}`,
+                clienteNombre: pedido.cliente || pedido.clienteNombre || 'Cliente',
+                productoNombre: producto.nombre || pedido.nombre || 'Producto',
+                productoImagen: producto.imagen || '',
+                meta: cantidadPedido,
+                cantidadTotal: cantidadPedido,
+                piezasCompletadas: 0,
+                prioridad: pedido.prioridad || 'normal',
+                fechaEntrega: pedido.fechaEntrega || null,
+                fechaAsignacion: new Date().toISOString(),
+                estado: 'pendiente',
+                autoAsignado: true,
+                areaPlantaId: 'manual',
+                orden: siguienteProceso.orden || 0
+            };
+
+            if (!maquina.procesoId) {
+                maquina.procesoId = siguienteProceso.id;
+                maquina.procesoNombre = siguienteProceso.nombre;
+                maquina.pedidoId = pedido.id;
+                procesoData.estado = 'en_progreso';
+                if (maquina.operadores && maquina.operadores.length > 0) {
+                    maquina.estado = 'activo';
+                }
+                asignaciones[mejorEstacion] = {
+                    ...procesoData,
+                    estado: 'asignado',
+                    asignadoPor: 'Auto-EXTRAS→Manual'
+                };
+                asignaciones[mejorEstacion].colaProcesos = maquina.colaProcesos || [];
+            } else {
+                if (!maquina.colaProcesos) maquina.colaProcesos = [];
+                maquina.colaProcesos.push(procesoData);
+                if (asignaciones[mejorEstacion]) {
+                    asignaciones[mejorEstacion].colaProcesos = maquina.colaProcesos;
+                }
+            }
+
+            siguienteProceso.estado = 'en-proceso';
+            asignacionesModificadas = true;
+            DEBUG_MODE && console.log('[SUPERVISORA] Auto-asignación EXTRAS→Manual:', siguienteProceso.nombre, '→', mejorEstacion, 'Pedido:', pedido.codigo);
+            showToast(`"${siguienteProceso.nombre}" auto-asignado a ${mejorEstacion} (Manual) tras completar EXTRAS`, 'success');
+        });
+    });
+
+    if (asignacionesModificadas) {
+        localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
+    }
+}
+
+// Ejecutar verificación de asignación automática EXTRAS cada 10 segundos
+setInterval(verificarAsignacionAutomaticaExtras, 10000);
+
+// Primera ejecución después de 4 segundos
+setTimeout(verificarAsignacionAutomaticaExtras, 4000);
+
+// Polling cada 8 segundos para datos de operadoras (balance entre tiempo real y rendimiento)
+setInterval(actualizarDatosDeOperadoras, 8000);
 
 // Primera ejecución después de 2 segundos
 setTimeout(actualizarDatosDeOperadoras, 2000);
