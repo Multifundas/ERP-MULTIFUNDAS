@@ -1323,6 +1323,11 @@ function renderizarColaProcesosOperadora(asignacion) {
                                 <span class="proceso-pedido">${S(proceso.pedidoCodigo || 'Pedido #' + (proceso.pedidoId || ''))}</span>
                             `}
                         </div>
+                        ${!operadoraState.modoSimultaneo && !estaBloqueado ? `
+                            <button class="btn-trabajar-proceso" onclick="event.stopPropagation(); cambiarProcesoActivo(${idx})" title="Trabajar este proceso">
+                                <i class="fas fa-play"></i>
+                            </button>
+                        ` : ''}
                         <button class="btn-expandir-proceso" onclick="event.stopPropagation(); toggleDetallesProceso('${proceso.procesoId}')" title="Ver detalles">
                             <i class="fas fa-chevron-down"></i>
                         </button>
@@ -1383,6 +1388,142 @@ function renderizarColaProcesosOperadora(asignacion) {
 
     html += `</div>`;
     container.innerHTML = html;
+}
+
+/**
+ * Permite al operador cambiar al proceso en la posición `index` de la cola,
+ * moviendo el proceso actual de vuelta a la cola.
+ */
+function cambiarProcesoActivo(index) {
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
+    let estacionIdUsada = CONFIG_ESTACION.id;
+    if (!asignaciones[CONFIG_ESTACION.id]) {
+        const miIdN = CONFIG_ESTACION.id.toLowerCase().replace(/[-_\s]/g, '');
+        for (const [estId] of Object.entries(asignaciones)) {
+            const estIdN = estId.toLowerCase().replace(/[-_\s]/g, '');
+            if (estIdN === miIdN || estIdN.includes(miIdN) || miIdN.includes(estIdN)) {
+                estacionIdUsada = estId;
+                break;
+            }
+        }
+    }
+
+    const miAsignacion = asignaciones[estacionIdUsada];
+    if (!miAsignacion || !miAsignacion.colaProcesos || !miAsignacion.colaProcesos[index]) {
+        mostrarToast('Proceso no encontrado en la cola', 'error');
+        return;
+    }
+
+    // Si ya inició el proceso y tiene piezas, pedir confirmación
+    if (operadoraState.procesoIniciado && operadoraState.piezasCapturadas > 0) {
+        if (!confirm(`Tienes ${operadoraState.piezasCapturadas} piezas en "${miAsignacion.procesoNombre}". ¿Cambiar de proceso? El progreso se guardará.`)) {
+            return;
+        }
+    }
+
+    // Detener temporizador si estaba corriendo
+    if (operadoraState.intervaloProceso) {
+        clearInterval(operadoraState.intervaloProceso);
+        operadoraState.intervaloProceso = null;
+    }
+    detenerContadorPausa();
+
+    // Calcular tiempo trabajado del proceso actual
+    let tiempoTrabajado = operadoraState.tiempoProcesoAcumulado || 0;
+    if (operadoraState.procesoIniciado && !operadoraState.procesoEnPausa && operadoraState.tiempoProcesoInicio) {
+        tiempoTrabajado += (Date.now() - operadoraState.tiempoProcesoInicio);
+    }
+
+    // Construir objeto del proceso actual para moverlo a la cola
+    const procesoActualParaCola = {
+        pedidoId: miAsignacion.pedidoId,
+        pedidoCodigo: miAsignacion.pedidoCodigo || operadoraState.pedidoActual?.codigo,
+        cliente: miAsignacion.cliente || operadoraState.pedidoActual?.cliente,
+        producto: miAsignacion.producto || operadoraState.pedidoActual?.producto,
+        procesoId: miAsignacion.procesoId,
+        procesoNombre: miAsignacion.procesoNombre,
+        productoId: miAsignacion.productoId,
+        productoNombre: miAsignacion.productoNombre,
+        meta: miAsignacion.meta || miAsignacion.cantidadMeta,
+        metaPorMinuto: miAsignacion.metaPorMinuto,
+        orden: miAsignacion.orden || miAsignacion.procesoOrden || 0,
+        simultaneo: miAsignacion.simultaneo,
+        // Guardar progreso si tiene
+        piezasCapturadas: operadoraState.piezasCapturadas || 0,
+        tiempoAcumulado: tiempoTrabajado,
+        capturasDia: operadoraState.capturasDia.slice(),
+        historialPausas: operadoraState.historialPausas.slice(),
+        estado: operadoraState.piezasCapturadas > 0 ? 'suspendido' : 'asignado'
+    };
+
+    // Extraer el proceso seleccionado de la cola
+    const procesoSeleccionado = miAsignacion.colaProcesos.splice(index, 1)[0];
+
+    // Insertar el proceso actual en la cola (en la posición donde estaba el seleccionado)
+    miAsignacion.colaProcesos.splice(index, 0, procesoActualParaCola);
+
+    // Determinar si el proceso seleccionado tiene progreso previo (fue suspendido)
+    const tieneProgreso = procesoSeleccionado.piezasCapturadas > 0 && procesoSeleccionado.estado === 'suspendido';
+
+    // Actualizar la asignación principal con el proceso seleccionado
+    asignaciones[estacionIdUsada] = {
+        pedidoId: procesoSeleccionado.pedidoId || miAsignacion.pedidoId,
+        pedidoCodigo: procesoSeleccionado.pedidoCodigo,
+        cliente: procesoSeleccionado.cliente,
+        producto: procesoSeleccionado.producto,
+        procesoId: procesoSeleccionado.procesoId,
+        procesoNombre: procesoSeleccionado.procesoNombre,
+        productoId: procesoSeleccionado.productoId,
+        productoNombre: procesoSeleccionado.productoNombre,
+        meta: procesoSeleccionado.meta || procesoSeleccionado.cantidadMeta || miAsignacion.meta,
+        cantidadMeta: procesoSeleccionado.meta || procesoSeleccionado.cantidadMeta || miAsignacion.meta,
+        metaPorMinuto: procesoSeleccionado.metaPorMinuto || miAsignacion.metaPorMinuto,
+        orden: procesoSeleccionado.orden || procesoSeleccionado.procesoOrden || 0,
+        simultaneo: procesoSeleccionado.simultaneo,
+        operadoraId: authState.operadoraActual?.id,
+        operadoraNombre: authState.operadoraActual?.nombre,
+        colaProcesos: miAsignacion.colaProcesos,
+        estado: 'asignado',
+        fechaAsignacion: new Date().toISOString(),
+        // Si tiene progreso previo, marcarlo para restauración
+        esReanudacion: tieneProgreso,
+        datosSuspendidos: tieneProgreso ? {
+            piezasCapturadas: procesoSeleccionado.piezasCapturadas,
+            tiempoAcumulado: procesoSeleccionado.tiempoAcumulado,
+            capturasDia: procesoSeleccionado.capturasDia,
+            historialPausas: procesoSeleccionado.historialPausas
+        } : undefined
+    };
+
+    localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
+
+    // Resetear estado local
+    operadoraState.procesoIniciado = false;
+    operadoraState.procesoEnPausa = false;
+    operadoraState.tiempoProcesoInicio = null;
+    operadoraState.tiempoProcesoAcumulado = 0;
+    operadoraState.motivoPausaActual = null;
+    operadoraState.historialPausas = [];
+    operadoraState.piezasCapturadas = 0;
+    operadoraState.piezasMeta = 0;
+    operadoraState.capturasDia = [];
+
+    // Limpiar temporizador
+    localStorage.removeItem(`temporizador_${CONFIG_ESTACION.id}`);
+
+    // Limpiar UI
+    actualizarBotonesTemporizador('sin-iniciar');
+    actualizarEstadoProceso('sin-iniciar');
+    ocultarIndicadorPausa();
+    resetearDisplayTiempo();
+
+    if (typeof detenerMonitoreoDesempeno === 'function') detenerMonitoreoDesempeno();
+    if (typeof resetearFeedbackState === 'function') resetearFeedbackState();
+
+    // Cargar el nuevo proceso
+    cargarPedidoAsignado();
+
+    mostrarToast(`Cambiado a "${procesoSeleccionado.procesoNombre}"`, 'success');
 }
 
 function toggleModoSimultaneo() {

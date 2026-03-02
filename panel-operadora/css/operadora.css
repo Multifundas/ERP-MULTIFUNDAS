@@ -5258,6 +5258,31 @@ body {
     transform: scale(0.95);
 }
 
+.btn-trabajar-proceso {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: var(--success, #10b981);
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    font-size: 0.75rem;
+}
+
+.btn-trabajar-proceso:hover {
+    background: #059669;
+    transform: scale(1.05);
+}
+
+.btn-trabajar-proceso:active {
+    transform: scale(0.95);
+}
+
 .proceso-detalles {
     background: linear-gradient(145deg, #f8f9ff, #f3f4f6);
     border: 1px solid var(--gray-200);
