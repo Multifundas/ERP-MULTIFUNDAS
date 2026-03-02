@@ -109,6 +109,10 @@ class SupabaseDatabase {
                 personal: this.data.personal.length,
                 pedidos: this.data.pedidos.length
             });
+
+            // Sincronizar planta_layout de Supabase a localStorage
+            // para que todas las computadoras vean el mismo mapa
+            await this._syncPlantaLayout();
         } catch (err) {
             console.error('[SupabaseDB] Error en precarga:', err);
             // Fallback: usar datos vacíos
@@ -121,6 +125,30 @@ class SupabaseDatabase {
                 auditoria: [], notificaciones: [], inventarioPiezas: []
             };
             this._ready = true;
+        }
+    }
+
+    // Sincronizar planta_layout desde Supabase a localStorage
+    async _syncPlantaLayout() {
+        try {
+            const rows = await SupabaseClient.getAll('planta_layout', {
+                filter: { activo: true },
+                order: { column: 'updated_at', ascending: false },
+                limit: 1
+            });
+            if (rows && rows.length > 0) {
+                const row = rows[0];
+                const layoutData = {
+                    version: row.version || '1.0',
+                    canvasWidth: row.canvas_width || 1200,
+                    canvasHeight: row.canvas_height || 700,
+                    elements: row.elements || []
+                };
+                localStorage.setItem('planta_layout', JSON.stringify(layoutData));
+                DEBUG_MODE && console.log('[SupabaseDB] planta_layout sincronizado:', layoutData.elements.length, 'elements');
+            }
+        } catch (e) {
+            console.error('[SupabaseDB] Error sincronizando planta_layout:', e);
         }
     }
 
