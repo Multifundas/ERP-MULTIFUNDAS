@@ -615,10 +615,8 @@ body {
     width: 80%;
     height: 20px;
     border-radius: 50%;
-    filter: blur(15px);
     opacity: 0.5;
     z-index: -1;
-    transition: all 0.3s;
 }
 
 .estacion-glow.activo { background: #10b981; }
@@ -637,6 +635,7 @@ body {
     background: #10b981;
     border-radius: 50%;
     z-index: 20;
+    will-change: transform, opacity;
 }
 
 .activity-pulse::before {
@@ -649,12 +648,13 @@ body {
     height: 100%;
     background: #10b981;
     border-radius: 50%;
-    animation: pulseDot 1.5s ease-out infinite;
+    animation: pulseDot 2s ease-out infinite;
+    will-change: transform, opacity;
 }
 
 @keyframes pulseDot {
-    0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+    0% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
+    100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
 }
 
 /* Header de estacion */

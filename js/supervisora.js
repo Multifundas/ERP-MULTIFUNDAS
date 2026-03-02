@@ -19,6 +19,15 @@ function _markInteracting() {
 document.addEventListener('mousedown', _markInteracting, true);
 document.addEventListener('touchstart', _markInteracting, true);
 document.addEventListener('dragstart', _markInteracting, true);
+// Throttled mousemove para pausar updates DOM durante hover
+var _lastMoveTime = 0;
+document.addEventListener('mousemove', function() {
+    var now = Date.now();
+    if (now - _lastMoveTime > 300) {
+        _lastMoveTime = now;
+        _markInteracting();
+    }
+}, true);
 document.addEventListener('focusin', function(e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
         _markInteracting();
