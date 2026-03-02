@@ -1833,7 +1833,7 @@ function sincronizarConSupervisora(captura) {
     const historial = safeLocalGet('historial_produccion', []);
 
     const registro = {
-        id: Date.now(),
+        id: Date.now() + Math.random(),
         operadoraId: authState.operadoraActual?.id,
         operadoraNombre: authState.operadoraActual?.nombre,
         estacionId: CONFIG_ESTACION.id,
@@ -1841,13 +1841,14 @@ function sincronizarConSupervisora(captura) {
         area: CONFIG_ESTACION.area,
         pedidoId: operadoraState.pedidoActual?.id,
         pedidoCodigo: operadoraState.pedidoActual?.codigo,
-        procesoId: operadoraState.procesoActual?.procesoId,
-        procesoNombre: operadoraState.procesoActual?.procesoNombre,
+        procesoId: captura.procesoId || operadoraState.procesoActual?.procesoId,
+        procesoNombre: captura.procesoNombre || operadoraState.procesoActual?.procesoNombre,
         cantidad: captura.cantidad,
         piezasAcumuladas: operadoraState.piezasCapturadas,
         fecha: new Date().toISOString(),
         hora: new Date().toTimeString().slice(0, 5),
-        tipo: 'captura_operadora'
+        tipo: 'captura_operadora',
+        modoSimultaneo: captura.modoSimultaneo || false
     };
 
     historial.push(registro);
@@ -1861,7 +1862,7 @@ function sincronizarConSupervisora(captura) {
     // Actualizar avance del proceso en pedidos_erp (para que supervisora lo vea)
     const pedidoId = operadoraState.pedidoActual?.id;
     const procesoId = captura.procesoId || operadoraState.procesoActual?.procesoId;
-    const procesoNombre = operadoraState.procesoActual?.procesoNombre || operadoraState.procesoActual?.nombre;
+    const procesoNombre = captura.procesoNombre || operadoraState.procesoActual?.procesoNombre || operadoraState.procesoActual?.nombre;
 
     if (pedidoId) {
         // Usar DeltaMerge si está disponible (evita race conditions multi-operador)

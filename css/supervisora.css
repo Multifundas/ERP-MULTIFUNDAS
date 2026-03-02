@@ -543,6 +543,180 @@ body {
 }
 
 /* ============================================
+   PANEL DE AREAS VERTICAL
+   ============================================ */
+.plant-areas-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    max-height: 180px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: rgba(0,0,0,0.2);
+    border-bottom: 1px solid #2d3748;
+    flex-shrink: 0;
+}
+
+.area-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-left: 3px solid #6b7280;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.area-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    cursor: pointer;
+    gap: 8px;
+}
+
+.area-card-header:hover {
+    background: rgba(255,255,255,0.04);
+}
+
+.area-card-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.area-expand-icon {
+    font-size: 0.6rem;
+    transition: transform 0.2s;
+}
+
+.area-card.open .area-expand-icon {
+    transform: rotate(90deg);
+}
+
+.area-card-stats {
+    display: flex;
+    gap: 10px;
+    font-size: 0.68rem;
+    color: #8b9dc3;
+}
+
+.area-stat {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.area-card-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+}
+
+.area-card.open .area-card-body {
+    max-height: 400px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.area-station-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 8px 3px 16px;
+    font-size: 0.72rem;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.area-station-row:last-child {
+    border-bottom: none;
+}
+
+.area-station-id {
+    font-weight: 600;
+    color: #94a3b8;
+    min-width: 30px;
+    font-size: 0.68rem;
+}
+
+.area-station-ops {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.area-op-name {
+    color: #cbd5e1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.7rem;
+}
+
+.area-station-proceso {
+    color: #8b9dc3;
+    font-size: 0.65rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100px;
+}
+
+.area-station-empty {
+    color: #4b5563;
+    font-style: italic;
+    font-size: 0.68rem;
+}
+
+.area-station-status {
+    font-size: 0.5rem;
+    flex-shrink: 0;
+}
+
+.area-station-status.trabajando {
+    color: #10b981;
+}
+
+.area-station-status.asignado {
+    color: #f59e0b;
+}
+
+.area-station-status.vacio {
+    color: #374151;
+}
+
+.area-station-row.trabajando {
+    background: rgba(16, 185, 129, 0.06);
+}
+
+.area-station-row.asignado {
+    background: rgba(245, 158, 11, 0.04);
+}
+
+/* Day mode */
+body.day-mode .plant-areas-panel {
+    background: rgba(0,0,0,0.03);
+    border-bottom-color: #e2e8f0;
+}
+
+body.day-mode .area-card {
+    background: rgba(0,0,0,0.02);
+    border-color: #e2e8f0;
+}
+
+body.day-mode .area-op-name {
+    color: #334155;
+}
+
+body.day-mode .area-station-id {
+    color: #64748b;
+}
+
+/* ============================================
    ESTACIONES DE TRABAJO - NUEVO DISEÑO
    ============================================ */
 .estacion-element {

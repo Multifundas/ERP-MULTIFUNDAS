@@ -309,54 +309,80 @@ function renderLayoutInSupervisora(layout) {
     const areas = layout.elements.filter(e => e.type === 'area' && !tieneStationIds(e));
     const estaciones = layout.elements.filter(e => e.type !== 'area' || tieneStationIds(e));
 
-    // Renderizar areas como zonas de fondo
-    areas.forEach(element => {
-        const areaType = detectAreaType(element.name || element.id);
-        const colors = areaColors[areaType] || areaColors.default;
+    // Mapear estaciones a sus áreas (por bounding box)
+    var _areaStationMap = {};
+    areas.forEach(function(area) {
+        var areaId = area.id || area.name;
+        _areaStationMap[areaId] = [];
+        estaciones.forEach(function(est) {
+            var cx = est.x + (est.width || 0) / 2;
+            var cy = est.y + (est.height || 0) / 2;
+            if (cx >= area.x && cx <= area.x + area.width && cy >= area.y && cy <= area.y + area.height) {
+                var sids = est.stationIds || [est.id];
+                sids.forEach(function(sid) { _areaStationMap[areaId].push(sid); });
+            }
+        });
+    });
+    supervisoraState._areaStationMap = _areaStationMap;
 
-        const areaEl = document.createElement('div');
-        areaEl.className = 'plant-zone';
-        areaEl.style.cssText = `
-            position: absolute;
-            left: ${element.x}px;
-            top: ${element.y}px;
-            width: ${element.width}px;
-            height: ${element.height}px;
-            background: ${colors.bg};
-            border: 2px dashed ${colors.border};
-            border-radius: 12px;
-            z-index: 1;
-        `;
+    // Renderizar panel de areas verticalmente
+    var areasPanel = document.getElementById('plantAreasPanel');
+    if (!areasPanel) {
+        areasPanel = document.createElement('div');
+        areasPanel.id = 'plantAreasPanel';
+        areasPanel.className = 'plant-areas-panel';
+        container.parentNode.insertBefore(areasPanel, container);
+    }
+    areasPanel.innerHTML = '';
 
-        areaEl.innerHTML = `
-            <div class="zone-label" style="
-                position: absolute;
-                top: -12px;
-                left: 15px;
-                background: ${colors.border};
-                color: #fff;
-                padding: 3px 12px;
-                border-radius: 10px;
-                font-size: 0.7rem;
-                font-weight: 700;
-                letter-spacing: 1px;
-                text-transform: uppercase;
-                box-shadow: 0 2px 8px ${colors.border}40;
-            ">${S(element.name || colors.label)}</div>
-            <div class="zone-stats" style="
-                position: absolute;
-                bottom: 8px;
-                right: 12px;
-                display: flex;
-                gap: 10px;
-                font-size: 0.7rem;
-                color: ${colors.border};
-            ">
-                <span><i class="fas fa-users"></i> <span class="zone-operadores">0</span></span>
-                <span><i class="fas fa-box"></i> <span class="zone-piezas">0</span></span>
+    areas.forEach(function(element) {
+        var areaType = detectAreaType(element.name || element.id);
+        var colors = areaColors[areaType] || areaColors.default;
+        var areaId = element.id || element.name;
+        var stationIds = _areaStationMap[areaId] || [];
+
+        var card = document.createElement('div');
+        card.className = 'area-card';
+        card.dataset.areaId = areaId;
+        card.style.borderLeftColor = colors.border;
+
+        var operadoresCount = 0;
+        var piezasCount = 0;
+        var trabajandoCount = 0;
+        stationIds.forEach(function(sid) {
+            var m = supervisoraState.maquinas[sid];
+            if (m && m.operadores && m.operadores.length > 0) { operadoresCount += m.operadores.length; }
+            if (m) { piezasCount += m.piezasHoy || 0; }
+            if (m && (m.estado === 'activo' || m.estado === 'adelantado')) { trabajandoCount++; }
+        });
+
+        card.innerHTML = `
+            <div class="area-card-header" onclick="toggleAreaExpand('${areaId}')">
+                <div class="area-card-title" style="color:${colors.border};">
+                    <i class="fas fa-chevron-right area-expand-icon"></i>
+                    ${S(element.name || colors.label)}
+                </div>
+                <div class="area-card-stats">
+                    <span class="area-stat"><i class="fas fa-users"></i> ${operadoresCount}</span>
+                    <span class="area-stat"><i class="fas fa-cog"></i> ${trabajandoCount}/${stationIds.length}</span>
+                    <span class="area-stat"><i class="fas fa-cubes"></i> ${piezasCount}</span>
+                </div>
             </div>
+            <div class="area-card-body" id="areaBody-${areaId}"></div>
         `;
 
+        areasPanel.appendChild(card);
+    });
+
+    // Renderizar áreas de fondo en el mapa (simplificadas)
+    areas.forEach(function(element) {
+        var areaType = detectAreaType(element.name || element.id);
+        var colors = areaColors[areaType] || areaColors.default;
+
+        var areaEl = document.createElement('div');
+        areaEl.className = 'plant-zone';
+        areaEl.style.cssText = 'position:absolute;left:' + element.x + 'px;top:' + element.y + 'px;width:' + element.width + 'px;height:' + element.height + 'px;background:' + colors.bg + ';border:2px dashed ' + colors.border + ';border-radius:12px;z-index:1;';
+        areaEl.innerHTML = '<div class="zone-label" style="position:absolute;top:-12px;left:15px;background:' + colors.border + ';color:#fff;padding:3px 12px;border-radius:10px;font-size:0.7rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;box-shadow:0 2px 8px ' + colors.border + '40;">' + S(element.name || colors.label) + '</div>';
         container.appendChild(areaEl);
     });
 
@@ -1058,6 +1084,57 @@ function detectAreaType(name) {
     return 'default';
 }
 
+// Toggle expandir/colapsar area en panel vertical
+function toggleAreaExpand(areaId) {
+    var card = document.querySelector('.area-card[data-area-id="' + areaId + '"]');
+    if (!card) return;
+
+    var body = document.getElementById('areaBody-' + areaId);
+    var isOpen = card.classList.contains('open');
+
+    if (isOpen) {
+        card.classList.remove('open');
+        if (body) body.innerHTML = '';
+        return;
+    }
+
+    card.classList.add('open');
+    if (!body) return;
+
+    var stationIds = (supervisoraState._areaStationMap || {})[areaId] || [];
+    var asignaciones = safeLocalGet('asignaciones_estaciones', {});
+    var estadoMaquinas = safeLocalGet('estado_maquinas', {});
+
+    var html = stationIds.map(function(sid) {
+        var m = supervisoraState.maquinas[sid] || {};
+        var ops = m.operadores || [];
+        var asig = asignaciones[sid];
+        var estMaq = estadoMaquinas[sid];
+        var estaTrabajando = (estMaq && (estMaq.estado === 'trabajando' || estMaq.procesoActivo)) || m.estado === 'activo' || m.estado === 'adelantado';
+        var proceso = (asig && asig.procesoNombre) || m.procesoNombre || '';
+
+        if (ops.length === 0 && !proceso) {
+            return '<div class="area-station-row vacio"><span class="area-station-id">' + sid + '</span><span class="area-station-empty">Sin operador</span></div>';
+        }
+
+        var opsHTML = ops.map(function(op) {
+            return '<span class="area-op-name">' + S(op.nombre || '??') + '</span>';
+        }).join('');
+
+        var statusClass = estaTrabajando ? 'trabajando' : (ops.length > 0 ? 'asignado' : 'vacio');
+
+        return '<div class="area-station-row ' + statusClass + '">' +
+            '<span class="area-station-id">' + sid + '</span>' +
+            '<div class="area-station-ops">' + opsHTML + '</div>' +
+            (proceso ? '<span class="area-station-proceso">' + S(proceso) + '</span>' : '') +
+            '<span class="area-station-status ' + statusClass + '"><i class="fas ' + (estaTrabajando ? 'fa-circle' : 'fa-circle') + '"></i></span>' +
+        '</div>';
+    }).join('');
+
+    body.innerHTML = html || '<div class="area-station-row vacio">Sin estaciones</div>';
+}
+window.toggleAreaExpand = toggleAreaExpand;
+
 // Obtener icono segun estado
 function getEstadoIcon(estado) {
     const iconos = {
@@ -1072,8 +1149,41 @@ function getEstadoIcon(estado) {
 
 // Actualizar estadisticas de zonas
 function updateZoneStats() {
-    // Contar operadores y piezas por zona
-    // Esto se puede expandir segun la logica de zonas
+    var areaMap = supervisoraState._areaStationMap;
+    if (!areaMap) return;
+
+    var asignaciones = safeLocalGet('asignaciones_estaciones', {});
+    var estadoMaquinasLocal = safeLocalGet('estado_maquinas', {});
+
+    Object.keys(areaMap).forEach(function(areaId) {
+        var card = document.querySelector('.area-card[data-area-id="' + areaId + '"]');
+        if (!card) return;
+
+        var stationIds = areaMap[areaId] || [];
+        var operadoresCount = 0;
+        var piezasCount = 0;
+        var trabajandoCount = 0;
+
+        stationIds.forEach(function(sid) {
+            var m = supervisoraState.maquinas[sid];
+            if (m && m.operadores && m.operadores.length > 0) operadoresCount += m.operadores.length;
+            if (m) piezasCount += m.piezasHoy || 0;
+            if (m && (m.estado === 'activo' || m.estado === 'adelantado')) trabajandoCount++;
+        });
+
+        var statsEl = card.querySelector('.area-card-stats');
+        if (statsEl) {
+            statsEl.innerHTML = '<span class="area-stat"><i class="fas fa-users"></i> ' + operadoresCount + '</span>' +
+                '<span class="area-stat"><i class="fas fa-cog"></i> ' + trabajandoCount + '/' + stationIds.length + '</span>' +
+                '<span class="area-stat"><i class="fas fa-cubes"></i> ' + piezasCount + '</span>';
+        }
+
+        // Si el card está expandido, refrescar el contenido
+        if (card.classList.contains('open')) {
+            toggleAreaExpand(areaId);
+            toggleAreaExpand(areaId);
+        }
+    });
 }
 
 // ========================================
@@ -4193,6 +4303,7 @@ function verDetallePedido(pedidoId) {
     const productos = typeof db !== 'undefined' ? db.getProductos() : [];
     let productosHTML = '';
 
+    var _usedTopLevelProcesos = false;
     if (pedido.productos && pedido.productos.length > 0) {
         productosHTML = pedido.productos.map(p => {
             const prod = productos.find(pr => pr.id == p.productoId);
@@ -4211,7 +4322,9 @@ function verDetallePedido(pedidoId) {
                         completadas: proc.piezasCompletadas || proc.piezas || proc.completadas || 0,
                         estado: proc.estado || 'pendiente'
                     }));
-                } else if (pedidoERP.procesos) {
+                } else if (pedidoERP.procesos && !_usedTopLevelProcesos) {
+                    // Solo usar procesos top-level una vez (evita duplicados entre productos)
+                    _usedTopLevelProcesos = true;
                     procesos = pedidoERP.procesos.map(proc => ({
                         nombre: proc.nombre || proc.procesoNombre || '',
                         completadas: proc.piezas || proc.piezasCompletadas || 0,
