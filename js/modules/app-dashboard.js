@@ -345,164 +345,149 @@ function loadPlantMap() {
     const container = document.getElementById('plantMapContainer');
     if (!container) return;
 
-    const mapaData = db.getMapaPlantaData();
+    // Usar el mismo layout visual de la supervisora (planta_layout)
+    const savedLayout = localStorage.getItem('planta_layout');
+    if (!savedLayout) {
+        container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:40px;">No hay layout configurado. <a href="layout-editor.html">Configúralo aquí</a></p>';
+        return;
+    }
 
-    // Obtener datos de asignaciones reales de localStorage
+    let layout;
+    try {
+        layout = JSON.parse(savedLayout);
+    } catch (e) {
+        container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:40px;">Error cargando layout</p>';
+        return;
+    }
+
+    if (!layout || !layout.elements || layout.elements.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:var(--text-secondary);padding:40px;">Layout vacío</p>';
+        return;
+    }
+
+    // Datos de asignaciones reales
     const asignacionesEstaciones = safeLocalGet('asignaciones_estaciones', {});
     const estadoMaquinas = safeLocalGet('estado_maquinas', {});
-    const supervisoraMaquinas = safeLocalGet('supervisora_maquinas', {});
 
-    container.innerHTML = mapaData.map(area => {
-        const posicionesHtml = area.posiciones.map(pos => {
-            // Obtener estado real de la estación desde localStorage
-            const asignacion = asignacionesEstaciones[pos.id];
-            const estadoMaquina = estadoMaquinas[pos.id];
-            const maquinaSupervisora = supervisoraMaquinas[pos.id];
+    // Calcular escala para que quepa en el contenedor
+    const containerWidth = container.clientWidth || 800;
+    const scale = Math.min(1, (containerWidth - 20) / (layout.canvasWidth || 1200));
+    const scaledHeight = (layout.canvasHeight || 700) * scale;
 
-            // Recopilar TODOS los procesos asignados a esta estación
-            let procesosActivos = [];
+    // Separar áreas (fondo) de estaciones
+    const tieneStationIds = (e) => e.stationIds && e.stationIds.length > 0 && !(e.stationIds.length === 1 && e.stationIds[0] === e.id);
+    const areas = layout.elements.filter(e => e.type === 'area' && !tieneStationIds(e));
+    const estaciones = layout.elements.filter(e => e.type !== 'area' || tieneStationIds(e));
 
-            // Proceso activo de supervisora_maquinas
-            if (maquinaSupervisora?.procesoId) {
-                procesosActivos.push({
-                    nombre: maquinaSupervisora.procesoNombre || 'Proceso',
-                    estado: maquinaSupervisora.estado || 'asignado',
-                    piezas: maquinaSupervisora.piezasCompletadas || 0
-                });
-            }
+    const areaColors = {
+        'costura': { bg: 'rgba(102,126,234,0.08)', border: '#667eea' },
+        'corte': { bg: 'rgba(236,72,153,0.08)', border: '#ec4899' },
+        'empaque': { bg: 'rgba(16,185,129,0.08)', border: '#10b981' },
+        'calidad': { bg: 'rgba(245,158,11,0.08)', border: '#f59e0b' },
+        'almacen': { bg: 'rgba(139,92,246,0.08)', border: '#8b5cf6' },
+        'extras': { bg: 'rgba(245,158,11,0.08)', border: '#f59e0b' },
+        'manual': { bg: 'rgba(148,163,184,0.08)', border: '#94a3b8' },
+        'default': { bg: 'rgba(107,114,128,0.08)', border: '#6b7280' }
+    };
 
-            // Cola de procesos de supervisora
-            if (maquinaSupervisora?.colaProcesos && Array.isArray(maquinaSupervisora.colaProcesos)) {
-                maquinaSupervisora.colaProcesos.forEach(proc => {
-                    procesosActivos.push({
-                        nombre: proc.procesoNombre || 'En cola',
-                        estado: 'pendiente',
-                        piezas: 0
-                    });
-                });
-            }
+    function detectAreaTypeLocal(name) {
+        const n = (name || '').toLowerCase();
+        if (n.includes('costura') || n.includes('cost')) return 'costura';
+        if (n.includes('corte') || n.includes('cut')) return 'corte';
+        if (n.includes('empaque') || n.includes('pack')) return 'empaque';
+        if (n.includes('calidad') || n.includes('qa')) return 'calidad';
+        if (n.includes('almacen') || n.includes('bodega')) return 'almacen';
+        if (n.includes('extras') || n.includes('extra')) return 'extras';
+        if (n.includes('manual')) return 'manual';
+        return 'default';
+    }
 
-            // PROCESOS SIMULTÁNEOS desde estado_maquinas (todos son activos)
-            if (estadoMaquina?.procesosSimultaneos && Array.isArray(estadoMaquina.procesosSimultaneos)) {
-                estadoMaquina.procesosSimultaneos.forEach(proc => {
-                    if (!procesosActivos.some(p => p.nombre === proc.procesoNombre)) {
-                        procesosActivos.push({
-                            nombre: proc.procesoNombre || 'Proceso',
-                            estado: 'en_proceso',
-                            piezas: proc.piezasCompletadas || 0
-                        });
-                    }
-                });
-            }
-
-            // Proceso de asignaciones_estaciones (si no está duplicado)
-            if (asignacion?.procesoNombre && !procesosActivos.some(p => p.nombre === asignacion.procesoNombre)) {
-                procesosActivos.push({
-                    nombre: asignacion.procesoNombre,
-                    estado: asignacion.estado || 'asignado',
-                    piezas: asignacion.piezasCompletadas || 0
-                });
-            }
-
-            // Cola de asignaciones_estaciones
-            if (asignacion?.colaProcesos && Array.isArray(asignacion.colaProcesos)) {
-                asignacion.colaProcesos.forEach(proc => {
-                    if (!procesosActivos.some(p => p.nombre === proc.procesoNombre)) {
-                        procesosActivos.push({
-                            nombre: proc.procesoNombre || 'En cola',
-                            estado: 'pendiente',
-                            piezas: 0
-                        });
-                    }
-                });
-            }
-
-            const totalProcesos = procesosActivos.length;
-            const tieneAsignacion = totalProcesos > 0 || asignacion?.procesoNombre || estadoMaquina?.procesoNombre;
-            const estaTrabajando = estadoMaquina?.estado === 'trabajando' || estadoMaquina?.procesoActivo ||
-                                   maquinaSupervisora?.estado === 'trabajando' || procesosActivos.some(p => p.estado === 'trabajando' || p.estado === 'en_proceso');
-            const piezasHoy = estadoMaquina?.piezasHoy || maquinaSupervisora?.piezasCompletadas || 0;
-            const _rawOpNombre = asignacion?.operadoraNombre || estadoMaquina?.operadoraNombre || maquinaSupervisora?.operadoraNombre || pos.operadorNombre;
-            const operadorNombre = (_rawOpNombre && _rawOpNombre !== 'undefined') ? _rawOpNombre : null;
-
-            // Determinar estado visual
-            let estado = pos.estado || 'empty';
-            let colorBorde = '';
-
-            if (tieneAsignacion) {
-                if (estaTrabajando || piezasHoy > 0) {
-                    estado = 'trabajando';
-                    colorBorde = '#10b981'; // Verde
-                } else {
-                    estado = 'asignado';
-                    colorBorde = '#f59e0b'; // Naranja
-                }
-            } else if (operadorNombre) {
-                estado = 'disponible';
-                colorBorde = '#6b7280'; // Gris
-            }
-
-            // Construir texto de proceso(s)
-            let procesoTexto = '';
-            let procesoTooltip = '';
-            if (totalProcesos > 1) {
-                procesoTexto = `${totalProcesos} procesos`;
-                procesoTooltip = procesosActivos.map(p => p.nombre).join(', ');
-            } else if (totalProcesos === 1) {
-                procesoTexto = procesosActivos[0].nombre;
-                procesoTooltip = procesoTexto;
-            } else {
-                procesoTexto = asignacion?.procesoNombre || estadoMaquina?.procesoNombre || '';
-                procesoTooltip = procesoTexto;
-            }
-
-            const tooltip = tieneAsignacion
-                ? `${S(operadorNombre || 'Operador')} - ${S(procesoTooltip)}${piezasHoy > 0 ? ` (${piezasHoy} pzas)` : ''}`
-                : operadorNombre
-                    ? `${S(operadorNombre)} - Sin proceso`
-                    : S(pos.nombre || pos.id);
-
-            if (!operadorNombre && !tieneAsignacion) {
-                return `
-                    <div class="workstation empty clickable" data-tooltip="${S(pos.nombre || pos.id)}" data-id="${pos.id}" onclick="showPosicionDetalle('${pos.id}')">
-                        <span class="workstation-code">${pos.id}</span>
-                    </div>
-                `;
-            }
-
-            // Iniciales del operador
-            const iniciales = operadorNombre
-                ? operadorNombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
-                : '??';
-
-            // Badge de múltiples procesos
-            const badgeMultiple = totalProcesos > 1 ? `<span class="workstation-multi-badge">${totalProcesos}</span>` : '';
-
-            return `
-                <div class="workstation ${estado} clickable" data-tooltip="${S(tooltip)}" data-id="${pos.id}" onclick="showPosicionDetalle('${pos.id}')" style="${colorBorde ? `border-color: ${S(colorBorde)}; border-width: 2px;` : ''}">
-                    <span class="workstation-initials">${S(iniciales)}</span>
-                    <span class="workstation-code">${pos.id}</span>
-                    ${tieneAsignacion ? `<span class="workstation-proceso" title="${S(procesoTooltip)}">${S(procesoTexto.substring(0, 10))}${procesoTexto.length > 10 ? '..' : ''}</span>` : ''}
-                    ${estaTrabajando ? '<span class="workstation-trabajando"><i class="fas fa-circle"></i></span>' : ''}
-                    ${badgeMultiple}
-                </div>
-            `;
-        }).join('');
-
-        // Mostrar cantidad de posiciones para todas las áreas
-        const posicionesLabel = area.posiciones.length > 0 ? ` (${area.posiciones.length} posiciones)` : '';
-
-        return `
-            <div class="map-area" style="border-color: ${area.color}20;">
-                <div class="map-area-header" style="color: ${area.color};">
-                    ${S(area.nombre)}${posicionesLabel}
-                </div>
-                <div class="map-area-positions">
-                    ${posicionesHtml}
-                </div>
-            </div>
-        `;
+    // Generar HTML de áreas (fondo)
+    let areasHTML = areas.map(el => {
+        const at = detectAreaTypeLocal(el.name || el.id);
+        const c = areaColors[at] || areaColors.default;
+        return `<div style="position:absolute;left:${el.x * scale}px;top:${el.y * scale}px;width:${el.width * scale}px;height:${el.height * scale}px;background:${c.bg};border:2px dashed ${c.border};border-radius:8px;z-index:1;">
+            <div style="position:absolute;top:-10px;left:10px;background:${c.border};color:#fff;padding:2px 8px;border-radius:8px;font-size:0.6rem;font-weight:700;letter-spacing:0.5px;">${S(el.name || el.id)}</div>
+        </div>`;
     }).join('');
+
+    // Generar HTML de estaciones
+    let estacionesHTML = estaciones.map(el => {
+        const stationIds = el.stationIds || [el.id];
+        const isMulti = stationIds.length > 1;
+
+        // Determinar estado
+        let tieneOperador = false;
+        let estaTrabajando = false;
+        let procesoNombre = '';
+        let operadorIniciales = '';
+
+        stationIds.forEach(sid => {
+            const asig = asignacionesEstaciones[sid];
+            const est = estadoMaquinas[sid];
+            if (est?.operadorNombre || est?.operadoraNombre || asig?.operadoraNombre) {
+                tieneOperador = true;
+                const nom = est?.operadorNombre || est?.operadoraNombre || asig?.operadoraNombre || '';
+                if (nom && !operadorIniciales) {
+                    operadorIniciales = nom.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                }
+            }
+            if (est?.estado === 'trabajando' || est?.procesoActivo) estaTrabajando = true;
+            if (!procesoNombre && (asig?.procesoNombre || est?.procesoNombre)) {
+                procesoNombre = asig?.procesoNombre || est?.procesoNombre || '';
+            }
+        });
+
+        let borderColor = '#374151';
+        let bgColor = 'var(--bg-tertiary, #1f2937)';
+        let opacity = '0.7';
+        if (estaTrabajando) { borderColor = '#10b981'; bgColor = 'rgba(16,185,129,0.15)'; opacity = '1'; }
+        else if (procesoNombre) { borderColor = '#f59e0b'; bgColor = 'rgba(245,158,11,0.1)'; opacity = '1'; }
+        else if (tieneOperador) { borderColor = '#6b7280'; bgColor = 'var(--bg-tertiary, #1f2937)'; opacity = '0.85'; }
+
+        const w = el.width * scale;
+        const h = el.height * scale;
+        const fontSize = Math.max(8, Math.min(11, w / 6));
+
+        let innerHTML = '';
+        if (isMulti) {
+            // Multi-station: mostrar slots
+            innerHTML = `<div style="font-size:${fontSize}px;font-weight:700;color:var(--text-primary,#e5e7eb);text-align:center;padding:2px;">${el.id}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:2px;padding:2px;justify-content:center;">
+                    ${stationIds.map(sid => {
+                        const est = estadoMaquinas[sid];
+                        const asig = asignacionesEstaciones[sid];
+                        const opNom = est?.operadorNombre || est?.operadoraNombre || asig?.operadoraNombre || '';
+                        const ini = opNom ? opNom.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : '';
+                        return `<div style="background:rgba(255,255,255,0.05);border-radius:4px;padding:1px 3px;font-size:${Math.max(7, fontSize - 2)}px;min-width:30px;text-align:center;">
+                            <div style="color:var(--text-secondary,#9ca3af);font-size:${Math.max(6, fontSize - 3)}px;">${sid}</div>
+                            ${ini ? `<div style="color:#10b981;font-weight:600;">${ini}</div>` : '<div style="color:#4b5563;">·</div>'}
+                        </div>`;
+                    }).join('')}
+                </div>`;
+        } else {
+            innerHTML = `<div style="text-align:center;padding:3px;">
+                <div style="font-size:${fontSize}px;font-weight:700;color:var(--text-primary,#e5e7eb);">${el.id}</div>
+                ${operadorIniciales ? `<div style="font-size:${Math.max(8, fontSize)}px;font-weight:600;color:#10b981;margin:1px 0;">${operadorIniciales}</div>` : `<div style="color:#4b5563;font-size:${Math.max(7, fontSize - 1)}px;">·</div>`}
+                ${procesoNombre ? `<div style="font-size:${Math.max(6, fontSize - 2)}px;color:var(--text-secondary,#9ca3af);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${S(procesoNombre.substring(0, 12))}</div>` : ''}
+            </div>`;
+        }
+
+        return `<div style="position:absolute;left:${el.x * scale}px;top:${el.y * scale}px;width:${w}px;height:${h}px;background:${bgColor};border:2px solid ${borderColor};border-radius:8px;z-index:10;opacity:${opacity};overflow:hidden;cursor:pointer;transition:transform 0.15s;"
+            onclick="showPosicionDetalle('${stationIds[0]}')"
+            onmouseenter="this.style.transform='scale(1.05)';this.style.zIndex='100'"
+            onmouseleave="this.style.transform='scale(1)';this.style.zIndex='10'">
+            ${innerHTML}
+        </div>`;
+    }).join('');
+
+    // Override container styles para layout absoluto
+    container.style.display = 'block';
+    container.style.position = 'relative';
+    container.style.width = '100%';
+    container.style.height = scaledHeight + 'px';
+    container.style.overflow = 'auto';
+    container.innerHTML = areasHTML + estacionesHTML;
 
     // Actualizar contadores del resumen
     updatePlantMapSummary();

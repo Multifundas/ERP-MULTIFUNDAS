@@ -3419,10 +3419,9 @@ html {
 
 /* Contenedor del mapa */
 .plant-map-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 15px;
+    position: relative;
     margin-bottom: 20px;
+    overflow: hidden;
 }
 
 /* Área del mapa */
