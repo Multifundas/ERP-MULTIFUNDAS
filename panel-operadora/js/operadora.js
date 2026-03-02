@@ -1348,6 +1348,7 @@ function renderizarColaProcesosOperadora(asignacion) {
 
     // Resumen de procesos simultáneos activos
     if (operadoraState.modoSimultaneo && operadoraState.procesosSimultaneos.length > 0) {
+        const yaGuardado = operadoraState._configSimultaneosGuardada;
         html += `
             <div class="procesos-simultaneos-activos">
                 <div class="simultaneos-header">
@@ -1360,9 +1361,15 @@ function renderizarColaProcesosOperadora(asignacion) {
                     `).join('')}
                 </div>
                 <p class="simultaneos-nota">Las piezas se contabilizarán para todos los procesos seleccionados</p>
-                <button class="btn btn-primary btn-guardar-simultaneos" onclick="guardarProcesosSimultaneos()">
-                    <i class="fas fa-save"></i> Guardar Configuración
-                </button>
+                ${yaGuardado ? `
+                    <div class="btn btn-primary btn-guardar-simultaneos guardado" style="pointer-events:none;opacity:0.7;">
+                        <i class="fas fa-check"></i> Configuración Guardada
+                    </div>
+                ` : `
+                    <button class="btn btn-primary btn-guardar-simultaneos" onclick="guardarProcesosSimultaneos()">
+                        <i class="fas fa-save"></i> Guardar Configuración
+                    </button>
+                `}
             </div>
         `;
     }
@@ -1395,6 +1402,9 @@ function toggleModoSimultaneo() {
 }
 
 function toggleProcesoSimultaneo(procesoId, procesoNombre, pedidoId, productoId) {
+    // Al cambiar selección, marcar que la config necesita re-guardarse
+    operadoraState._configSimultaneosGuardada = false;
+
     const index = operadoraState.procesosSimultaneos.findIndex(p => p.procesoId == procesoId);
 
     // Obtener pedidoId del estado actual si no se pasó
@@ -1584,18 +1594,17 @@ function guardarProcesosSimultaneos() {
     sincronizarProcesosSimultaneos();
     registrarProcesosSimultaneosEnERP();
 
+    // Marcar como guardada para que no vuelva a aparecer el botón
+    operadoraState._configSimultaneosGuardada = true;
+
     // Feedback visual
     mostrarToast(`Configuración guardada: ${operadoraState.procesosSimultaneos.length} procesos simultáneos`, 'success');
 
-    // Efecto visual en el botón
-    const btn = document.querySelector('.btn-guardar-simultaneos');
-    if (btn) {
-        btn.innerHTML = '<i class="fas fa-check"></i> ¡Guardado!';
-        btn.classList.add('guardado');
-        setTimeout(() => {
-            btn.innerHTML = '<i class="fas fa-save"></i> Guardar Configuración';
-            btn.classList.remove('guardado');
-        }, 2000);
+    // Re-renderizar para que el botón desaparezca
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
+    const miAsignacion = asignaciones[CONFIG_ESTACION.id];
+    if (miAsignacion) {
+        renderizarColaProcesosOperadora(miAsignacion);
     }
 
     DEBUG_MODE && console.log('[OPERADORA] Configuración de procesos simultáneos guardada:', configSimultaneos);
@@ -1616,17 +1625,17 @@ function cargarConfiguracionSimultaneos() {
             if (config.operadoraId === authState.operadoraActual?.id) {
                 operadoraState.modoSimultaneo = config.modoSimultaneo || false;
                 operadoraState.procesosSimultaneos = config.procesosSimultaneos || [];
+                operadoraState._configSimultaneosGuardada = true;
 
                 DEBUG_MODE && console.log('[OPERADORA] Configuración de simultáneos cargada:', config);
 
-                // Re-renderizar si hay procesos
+                // Re-renderizar si hay procesos (sin toast, restauración silenciosa)
                 if (operadoraState.procesosSimultaneos.length > 0) {
                     const asignaciones = safeLocalGet('asignaciones_estaciones', {});
                     const miAsignacion = asignaciones[CONFIG_ESTACION.id];
                     if (miAsignacion) {
                         renderizarColaProcesosOperadora(miAsignacion);
                     }
-                    mostrarToast(`Modo simultáneo restaurado: ${operadoraState.procesosSimultaneos.length} procesos`, 'info');
                 }
             }
         } catch (e) {

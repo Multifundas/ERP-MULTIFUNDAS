@@ -493,9 +493,9 @@ body {
 .panel-main {
     flex: 1;
     display: grid;
-    grid-template-columns: 1fr 1.2fr 1fr;
-    gap: 20px;
-    padding: 20px;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    padding: 16px;
     overflow: hidden;
 }
 
@@ -1103,21 +1103,22 @@ body {
 .col-captura {
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
 }
 
 /* Progreso Circular */
 .progress-container {
-    padding: 20px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
 }
 
 .progress-circle {
     position: relative;
-    width: 200px;
-    height: 200px;
+    width: 170px;
+    height: 170px;
 }
 
 .progress-circle svg {
@@ -1162,7 +1163,7 @@ body {
 }
 
 .progress-value {
-    font-size: 48px;
+    font-size: 40px;
     font-weight: 700;
     color: var(--primary);
     line-height: 1;
@@ -1425,10 +1426,10 @@ body {
 /* Sección de Captura */
 .captura-section {
     flex: 1;
-    padding: 20px;
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
 }
 
 .cantidad-input-container {
@@ -3944,7 +3945,7 @@ body {
 /* Ultra compacto para tablets pequeñas landscape */
 @media (min-width: 1025px) and (max-height: 700px) {
     .panel-main {
-        grid-template-columns: 0.9fr 1.3fr 0.8fr;
+        grid-template-columns: 1fr 1fr 0.9fr;
     }
 
     .progress-circle {
