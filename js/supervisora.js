@@ -2613,25 +2613,42 @@ function renderOperadoresList() {
     const activos = [];       // En estación pero sin proceso
     const enDesarrollo = [];  // Trabajando con proceso
 
+    const estadoMaquinasLS = safeLocalGet('estado_maquinas', {});
+    const asignacionesLS = safeLocalGet('asignaciones_estaciones', {});
+
     supervisoraState.operadores.forEach(op => {
-        // Buscar en qué estación está (buscando en arrays de operadores)
+        // Buscar en qué estación está (comparación flexible de ID)
         const estacionAsignada = Object.entries(supervisoraState.maquinas).find(([id, m]) =>
-            m.operadores && m.operadores.some(o => o.id === op.id)
+            m.operadores && m.operadores.some(o => o.id == op.id)
         );
 
         if (estacionAsignada) {
             const [estacionId, maquina] = estacionAsignada;
             const colaOp = getColaOperador(op.id);
             const procesoActual = colaOp.find(p => p.estado === 'en_progreso');
+            const em = estadoMaquinasLS[estacionId] || {};
+            const ae = asignacionesLS[estacionId] || {};
 
-            // Verificar si tiene proceso (en cola o en la estación)
-            const tieneProcesoActivo = procesoActual || maquina.procesoNombre;
+            // Verificar si tiene proceso activo (múltiples fuentes)
+            const tieneProcesoActivo = procesoActual ||
+                                       maquina.procesoNombre ||
+                                       maquina.procesoId ||
+                                       (em.estado === 'trabajando') ||
+                                       em.procesoActivo ||
+                                       ae.procesoId;
+
+            // Obtener nombre del proceso de la mejor fuente disponible
+            const nombreProceso = procesoActual?.procesoNombre ||
+                                  maquina.procesoNombre ||
+                                  em.procesoNombre ||
+                                  ae.procesoNombre ||
+                                  '';
 
             if (tieneProcesoActivo) {
                 enDesarrollo.push({
                     ...op,
                     estacionId: estacionId,
-                    procesoNombre: procesoActual?.procesoNombre || maquina.procesoNombre
+                    procesoNombre: nombreProceso
                 });
             } else {
                 activos.push({ ...op, estacionId: estacionId });
