@@ -2360,54 +2360,20 @@ function obtenerOtrasOperadorasEnProceso() {
 }
 
 /**
- * Obtiene el total real de piezas de un proceso desde pedidos_erp (fuente única de verdad)
- * Incluye las piezas de TODOS los operadores que trabajan en el mismo proceso
+ * Calcula el total de piezas del equipo sumando las propias + las de las otras operadoras
+ * Recibe el array de otrasOperadoras para no duplicar la lógica de detección
  */
-function obtenerTotalPiezasProceso() {
-    const pedidoId = operadoraState.pedidoActual?.id;
-    const procesoNombre = operadoraState.procesoActual?.procesoNombre;
-    const miEstacionId = CONFIG_ESTACION?.id;
+function obtenerTotalPiezasProceso(otrasOperadoras) {
+    var misPiezas = operadoraState.piezasCapturadas || 0;
+    var totalEquipo = misPiezas;
 
-    if (!pedidoId || !procesoNombre) return operadoraState.piezasCapturadas;
-
-    try {
-        // Sumar piezas en tiempo real desde estado_maquinas de todas las estaciones
-        const estadoMaquinas = safeLocalGet('estado_maquinas', {});
-        const asignaciones = safeLocalGet('asignaciones_estaciones', {});
-        const procesoNombreLower = procesoNombre.toLowerCase().trim();
-        let totalPiezas = operadoraState.piezasCapturadas; // Mis piezas
-
-        for (const [estacionId, asignacion] of Object.entries(asignaciones)) {
-            if (estacionId === miEstacionId) continue; // Ya conté mis piezas
-
-            const procesoNombreAsig = (asignacion.procesoNombre || '').toLowerCase().trim();
-            if (procesoNombreAsig === procesoNombreLower && asignacion.pedidoId == pedidoId) {
-                const em = estadoMaquinas[estacionId] || {};
-                const emProcesoNombre = (em.procesoNombre || '').toLowerCase().trim();
-                if (emProcesoNombre === procesoNombreLower && em.pedidoId == pedidoId) {
-                    totalPiezas += (em.piezasHoy || 0);
-                }
-            }
+    if (otrasOperadoras && otrasOperadoras.length > 0) {
+        for (var i = 0; i < otrasOperadoras.length; i++) {
+            totalEquipo += (otrasOperadoras[i].piezas || 0);
         }
-
-        // También comparar con pedidos_erp por si hay piezas previas que no están en estado_maquinas
-        const pedidosERP = safeLocalGet('pedidos_erp', []);
-        const pedido = pedidosERP.find(p => p.id == pedidoId);
-        if (pedido && pedido.procesos) {
-            let proceso = pedido.procesos.find(p =>
-                (p.nombre || '').toLowerCase().trim() === procesoNombreLower
-            );
-            if (proceso && typeof proceso.piezas === 'number' && proceso.piezas > totalPiezas) {
-                return proceso.piezas;
-            }
-        }
-
-        return totalPiezas;
-    } catch (e) {
-        console.error('[OPERADORA] Error calculando total piezas:', e);
     }
 
-    return operadoraState.piezasCapturadas;
+    return totalEquipo;
 }
 
 /**
@@ -2484,8 +2450,8 @@ function actualizarProgresoEquipo() {
         }).join('');
     }
 
-    // Calcular y mostrar gran total
-    const granTotal = obtenerTotalPiezasProceso();
+    // Calcular y mostrar gran total (mis piezas + las de las otras)
+    const granTotal = obtenerTotalPiezasProceso(otrasOperadoras);
     const meta = operadoraState.piezasMeta || 100;
     const porcentajeTotal = meta > 0 ? Math.min(100, Math.round((granTotal / meta) * 100)) : 0;
 
