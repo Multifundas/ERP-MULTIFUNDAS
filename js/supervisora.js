@@ -5013,9 +5013,20 @@ function abrirDetalleProceso(procesoId, pedidoId) {
         }
     }
 
-    // Buscar estaciones asignadas a este proceso
+    // Buscar estaciones asignadas a este proceso (comparación flexible)
+    const asignacionesEst = safeLocalGet('asignaciones_estaciones', {});
+    const procesoNombreLower = (proceso.nombre || proceso.procesoNombre || '').toLowerCase().trim();
     const estacionesAsignadas = Object.entries(supervisoraState.maquinas)
-        .filter(([id, m]) => m.procesoId === procesoId)
+        .filter(([id, m]) => {
+            if (String(m.procesoId) === String(procesoId)) return true;
+            // Buscar en asignaciones
+            var ae = _cachedAsignacionesRender[id] || asignacionesEst[id];
+            if (ae && String(ae.procesoId) === String(procesoId) && ae.pedidoId == pedidoId) return true;
+            // Comparar por nombre + pedidoId
+            if (procesoNombreLower && (m.procesoNombre || '').toLowerCase().trim() === procesoNombreLower && m.pedidoId == pedidoId) return true;
+            if (ae && procesoNombreLower && (ae.procesoNombre || '').toLowerCase().trim() === procesoNombreLower && ae.pedidoId == pedidoId) return true;
+            return false;
+        })
         .map(([id, m]) => ({
             id,
             operadores: m.operadores || [],
@@ -5103,19 +5114,28 @@ function abrirDetalleProceso(procesoId, pedidoId) {
                 <h4><i class="fas fa-desktop"></i> Estaciones Asignadas</h4>
                 ${estacionesAsignadas.length > 0 ? `
                     <div class="estaciones-asignadas-lista">
-                        ${estacionesAsignadas.map(est => `
+                        ${estacionesAsignadas.map(est => {
+                            const opNombre = est.operadores.length > 0 ? est.operadores[0].nombre || '' : '';
+                            const opId = est.operadores.length > 0 ? est.operadores[0].id : null;
+                            const estIdEsc = String(est.id).replace(/'/g, "\\'");
+                            return `
                             <div class="estacion-asignada-item ${est.estado}">
                                 <span class="estacion-asignada-id">${est.id}</span>
                                 <div class="estacion-asignada-ops">
                                     ${est.operadores.length > 0
-                                        ? est.operadores.map(op => `<span class="mini-chip">${getIniciales(op.nombre)}</span>`).join('')
+                                        ? est.operadores.map(op => `<span class="mini-chip">${getIniciales(op.nombre)}</span> <span style="font-size:0.8rem;">${op.nombre || ''}</span>`).join('')
                                         : '<span class="text-muted">Sin operador</span>'
                                     }
                                 </div>
                                 <span class="estacion-asignada-piezas">${est.piezas} pzas</span>
                                 <span class="estado-dot ${est.estado}"></span>
-                            </div>
-                        `).join('')}
+                                ${est.operadores.length > 0 && proceso.estado === 'en-proceso' ? `
+                                    <button class="btn btn-orange btn-sm" style="padding:4px 8px;font-size:0.7rem;margin-left:6px;" onclick="event.stopPropagation(); solicitarSuspensionIndividual('${procesoIdEscapado}', ${pedidoId}, '${estIdEsc}')">
+                                        <i class="fas fa-hand-paper"></i> Suspender
+                                    </button>
+                                ` : ''}
+                            </div>`;
+                        }).join('')}
                     </div>
                 ` : '<p class="text-muted">No hay estaciones asignadas a este proceso</p>'}
             ` : ''}
@@ -5159,9 +5179,6 @@ function abrirDetalleProceso(procesoId, pedidoId) {
         footerButtons += `
             <button class="btn btn-warning" onclick="pausarProceso('${procesoIdEscapado}', ${pedidoId})">
                 <i class="fas fa-pause"></i> Pausar
-            </button>
-            <button class="btn btn-orange" onclick="solicitarSuspensionDesdeSuper('${procesoIdEscapado}', ${pedidoId})">
-                <i class="fas fa-hand-paper"></i> Suspender
             </button>
             <button class="btn btn-success" onclick="marcarProcesoCompletado('${procesoIdEscapado}', ${pedidoId})">
                 <i class="fas fa-check"></i> Completar
@@ -5334,6 +5351,65 @@ function solicitarSuspensionDesdeSuper(procesoId, pedidoId) {
     // Bind click después de insertar en DOM
     setTimeout(function() {
         var btn = document.getElementById('btnConfirmarSuspension');
+        if (btn) {
+            btn.onclick = function() {
+                confirmarSolicitudSuspension(estacionesTarget);
+            };
+        }
+    }, 50);
+}
+
+/**
+ * Solicita suspensión de una estación individual desde el modal de detalle del proceso.
+ */
+function solicitarSuspensionIndividual(procesoId, pedidoId, estacionId) {
+    var m = supervisoraState.maquinas[estacionId];
+    if (!m || !m.operadores || m.operadores.length === 0) {
+        showToast('No hay operadora en esa estación', 'warning');
+        return;
+    }
+
+    // Verificar solicitud pendiente
+    var solicitudes = safeLocalGet('solicitudes_suspension', []);
+    var yaPendiente = solicitudes.find(function(s) {
+        return s.estacionId === estacionId && (s.estado === 'pendiente' || s.estado === 'mostrada');
+    });
+    if (yaPendiente) {
+        showToast('Ya hay una solicitud pendiente para ' + estacionId, 'warning');
+        return;
+    }
+
+    var operadoraNombre = m.operadores[0].nombre || '';
+    var procesoNombre = m.procesoNombre || '';
+    var estacionesTarget = [{
+        estacionId: estacionId,
+        procesoId: procesoId,
+        pedidoId: pedidoId,
+        procesoNombre: procesoNombre,
+        operadoraId: m.operadores[0].id,
+        operadoraNombre: operadoraNombre
+    }];
+
+    closeModal();
+    openModal('Confirmar Suspensión', `
+        <div style="text-align: center; padding: 20px;">
+            <i class="fas fa-hand-paper" style="font-size: 3rem; color: #f59e0b; margin-bottom: 15px;"></i>
+            <p>¿Suspender proceso de <strong>${S(operadoraNombre)}</strong>?</p>
+            <p>Estación: <strong>${estacionId}</strong></p>
+            <p>Proceso: <strong>${S(procesoNombre)}</strong></p>
+            <p style="color: var(--gray-400); font-size: 0.85rem; margin-top: 10px;">
+                La operadora verá un aviso para capturar sus piezas antes de confirmar.
+            </p>
+        </div>
+    `, `
+        <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-warning" id="btnConfirmarSuspensionInd">
+            <i class="fas fa-hand-paper"></i> Enviar Solicitud
+        </button>
+    `);
+
+    setTimeout(function() {
+        var btn = document.getElementById('btnConfirmarSuspensionInd');
         if (btn) {
             btn.onclick = function() {
                 confirmarSolicitudSuspension(estacionesTarget);
