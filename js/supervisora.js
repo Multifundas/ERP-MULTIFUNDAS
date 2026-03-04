@@ -2141,7 +2141,7 @@ function renderProcesoItem(proceso, pedidoId) {
             </div>
             <div class="proceso-drag-status ${tieneInventario ? 'completado' : proceso.estado}"></div>
             ${!tieneInventario ? `
-            <div class="proceso-ver-mas" onclick="event.stopPropagation(); abrirDetalleProceso('${procesoIdEscapado}', ${pedidoId})">
+            <div class="proceso-ver-mas" onclick="event.stopPropagation(); console.log('[DEBUG-CLICK] Ojito clickeado! procesoId:', '${procesoIdEscapado}', 'pedidoId:', ${pedidoId}); abrirDetalleProceso('${procesoIdEscapado}', ${pedidoId})">
                 <i class="fas fa-eye"></i>
             </div>
             ` : ''}
@@ -4986,10 +4986,13 @@ function confirmarCapturaPiezasObligatoria(estacionId, operadorId) {
 // ========================================
 
 function abrirDetalleProceso(procesoId, pedidoId) {
+    console.log('[DEBUG-CLICK] abrirDetalleProceso llamada con procesoId:', procesoId, 'tipo:', typeof procesoId, 'pedidoId:', pedidoId, 'tipo:', typeof pedidoId);
     const pedido = supervisoraState.pedidosHoy.find(p => p.id === pedidoId);
+    console.log('[DEBUG-CLICK] pedido encontrado:', !!pedido, 'pedidoIds disponibles:', supervisoraState.pedidosHoy.map(p => p.id + '(' + typeof p.id + ')').join(', '));
     if (!pedido) return;
 
     const proceso = pedido.procesos?.find(p => p.id === procesoId);
+    console.log('[DEBUG-CLICK] proceso encontrado:', !!proceso, 'procesoIds disponibles:', (pedido.procesos || []).map(p => p.id + '(' + typeof p.id + ')').join(', '));
     if (!proceso) return;
 
     // Verificar si tiene inventario disponible
