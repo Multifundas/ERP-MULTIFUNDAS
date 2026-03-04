@@ -2229,97 +2229,76 @@ function obtenerOtrasOperadorasEnProceso() {
     const miPedidoId = operadoraState.pedidoActual?.id;
     const miOperadoraId = authState.operadoraActual?.id;
     const miEstacionId = CONFIG_ESTACION?.id;
+    const miEstacionNorm = (miEstacionId || '').toLowerCase().replace(/[-_\s]/g, '');
 
     if (!miProcesoNombre || !miPedidoId) return [];
 
     const otrasOperadoras = [];
 
     try {
-        // Buscar en asignaciones_estaciones
         const asignaciones = safeLocalGet('asignaciones_estaciones', {});
-        // Buscar en estado_maquinas (fuente principal de piezas en tiempo real)
         const estadoMaquinas = safeLocalGet('estado_maquinas', {});
-
-        // Obtener personal para los nombres
         const dbData = safeLocalGet('erp_multifundas_db', {});
         const personal = dbData.personal || [];
-
-        // Normalizar nombre de proceso para comparación
         const miProcesoNombreLower = miProcesoNombre.toLowerCase().trim();
+        const miProcesoIdStr = String(miProcesoId || '');
 
         for (const [estacionId, asignacion] of Object.entries(asignaciones)) {
-            // Saltar mi propia estación
-            if (estacionId === miEstacionId) continue;
+            // Saltar mi propia estación (matching flexible)
+            const estNorm = estacionId.toLowerCase().replace(/[-_\s]/g, '');
+            if (estacionId === miEstacionId || estNorm === miEstacionNorm) continue;
 
-            // Verificar si está trabajando en el mismo proceso y pedido
-            const procesoNombreAsignacion = (asignacion.procesoNombre || '').toLowerCase().trim();
-            const pedidoIdAsignacion = asignacion.pedidoId;
+            // Verificar si está en el mismo proceso y pedido
+            const procesoNombreAsig = (asignacion.procesoNombre || '').toLowerCase().trim();
+            const procesoIdAsig = String(asignacion.procesoId || '');
+            const pedidoIdAsig = asignacion.pedidoId;
 
-            const mismoProcesoNombre = procesoNombreAsignacion === miProcesoNombreLower;
-            const mismoPedido = pedidoIdAsignacion == miPedidoId;
+            const mismoProceso = (procesoNombreAsig && procesoNombreAsig === miProcesoNombreLower) ||
+                                 (procesoIdAsig && procesoIdAsig === miProcesoIdStr);
+            const mismoPedido = pedidoIdAsig == miPedidoId;
 
-            if (mismoProcesoNombre && mismoPedido) {
-                // Obtener info de la operadora
-                const estadoMaquina = estadoMaquinas[estacionId] || {};
-                const operadoraId = asignacion.operadoraId || estadoMaquina.operadoraId;
-                const operadoraNombre = asignacion.operadoraNombre || estadoMaquina.operadoraNombre;
+            if (!mismoProceso || !mismoPedido) continue;
 
-                // Si no tiene operadora asignada, saltar
-                if (!operadoraId && !operadoraNombre) continue;
+            // Obtener info de la operadora desde asignación o estado_maquinas
+            const estadoMaquina = estadoMaquinas[estacionId] || {};
+            const operadoraId = asignacion.operadoraId || estadoMaquina.operadoraId;
+            const operadoraNombre = asignacion.operadoraNombre || estadoMaquina.operadoraNombre;
 
-                // Verificar que está activo (tiene proceso activo, estado trabajando, o ha capturado recientemente)
-                const estaActivo = estadoMaquina.procesoActivo ||
-                                   estadoMaquina.estado === 'trabajando' ||
-                                   (estadoMaquina.ultimaCaptura &&
-                                    (new Date() - new Date(estadoMaquina.ultimaCaptura)) < 3600000); // última hora
-
-                if (!estaActivo) continue;
-
-                // Buscar el personal para obtener nombre completo e iniciales
-                let nombre = operadoraNombre || 'Operadora';
-                let iniciales = 'OP';
-
-                const personaData = personal.find(p => p.id == operadoraId);
-                if (personaData) {
-                    nombre = personaData.nombre || nombre;
-                    iniciales = obtenerIniciales(nombre);
-                }
-
-                // La fuente principal de piezas es estado_maquinas.piezasHoy
-                // que se actualiza en tiempo real con cada captura
-                let piezasCapturadas = estadoMaquina.piezasHoy || 0;
-
-                // Si el estado_maquinas tiene info del proceso correcto, usar esas piezas
-                const procesoMaquinaNombre = (estadoMaquina.procesoNombre || '').toLowerCase().trim();
-                const pedidoMaquinaId = estadoMaquina.pedidoId;
-
-                // Verificar que estado_maquinas corresponde al mismo proceso/pedido
-                if (procesoMaquinaNombre === miProcesoNombreLower && pedidoMaquinaId == miPedidoId) {
-                    // Usar las piezas del estado_maquinas
-                    piezasCapturadas = estadoMaquina.piezasHoy || 0;
-                } else {
-                    // Si no coincide, buscar en historial_produccion
-                    const historial = safeLocalGet('historial_produccion', []);
-                    const registrosOperadora = historial.filter(h =>
-                        h.pedidoId == miPedidoId &&
-                        (h.procesoNombre || '').toLowerCase().trim() === miProcesoNombreLower &&
-                        h.estacionId === estacionId
-                    );
-                    if (registrosOperadora.length > 0) {
-                        // Sumar todas las capturas de esta operadora en este proceso
-                        piezasCapturadas = registrosOperadora.reduce((sum, r) => sum + (r.cantidad || 0), 0);
-                    }
-                }
-
-                otrasOperadoras.push({
-                    estacionId,
-                    operadoraId,
-                    nombre,
-                    iniciales,
-                    piezas: piezasCapturadas,
-                    meta: asignacion.meta || operadoraState.piezasMeta || 0
-                });
+            // Buscar iniciales del personal
+            let iniciales = 'OP';
+            const personaData = personal.find(p => p.id == operadoraId);
+            if (personaData) {
+                iniciales = obtenerIniciales(personaData.nombre || operadoraNombre || '');
+            } else if (operadoraNombre) {
+                iniciales = obtenerIniciales(operadoraNombre);
             }
+
+            // Obtener piezas capturadas desde estado_maquinas
+            let piezasCapturadas = 0;
+            const procesoMaqNombre = (estadoMaquina.procesoNombre || '').toLowerCase().trim();
+            if (procesoMaqNombre === miProcesoNombreLower && estadoMaquina.pedidoId == miPedidoId) {
+                piezasCapturadas = estadoMaquina.piezasHoy || 0;
+            } else {
+                // Fallback: buscar en historial_produccion
+                const historial = safeLocalGet('historial_produccion', []);
+                const registros = historial.filter(h =>
+                    h.pedidoId == miPedidoId &&
+                    (h.procesoNombre || '').toLowerCase().trim() === miProcesoNombreLower &&
+                    h.estacionId === estacionId
+                );
+                if (registros.length > 0) {
+                    piezasCapturadas = registros.reduce((sum, r) => sum + (r.cantidad || 0), 0);
+                }
+            }
+
+            otrasOperadoras.push({
+                estacionId,
+                operadoraId,
+                nombre: operadoraNombre || 'Operadora',
+                iniciales,
+                piezas: piezasCapturadas,
+                meta: asignacion.meta || operadoraState.piezasMeta || 0
+            });
         }
 
         DEBUG_MODE && console.log('[OPERADORA] Otras operadoras en proceso "' + miProcesoNombre + '":', otrasOperadoras);
