@@ -4207,6 +4207,11 @@ body.day-mode .proceso-mini-progress {
     align-items: center;
     justify-content: center;
     z-index: 5;
+    pointer-events: none;
+}
+
+.proceso-bloqueado-overlay .btn-desbloquear-mini {
+    pointer-events: auto;
 }
 
 .proceso-bloqueado-overlay i {
