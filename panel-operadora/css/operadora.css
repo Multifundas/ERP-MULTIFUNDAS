@@ -1208,6 +1208,22 @@ body {
     overflow-y: auto;
 }
 
+.equipo-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.equipo-header i {
+    color: var(--primary);
+    font-size: 10px;
+}
+
 .otras-operadoras-lista {
     display: flex;
     flex-direction: column;
@@ -1297,6 +1313,25 @@ body {
     font-size: 9px;
     font-weight: 700;
     color: var(--gray-700);
+}
+
+/* Marcador "Tú" en progreso de equipo */
+.otra-operadora-item.es-yo {
+    background: rgba(102, 126, 234, 0.12);
+    border: 1px solid rgba(102, 126, 234, 0.3);
+}
+
+.otra-operadora-item.es-yo .otra-operadora-avatar {
+    background: var(--primary);
+    color: #fff;
+}
+
+.yo-label {
+    font-size: 8px;
+    color: var(--primary);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 /* Gran Total cuando hay múltiples operadoras */

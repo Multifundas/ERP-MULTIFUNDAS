@@ -2409,23 +2409,38 @@ function actualizarProgresoEquipo() {
         return;
     }
 
-    // Mostrar otras operadoras
+    // Mostrar sección de equipo
     if (container) container.style.display = 'flex';
     if (granTotalContainer) granTotalContainer.style.display = 'block';
 
-    // Renderizar lista de otras operadoras
+    // Construir lista completa del equipo: yo + las demás
+    const miNombre = authState.operadoraActual?.nombre || 'Yo';
+    const miIniciales = obtenerIniciales(miNombre);
+    const miEstacion = CONFIG_ESTACION?.id || '';
+    const misPiezas = operadoraState.piezasCapturadas || 0;
+
+    const equipoCompleto = [
+        { estacionId: miEstacion, iniciales: miIniciales, piezas: misPiezas, esSoyYo: true }
+    ].concat(otrasOperadoras.map(function(op) {
+        return { estacionId: op.estacionId, iniciales: op.iniciales, piezas: op.piezas, esSoyYo: false };
+    }));
+
+    // Renderizar lista del equipo completo
     if (lista) {
         const meta = operadoraState.piezasMeta || 100;
-        lista.innerHTML = otrasOperadoras.map(op => {
+        lista.innerHTML = equipoCompleto.map(function(op) {
             const porcentaje = meta > 0 ? Math.min(100, Math.round((op.piezas / meta) * 100)) : 0;
-            const circumference = 2 * Math.PI * 16; // r = 16 para el mini círculo
+            const circumference = 2 * Math.PI * 16;
             const offset = circumference - (porcentaje / 100) * circumference;
+            const yoClass = op.esSoyYo ? ' es-yo' : '';
+            const yoLabel = op.esSoyYo ? '<span class="yo-label">Tú</span>' : '';
 
             return `
-                <div class="otra-operadora-item">
+                <div class="otra-operadora-item${yoClass}">
                     <div class="otra-operadora-avatar">${S(op.iniciales)}</div>
                     <div class="otra-operadora-info">
                         <span class="otra-operadora-estacion">${S(op.estacionId)}</span>
+                        ${yoLabel}
                     </div>
                     <div class="otra-operadora-mini-progress">
                         <svg viewBox="0 0 40 40">
@@ -2440,7 +2455,7 @@ function actualizarProgresoEquipo() {
         }).join('');
     }
 
-    // Calcular y mostrar gran total (usar pedidos_erp como fuente única de verdad)
+    // Calcular y mostrar gran total
     const granTotal = obtenerTotalPiezasProceso();
     const meta = operadoraState.piezasMeta || 100;
     const porcentajeTotal = meta > 0 ? Math.min(100, Math.round((granTotal / meta) * 100)) : 0;
@@ -2463,7 +2478,7 @@ function actualizarProgresoEquipo() {
     }
 
     DEBUG_MODE && console.log('[OPERADORA] Progreso equipo actualizado:', {
-        misPiezas: operadoraState.piezasCapturadas,
+        misPiezas,
         otrasOperadoras: otrasOperadoras.length,
         granTotal,
         meta,
