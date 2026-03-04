@@ -1968,16 +1968,34 @@ function renderProcesoItem(proceso, pedidoId) {
     };
     const icono = iconosTipo[proceso.tipo] || 'fa-cog';
 
-    // Contar cuantas estaciones tienen este proceso asignado y verificar si hay trabajo activo
-    const estacionesConProceso = Object.entries(supervisoraState.maquinas)
-        .filter(([id, m]) => m.procesoId === proceso.id || (m.colaProcesos && m.colaProcesos.some(p => p.procesoId === proceso.id)));
-
-    const estacionesAsignadas = estacionesConProceso.map(([id, m]) => id);
-    const cantidadAsignadas = estacionesAsignadas.length;
-
     // Usar caches de localStorage (refrescados una vez en renderPedidosList)
     const estadoMaquinas = _cachedEstadoMaquinasRender;
     const asignacionesEstaciones = _cachedAsignacionesRender;
+    const procesoNombreLower = (proceso.nombre || '').toLowerCase().trim();
+
+    // Contar cuantas estaciones tienen este proceso asignado y verificar si hay trabajo activo
+    // Buscar en: procesoId directo, colaProcesos de máquina, Y procesos simultáneos activos
+    const estacionesConProceso = Object.entries(supervisoraState.maquinas)
+        .filter(([id, m]) => {
+            // 1. Proceso directo asignado a la estación
+            if (m.procesoId === proceso.id || m.procesoId == proceso.id) return true;
+            // 2. Proceso en la cola de la máquina
+            if (m.colaProcesos && m.colaProcesos.some(p => p.procesoId == proceso.id)) return true;
+            // 3. Proceso en procesos simultáneos activos (estado_maquinas o asignaciones)
+            var em = estadoMaquinas[id];
+            if (em && em.procesosSimultaneos && em.procesosSimultaneos.some(function(p) {
+                return p.procesoId == proceso.id || (p.procesoNombre || '').toLowerCase().trim() === procesoNombreLower;
+            })) return true;
+            var ae = asignacionesEstaciones[id];
+            if (ae && ae.procesosSimultaneosActivos && (
+                ae.procesosSimultaneosActivos.includes(proceso.id) ||
+                ae.procesosSimultaneosActivos.includes(String(proceso.id))
+            )) return true;
+            return false;
+        });
+
+    const estacionesAsignadas = estacionesConProceso.map(([id, m]) => id);
+    const cantidadAsignadas = estacionesAsignadas.length;
 
     // Verificar si alguna estación está trabajando activamente en este proceso
     // Un operador está "trabajando" si:
@@ -1996,7 +2014,6 @@ function renderProcesoItem(proceso, pedidoId) {
         const asignacionEstacion = asignacionesEstaciones[id];
         const estadoEstacion = estadoMaquinas[id];
 
-        const procesoNombreLower = (proceso.nombre || '').toLowerCase().trim();
         const enProcesosSimultaneos = (
             (asignacionEstacion?.procesosSimultaneosActivos && (
                 asignacionEstacion.procesosSimultaneosActivos.includes(proceso.id) ||
