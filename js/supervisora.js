@@ -5014,17 +5014,42 @@ function abrirDetalleProceso(procesoId, pedidoId) {
     }
 
     // Buscar estaciones asignadas a este proceso (comparación flexible)
+    // Buscar estaciones asignadas (misma lógica de 6 checks que renderProcesoItem)
     const asignacionesEst = safeLocalGet('asignaciones_estaciones', {});
+    const estadoMaquinasLS = safeLocalGet('estado_maquinas', {});
+    const procesoIdStr = String(procesoId);
     const procesoNombreLower = (proceso.nombre || proceso.procesoNombre || '').toLowerCase().trim();
     const estacionesAsignadas = Object.entries(supervisoraState.maquinas)
         .filter(([id, m]) => {
-            if (String(m.procesoId) === String(procesoId)) return true;
-            // Buscar en asignaciones
             var ae = _cachedAsignacionesRender[id] || asignacionesEst[id];
-            if (ae && String(ae.procesoId) === String(procesoId) && ae.pedidoId == pedidoId) return true;
-            // Comparar por nombre + pedidoId
-            if (procesoNombreLower && (m.procesoNombre || '').toLowerCase().trim() === procesoNombreLower && m.pedidoId == pedidoId) return true;
+            var em = estadoMaquinasLS[id];
+            // 1. Proceso directo por ID o nombre+pedido
+            if (String(m.procesoId) === procesoIdStr) return true;
+            if (procesoNombreLower && (m.procesoNombre || '').toLowerCase().trim() === procesoNombreLower) {
+                if (ae && ae.pedidoId == pedidoId) return true;
+                if (m.pedidoId == pedidoId) return true;
+            }
+            // 2. En cola de la máquina
+            if (m.colaProcesos && m.colaProcesos.some(function(p) {
+                return String(p.procesoId) === procesoIdStr ||
+                       ((p.procesoNombre || '').toLowerCase().trim() === procesoNombreLower && p.pedidoId == pedidoId);
+            })) return true;
+            // 3. En asignación directa
+            if (ae && String(ae.procesoId) === procesoIdStr && ae.pedidoId == pedidoId) return true;
             if (ae && procesoNombreLower && (ae.procesoNombre || '').toLowerCase().trim() === procesoNombreLower && ae.pedidoId == pedidoId) return true;
+            // 4. En cola de asignación
+            if (ae && ae.colaProcesos && ae.colaProcesos.some(function(p) {
+                return String(p.procesoId) === procesoIdStr ||
+                       ((p.procesoNombre || '').toLowerCase().trim() === procesoNombreLower && p.pedidoId == pedidoId);
+            })) return true;
+            // 5. En procesos simultáneos (estado_maquinas)
+            if (em && em.procesosSimultaneos && em.procesosSimultaneos.some(function(p) {
+                return String(p.procesoId) === procesoIdStr || (p.procesoNombre || '').toLowerCase().trim() === procesoNombreLower;
+            })) return true;
+            // 6. En procesosSimultaneosActivos (asignaciones)
+            if (ae && ae.procesosSimultaneosActivos && ae.procesosSimultaneosActivos.some(function(pid) {
+                return String(pid) === procesoIdStr;
+            })) return true;
             return false;
         })
         .map(([id, m]) => ({
