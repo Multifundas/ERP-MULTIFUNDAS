@@ -5150,6 +5150,9 @@ function abrirDetalleProceso(procesoId, pedidoId) {
             <button class="btn btn-warning" onclick="pausarProceso(${procesoId}, ${pedidoId})">
                 <i class="fas fa-pause"></i> Pausar
             </button>
+            <button class="btn btn-orange" onclick="solicitarSuspensionDesdeSuper('${procesoIdEscapado}', ${pedidoId})">
+                <i class="fas fa-hand-paper"></i> Suspender
+            </button>
             <button class="btn btn-success" onclick="marcarProcesoCompletado(${procesoId}, ${pedidoId})">
                 <i class="fas fa-check"></i> Completar
             </button>
@@ -5245,6 +5248,164 @@ function pausarProceso(procesoId, pedidoId) {
     showToast(`Proceso "${proceso.nombre}" pausado`, 'warning');
 
     setTimeout(() => abrirDetalleProceso(procesoId, pedidoId), 100);
+}
+
+/**
+ * Solicita suspensión de un proceso desde la supervisora.
+ * Envía notificación a la operadora para que capture piezas y confirme.
+ */
+function solicitarSuspensionDesdeSuper(procesoId, pedidoId) {
+    // Buscar estaciones que trabajan este proceso
+    var estacionesTarget = [];
+    var procesoNombre = '';
+
+    Object.entries(supervisoraState.maquinas).forEach(function([estId, m]) {
+        // Comparar por ID directo o por nombre+pedido
+        var esEsteProceso = String(m.procesoId) === String(procesoId);
+        if (!esEsteProceso) {
+            // Buscar en asignaciones
+            var ae = _cachedAsignacionesRender[estId] || safeLocalGet('asignaciones_estaciones', {})[estId];
+            if (ae && String(ae.procesoId) === String(procesoId) && ae.pedidoId == pedidoId) {
+                esEsteProceso = true;
+            }
+        }
+
+        if (esEsteProceso && m.operadores && m.operadores.length > 0) {
+            procesoNombre = m.procesoNombre || procesoNombre;
+            estacionesTarget.push({
+                estacionId: estId,
+                procesoId: procesoId,
+                pedidoId: pedidoId,
+                procesoNombre: m.procesoNombre || '',
+                operadoraId: m.operadores[0].id,
+                operadoraNombre: m.operadores[0].nombre || ''
+            });
+        }
+    });
+
+    if (estacionesTarget.length === 0) {
+        showToast('No hay estaciones con operadora para suspender este proceso', 'warning');
+        closeModal();
+        return;
+    }
+
+    // Verificar que no haya solicitud pendiente ya
+    var solicitudes = safeLocalGet('solicitudes_suspension', []);
+    var yaPendiente = solicitudes.find(function(s) {
+        return estacionesTarget.some(function(t) { return t.estacionId === s.estacionId; }) &&
+               (s.estado === 'pendiente' || s.estado === 'mostrada');
+    });
+    if (yaPendiente) {
+        showToast('Ya hay una solicitud de suspensión pendiente para esa estación', 'warning');
+        closeModal();
+        return;
+    }
+
+    var nombres = estacionesTarget.map(function(e) { return e.estacionId + ' (' + e.operadoraNombre + ')'; }).join(', ');
+
+    closeModal();
+    openModal('Confirmar Suspensión', `
+        <div style="text-align: center; padding: 20px;">
+            <i class="fas fa-hand-paper" style="font-size: 3rem; color: #f59e0b; margin-bottom: 15px;"></i>
+            <p>Se enviará solicitud de suspensión a:</p>
+            <p><strong>${nombres}</strong></p>
+            <p>Proceso: <strong>${S(procesoNombre)}</strong></p>
+            <p style="color: var(--gray-400); font-size: 0.85rem; margin-top: 10px;">
+                La operadora verá un aviso para capturar sus piezas antes de confirmar.
+            </p>
+        </div>
+    `, `
+        <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-warning" id="btnConfirmarSuspension">
+            <i class="fas fa-hand-paper"></i> Enviar Solicitud
+        </button>
+    `);
+
+    // Bind click después de insertar en DOM
+    setTimeout(function() {
+        var btn = document.getElementById('btnConfirmarSuspension');
+        if (btn) {
+            btn.onclick = function() {
+                confirmarSolicitudSuspension(estacionesTarget);
+            };
+        }
+    }, 50);
+}
+
+function confirmarSolicitudSuspension(estacionesTarget) {
+    var solicitudes = safeLocalGet('solicitudes_suspension', []);
+
+    // Limpiar solicitudes viejas (>1 hora)
+    var ahora = Date.now();
+    solicitudes = solicitudes.filter(function(s) {
+        if (s.estado === 'completada' || s.estado === 'obsoleta') {
+            return (ahora - new Date(s.fechaSolicitud).getTime()) < 3600000;
+        }
+        return true;
+    });
+
+    estacionesTarget.forEach(function(target) {
+        solicitudes.push({
+            id: Date.now() + '_' + target.estacionId,
+            estacionId: target.estacionId,
+            procesoId: target.procesoId,
+            pedidoId: target.pedidoId,
+            procesoNombre: target.procesoNombre,
+            operadoraId: target.operadoraId,
+            solicitadoPor: 'Coco',
+            fechaSolicitud: new Date().toISOString(),
+            estado: 'pendiente'
+        });
+    });
+
+    localStorage.setItem('solicitudes_suspension', JSON.stringify(solicitudes));
+
+    guardarHistorialProceso({
+        procesoId: estacionesTarget[0].procesoId,
+        pedidoId: estacionesTarget[0].pedidoId,
+        accion: 'Suspensión solicitada por supervisora',
+        fecha: new Date().toISOString(),
+        usuario: 'Coco'
+    });
+
+    closeModal();
+    showToast('Solicitud de suspensión enviada a ' + estacionesTarget.length + ' estación(es)', 'info');
+}
+
+/**
+ * Monitorea solicitudes de suspensión pendientes y avisa si llevan >2 min sin respuesta
+ * Se ejecuta en el polling de 8s de la supervisora
+ */
+function verificarEstadoSolicitudesSuspension() {
+    var solicitudes = safeLocalGet('solicitudes_suspension', []);
+    if (!solicitudes || solicitudes.length === 0) return;
+
+    var ahora = Date.now();
+    var huboLimpieza = false;
+
+    solicitudes.forEach(function(s) {
+        if (s.estado === 'pendiente' || s.estado === 'mostrada') {
+            var tiempoTranscurrido = ahora - new Date(s.fechaSolicitud).getTime();
+            // Avisar a los 2 minutos si sigue pendiente
+            if (tiempoTranscurrido > 120000 && !s._avisadoTimeout) {
+                s._avisadoTimeout = true;
+                huboLimpieza = true;
+                showToast('La operadora en ' + s.estacionId + ' no ha respondido a la suspensión de "' + (s.procesoNombre || 'proceso') + '" (>' + Math.floor(tiempoTranscurrido / 60000) + ' min)', 'warning');
+            }
+        }
+    });
+
+    // Limpiar completadas/obsoletas >1 hora
+    var solicitudesLimpias = solicitudes.filter(function(s) {
+        if (s.estado === 'completada' || s.estado === 'obsoleta') {
+            return (ahora - new Date(s.fechaSolicitud).getTime()) < 3600000;
+        }
+        return true;
+    });
+
+    if (huboLimpieza || solicitudesLimpias.length !== solicitudes.length) {
+        localStorage.setItem('solicitudes_suspension', JSON.stringify(solicitudesLimpias));
+    }
 }
 
 function reanudarProceso(procesoId, pedidoId) {
@@ -9605,6 +9766,9 @@ setTimeout(verificarAsignacionAutomaticaExtras, 4000);
 
 // Polling cada 8 segundos para datos de operadoras (balance entre tiempo real y rendimiento)
 setInterval(actualizarDatosDeOperadoras, 8000);
+
+// Monitoreo de solicitudes de suspensión cada 15 segundos
+setInterval(verificarEstadoSolicitudesSuspension, 15000);
 
 // Primera ejecución después de 2 segundos
 setTimeout(actualizarDatosDeOperadoras, 2000);

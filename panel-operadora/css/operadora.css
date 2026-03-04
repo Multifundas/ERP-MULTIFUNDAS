@@ -2914,6 +2914,51 @@ body {
 }
 
 /* ========================================
+   BANNER SUSPENSIÓN PENDIENTE
+   ======================================== */
+
+.banner-suspension {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #f39c12, #e67e22);
+    color: white;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    z-index: 2500;
+    box-shadow: 0 -3px 10px rgba(0, 0, 0, 0.2);
+    animation: bannerPulse 2s ease-in-out infinite;
+}
+
+.banner-suspension i {
+    font-size: 1.3rem;
+    animation: shake 1.5s ease-in-out infinite;
+}
+
+@keyframes bannerPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
+}
+
+@keyframes shake {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-10deg); }
+    75% { transform: rotate(10deg); }
+}
+
+.banner-suspension:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+}
+
+/* ========================================
    INDICADOR DE CONEXIÓN
    ======================================== */
 

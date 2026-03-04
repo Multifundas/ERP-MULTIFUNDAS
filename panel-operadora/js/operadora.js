@@ -276,10 +276,11 @@ function initPanelOperadora() {
     // Grupo 2: Cada 5 segundos (conexión)
     window._erpIntervals.push(setInterval(actualizarIndicadorConexion, 5000));
 
-    // Grupo 3: Cada 15 segundos (progreso equipo + nueva asignación)
+    // Grupo 3: Cada 15 segundos (progreso equipo + nueva asignación + suspensión remota)
     window._erpIntervals.push(setInterval(function() {
         actualizarProgresoEquipo();
         verificarNuevaAsignacion();
+        verificarSolicitudSuspension();
     }, 15000));
 
     // Grupo 4: Cada 30 segundos (estadísticas + mensajes coco)
@@ -3027,6 +3028,33 @@ function suspenderProceso() {
         return;
     }
 
+    _ejecutarSuspensionInterna('operadora');
+}
+
+/**
+ * Ejecuta suspensión remota solicitada por la supervisora (sin confirm)
+ */
+function ejecutarSuspensionRemota(solicitudId) {
+    cerrarModal();
+    window._solicitudSuspensionPendiente = null;
+    // Ocultar banner si estaba visible
+    const banner = document.getElementById('bannerSuspensionPendiente');
+    if (banner) banner.style.display = 'none';
+
+    if (!operadoraState.procesoIniciado || !operadoraState.pedidoActual) {
+        mostrarToast('No hay proceso activo para suspender', 'warning');
+        return;
+    }
+
+    _ejecutarSuspensionInterna('supervisora', solicitudId);
+}
+
+/**
+ * Lógica interna de suspensión compartida por suspenderProceso() y ejecutarSuspensionRemota()
+ * @param {string} motivo - 'operadora' o 'supervisora'
+ * @param {string} solicitudId - ID de solicitud (solo si motivo='supervisora')
+ */
+function _ejecutarSuspensionInterna(motivo, solicitudId) {
     // Calcular tiempo trabajado hasta ahora
     let tiempoTrabajado = operadoraState.tiempoProcesoAcumulado;
     if (!operadoraState.procesoEnPausa && operadoraState.tiempoProcesoInicio) {
@@ -3056,6 +3084,7 @@ function suspenderProceso() {
         historialPausas: operadoraState.historialPausas.slice(),
         fechaSuspension: new Date().toISOString(),
         estado: 'suspendido',
+        suspendidoPor: motivo,
         operadoraId: authState.operadoraActual?.id,
         operadoraNombre: authState.operadoraActual?.nombre,
         estacionId: CONFIG_ESTACION.id
@@ -3099,10 +3128,8 @@ function suspenderProceso() {
             };
         } else {
             // Solo hay procesos suspendidos en cola → mostrar selector
-            // Mantener la asignación actual pero marcarla como vacía para trigger selector
             const colaActualizada = asignaciones[estacionIdUsada].colaProcesos;
             delete asignaciones[estacionIdUsada];
-            // Guardar cola como metadato temporal
             localStorage.setItem(`cola_suspendidos_${CONFIG_ESTACION.id}`, JSON.stringify(colaActualizada));
         }
 
@@ -3122,12 +3149,13 @@ function suspenderProceso() {
     localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
 
     // Notificar a supervisora
+    const tipoNotif = motivo === 'supervisora' ? 'proceso_suspendido_por_supervisora' : 'proceso_suspendido';
     const notificaciones = safeLocalGet('notificaciones_coco', []);
     notificaciones.unshift({
         id: Date.now(),
-        tipo: 'proceso_suspendido',
-        titulo: 'Proceso Suspendido',
-        mensaje: `${authState.operadoraActual?.nombre} suspendió "${suspendedData.procesoNombre}" con ${suspendedData.piezasCapturadas} piezas (${suspendedData.piezasCapturadas}/${suspendedData.meta})`,
+        tipo: tipoNotif,
+        titulo: motivo === 'supervisora' ? 'Suspensión Confirmada' : 'Proceso Suspendido',
+        mensaje: `${authState.operadoraActual?.nombre} ${motivo === 'supervisora' ? 'confirmó suspensión de' : 'suspendió'} "${suspendedData.procesoNombre}" con ${suspendedData.piezasCapturadas} piezas (${suspendedData.piezasCapturadas}/${suspendedData.meta})`,
         operadoraId: authState.operadoraActual?.id,
         estacionId: CONFIG_ESTACION.id,
         pedidoId: suspendedData.pedidoId,
@@ -3137,6 +3165,18 @@ function suspenderProceso() {
         leida: false
     });
     localStorage.setItem('notificaciones_coco', JSON.stringify(notificaciones.slice(0, 100)));
+
+    // Si fue suspensión remota, marcar solicitud como completada
+    if (solicitudId) {
+        const solicitudes = safeLocalGet('solicitudes_suspension', []);
+        const idx = solicitudes.findIndex(s => s.id === solicitudId);
+        if (idx >= 0) {
+            solicitudes[idx].estado = 'completada';
+            solicitudes[idx].fechaCompletada = new Date().toISOString();
+            solicitudes[idx].piezasAlSuspender = suspendedData.piezasCapturadas;
+            localStorage.setItem('solicitudes_suspension', JSON.stringify(solicitudes));
+        }
+    }
 
     // Resetear estado local
     operadoraState.procesoIniciado = false;
@@ -3164,7 +3204,8 @@ function suspenderProceso() {
     // Reproducir sonido
     if (typeof reproducirSonido === 'function') reproducirSonido('pausar');
 
-    mostrarToast('Proceso suspendido. Progreso guardado.', 'info');
+    const msgMotivo = motivo === 'supervisora' ? 'Proceso suspendido por solicitud de Coco. ' : 'Proceso suspendido. ';
+    mostrarToast(msgMotivo + 'Progreso guardado.', 'info');
 
     // Verificar si hay un siguiente proceso asignado o mostrar selector de suspendidos
     const asignacionesActualizadas = safeLocalGet('asignaciones_estaciones', {});
@@ -5590,6 +5631,177 @@ function marcarMensajeLeido(mensajeId) {
         }
         localStorage.setItem('mensajes_operadoras', JSON.stringify(mensajes));
     }
+}
+
+// ========================================
+// SISTEMA DE SUSPENSIÓN REMOTA (desde supervisora)
+// ========================================
+
+/**
+ * Polling: busca solicitudes de suspensión pendientes para esta estación
+ * Se ejecuta cada 15s junto con verificarNuevaAsignacion
+ */
+function verificarSolicitudSuspension() {
+    // Solo verificar si hay un proceso activo
+    if (!operadoraState.procesoIniciado || !operadoraState.pedidoActual) return;
+
+    var solicitudes = safeLocalGet('solicitudes_suspension', []);
+    if (!solicitudes || solicitudes.length === 0) return;
+
+    var miEstacionId = CONFIG_ESTACION.id;
+    var miIdNormalizado = miEstacionId.toLowerCase().replace(/[-_\s]/g, '');
+
+    // Buscar solicitudes pendientes para mi estación
+    var solicitudPendiente = null;
+    for (var i = 0; i < solicitudes.length; i++) {
+        var s = solicitudes[i];
+        if (s.estado !== 'pendiente') continue;
+
+        // Matching flexible de estación
+        var solEstId = (s.estacionId || '').toLowerCase().replace(/[-_\s]/g, '');
+        var esParaMi = solEstId === miIdNormalizado ||
+                       solEstId.includes(miIdNormalizado) ||
+                       miIdNormalizado.includes(solEstId) ||
+                       s.estacionId === miEstacionId;
+
+        if (!esParaMi) continue;
+
+        // Verificar que el procesoId coincida con el proceso actual
+        var procesoActual = operadoraState.procesoActual;
+        if (procesoActual) {
+            var procesoIdActual = String(procesoActual.procesoId || '');
+            var procesoIdSolicitud = String(s.procesoId || '');
+            var procesoNombreActual = (procesoActual.procesoNombre || '').toLowerCase().trim();
+            var procesoNombreSolicitud = (s.procesoNombre || '').toLowerCase().trim();
+
+            var coincideProceso = procesoIdActual === procesoIdSolicitud ||
+                                  (procesoNombreActual && procesoNombreActual === procesoNombreSolicitud &&
+                                   procesoActual.pedidoId == s.pedidoId);
+
+            if (!coincideProceso) {
+                // Marcar como obsoleta si no coincide
+                solicitudes[i].estado = 'obsoleta';
+                localStorage.setItem('solicitudes_suspension', JSON.stringify(solicitudes));
+                DEBUG_MODE && console.log('[OPERADORA] Solicitud suspensión obsoleta (proceso no coincide):', s.id);
+                continue;
+            }
+        }
+
+        solicitudPendiente = s;
+        break;
+    }
+
+    if (solicitudPendiente) {
+        DEBUG_MODE && console.log('[OPERADORA] Solicitud de suspensión detectada:', solicitudPendiente.id);
+        mostrarAvisoSuspensionRemota(solicitudPendiente);
+    }
+}
+
+/**
+ * Muestra popup avisando que la supervisora quiere suspender el proceso
+ */
+function mostrarAvisoSuspensionRemota(solicitud) {
+    // Marcar como 'mostrada' para no re-mostrar en el próximo polling
+    var solicitudes = safeLocalGet('solicitudes_suspension', []);
+    for (var i = 0; i < solicitudes.length; i++) {
+        if (solicitudes[i].id === solicitud.id) {
+            solicitudes[i].estado = 'mostrada';
+            break;
+        }
+    }
+    localStorage.setItem('solicitudes_suspension', JSON.stringify(solicitudes));
+
+    // Guardar referencia para retomarSuspensionPendiente
+    window._solicitudSuspensionPendiente = solicitud.id;
+
+    var piezasActuales = operadoraState.piezasCapturadas || 0;
+    var procesoNombre = solicitud.procesoNombre || operadoraState.procesoActual?.procesoNombre || 'el proceso actual';
+
+    var htmlContenido = `
+        <div style="text-align: center; padding: 20px;">
+            <div style="font-size: 48px; color: #f39c12; margin-bottom: 15px;">
+                <i class="fas fa-hand-paper"></i>
+            </div>
+            <h3 style="color: #e74c3c; margin-bottom: 10px;">Suspensión Solicitada</h3>
+            <p style="font-size: 16px; margin-bottom: 15px;">
+                <strong>${solicitud.solicitadoPor || 'Coco'}</strong> necesita suspender tu proceso:
+            </p>
+            <p style="font-size: 18px; font-weight: bold; color: #2c3e50; margin-bottom: 15px;">
+                ${procesoNombre}
+            </p>
+            <p style="font-size: 14px; color: #7f8c8d; margin-bottom: 20px;">
+                Llevas <strong>${piezasActuales}</strong> piezas capturadas.<br>
+                Captura tus piezas pendientes antes de confirmar.
+            </p>
+        </div>
+    `;
+
+    var solicitudIdEscapado = String(solicitud.id).replace(/'/g, "\\'");
+    mostrarModal('Aviso de Suspensión', htmlContenido, [
+        { class: 'btn-warning', onclick: "cerrarModal(); mostrarBannerSuspensionPendiente();", text: '⏳ Capturar piezas primero' },
+        { class: 'btn-danger', onclick: "ejecutarSuspensionRemota('" + solicitudIdEscapado + "')", text: '✓ Confirmar Suspensión' }
+    ]);
+
+    // Reproducir sonido de notificación
+    if (typeof reproducirSonido === 'function') reproducirSonido('notificacion');
+}
+
+/**
+ * Muestra el banner persistente para recordar la suspensión pendiente
+ */
+function mostrarBannerSuspensionPendiente() {
+    var banner = document.getElementById('bannerSuspensionPendiente');
+    if (banner) banner.style.display = 'flex';
+}
+
+/**
+ * Re-abre el modal de suspensión cuando la operadora toca el banner
+ */
+function retomarSuspensionPendiente() {
+    var solicitudId = window._solicitudSuspensionPendiente;
+    if (!solicitudId) {
+        mostrarToast('No hay suspensión pendiente', 'warning');
+        return;
+    }
+
+    // Buscar la solicitud para re-mostrar el modal
+    var solicitudes = safeLocalGet('solicitudes_suspension', []);
+    var solicitud = solicitudes.find(function(s) { return s.id === solicitudId; });
+
+    if (!solicitud || solicitud.estado === 'completada') {
+        window._solicitudSuspensionPendiente = null;
+        var banner = document.getElementById('bannerSuspensionPendiente');
+        if (banner) banner.style.display = 'none';
+        mostrarToast('La solicitud ya fue procesada', 'info');
+        return;
+    }
+
+    var piezasActuales = operadoraState.piezasCapturadas || 0;
+    var procesoNombre = solicitud.procesoNombre || operadoraState.procesoActual?.procesoNombre || 'el proceso actual';
+
+    var htmlContenido = `
+        <div style="text-align: center; padding: 20px;">
+            <div style="font-size: 48px; color: #f39c12; margin-bottom: 15px;">
+                <i class="fas fa-hand-paper"></i>
+            </div>
+            <h3 style="color: #e74c3c; margin-bottom: 10px;">Suspensión Pendiente</h3>
+            <p style="font-size: 16px; margin-bottom: 15px;">
+                <strong>${solicitud.solicitadoPor || 'Coco'}</strong> solicitó suspender:
+            </p>
+            <p style="font-size: 18px; font-weight: bold; color: #2c3e50; margin-bottom: 15px;">
+                ${procesoNombre}
+            </p>
+            <p style="font-size: 14px; color: #7f8c8d; margin-bottom: 20px;">
+                Llevas <strong>${piezasActuales}</strong> piezas capturadas.
+            </p>
+        </div>
+    `;
+
+    var solicitudIdEscapado = String(solicitud.id).replace(/'/g, "\\'");
+    mostrarModal('Suspensión Pendiente', htmlContenido, [
+        { class: 'btn-warning', onclick: "cerrarModal();", text: '⏳ Seguir capturando' },
+        { class: 'btn-danger', onclick: "ejecutarSuspensionRemota('" + solicitudIdEscapado + "')", text: '✓ Confirmar Suspensión' }
+    ]);
 }
 
 // ========================================
