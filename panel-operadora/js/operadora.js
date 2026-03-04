@@ -2224,84 +2224,134 @@ function actualizarHistorialUI() {
  * @returns {Array} Lista de operadoras con sus piezas
  */
 function obtenerOtrasOperadorasEnProceso() {
-    const miProcesoId = operadoraState.procesoActual?.id || operadoraState.procesoActual?.procesoId;
-    const miProcesoNombre = operadoraState.procesoActual?.nombre || operadoraState.procesoActual?.procesoNombre;
     const miPedidoId = operadoraState.pedidoActual?.id;
-    const miOperadoraId = authState.operadoraActual?.id;
     const miEstacionId = CONFIG_ESTACION?.id;
     const miEstacionNorm = (miEstacionId || '').toLowerCase().replace(/[-_\s]/g, '');
 
-    if (!miProcesoNombre || !miPedidoId) return [];
+    if (!miPedidoId) return [];
 
-    const otrasOperadoras = [];
+    // Construir set de MIS procesos activos (principal + simultáneos)
+    var misProcesosNombres = [];
+    var misProcesosIds = [];
+
+    var nombrePrincipal = operadoraState.procesoActual?.nombre || operadoraState.procesoActual?.procesoNombre;
+    var idPrincipal = operadoraState.procesoActual?.id || operadoraState.procesoActual?.procesoId;
+    if (nombrePrincipal) misProcesosNombres.push(nombrePrincipal.toLowerCase().trim());
+    if (idPrincipal) misProcesosIds.push(String(idPrincipal));
+
+    // Agregar procesos simultáneos propios
+    if (operadoraState.procesosSimultaneos && operadoraState.procesosSimultaneos.length > 0) {
+        operadoraState.procesosSimultaneos.forEach(function(p) {
+            var n = (p.procesoNombre || '').toLowerCase().trim();
+            if (n && misProcesosNombres.indexOf(n) === -1) misProcesosNombres.push(n);
+            var id = String(p.procesoId || '');
+            if (id && misProcesosIds.indexOf(id) === -1) misProcesosIds.push(id);
+        });
+    }
+
+    if (misProcesosNombres.length === 0) return [];
+
+    var otrasOperadoras = [];
 
     try {
-        const asignaciones = safeLocalGet('asignaciones_estaciones', {});
-        const estadoMaquinas = safeLocalGet('estado_maquinas', {});
-        const dbData = safeLocalGet('erp_multifundas_db', {});
-        const personal = dbData.personal || [];
-        const miProcesoNombreLower = miProcesoNombre.toLowerCase().trim();
-        const miProcesoIdStr = String(miProcesoId || '');
+        var asignaciones = safeLocalGet('asignaciones_estaciones', {});
+        var estadoMaquinas = safeLocalGet('estado_maquinas', {});
+        var dbData = safeLocalGet('erp_multifundas_db', {});
+        var personal = dbData.personal || [];
 
-        for (const [estacionId, asignacion] of Object.entries(asignaciones)) {
-            // Saltar mi propia estación (matching flexible)
-            const estNorm = estacionId.toLowerCase().replace(/[-_\s]/g, '');
+        for (var estacionId in asignaciones) {
+            if (!asignaciones.hasOwnProperty(estacionId)) continue;
+            var asignacion = asignaciones[estacionId];
+
+            // Saltar mi propia estación
+            var estNorm = estacionId.toLowerCase().replace(/[-_\s]/g, '');
             if (estacionId === miEstacionId || estNorm === miEstacionNorm) continue;
 
-            // Verificar si está en el mismo proceso y pedido
-            const procesoNombreAsig = (asignacion.procesoNombre || '').toLowerCase().trim();
-            const procesoIdAsig = String(asignacion.procesoId || '');
-            const pedidoIdAsig = asignacion.pedidoId;
+            // Mismo pedido?
+            if (asignacion.pedidoId != miPedidoId) continue;
 
-            const mismoProceso = (procesoNombreAsig && procesoNombreAsig === miProcesoNombreLower) ||
-                                 (procesoIdAsig && procesoIdAsig === miProcesoIdStr);
-            const mismoPedido = pedidoIdAsig == miPedidoId;
+            // Recopilar TODOS los procesos de esta otra estación
+            var procesosOtra = [];
 
-            if (!mismoProceso || !mismoPedido) continue;
+            // 1. Proceso principal
+            var nomPrinc = (asignacion.procesoNombre || '').toLowerCase().trim();
+            var idPrinc = String(asignacion.procesoId || '');
+            if (nomPrinc) procesosOtra.push(nomPrinc);
 
-            // Obtener info de la operadora desde asignación o estado_maquinas
-            const estadoMaquina = estadoMaquinas[estacionId] || {};
-            const operadoraId = asignacion.operadoraId || estadoMaquina.operadoraId;
-            const operadoraNombre = asignacion.operadoraNombre || estadoMaquina.operadoraNombre;
+            // 2. Cola de procesos
+            if (asignacion.colaProcesos && asignacion.colaProcesos.length > 0) {
+                asignacion.colaProcesos.forEach(function(p) {
+                    var n = (p.procesoNombre || '').toLowerCase().trim();
+                    if (n && procesosOtra.indexOf(n) === -1) procesosOtra.push(n);
+                });
+            }
 
-            // Buscar iniciales del personal
-            let iniciales = 'OP';
-            const personaData = personal.find(p => p.id == operadoraId);
+            // 3. Procesos simultáneos desde estado_maquinas
+            var em = estadoMaquinas[estacionId] || {};
+            if (em.procesosSimultaneos && em.procesosSimultaneos.length > 0) {
+                em.procesosSimultaneos.forEach(function(p) {
+                    var n = (p.procesoNombre || '').toLowerCase().trim();
+                    if (n && procesosOtra.indexOf(n) === -1) procesosOtra.push(n);
+                });
+            }
+
+            // 4. procesosSimultaneosActivos desde asignación (array de IDs)
+            if (asignacion.procesosSimultaneosActivos && asignacion.procesosSimultaneosActivos.length > 0) {
+                asignacion.procesosSimultaneosActivos.forEach(function(pid) {
+                    var s = String(pid);
+                    if (misProcesosIds.indexOf(s) !== -1 && procesosOtra.indexOf(s) === -1) {
+                        procesosOtra.push(s);
+                    }
+                });
+            }
+
+            // Buscar si alguno de mis procesos coincide con alguno de la otra estación
+            var procesoEnComun = null;
+            for (var i = 0; i < misProcesosNombres.length; i++) {
+                if (procesosOtra.indexOf(misProcesosNombres[i]) !== -1) {
+                    procesoEnComun = misProcesosNombres[i];
+                    break;
+                }
+            }
+            // También verificar por ID
+            if (!procesoEnComun) {
+                for (var j = 0; j < misProcesosIds.length; j++) {
+                    if (procesosOtra.indexOf(misProcesosIds[j]) !== -1) {
+                        procesoEnComun = misProcesosIds[j];
+                        break;
+                    }
+                }
+            }
+
+            if (!procesoEnComun) continue;
+
+            // Encontramos un proceso en común → agregar a la lista
+            var operadoraId = asignacion.operadoraId || em.operadoraId;
+            var operadoraNombre = asignacion.operadoraNombre || em.operadoraNombre;
+
+            var iniciales = 'OP';
+            var personaData = personal.find(function(p) { return p.id == operadoraId; });
             if (personaData) {
                 iniciales = obtenerIniciales(personaData.nombre || operadoraNombre || '');
             } else if (operadoraNombre) {
                 iniciales = obtenerIniciales(operadoraNombre);
             }
 
-            // Obtener piezas capturadas desde estado_maquinas
-            let piezasCapturadas = 0;
-            const procesoMaqNombre = (estadoMaquina.procesoNombre || '').toLowerCase().trim();
-            if (procesoMaqNombre === miProcesoNombreLower && estadoMaquina.pedidoId == miPedidoId) {
-                piezasCapturadas = estadoMaquina.piezasHoy || 0;
-            } else {
-                // Fallback: buscar en historial_produccion
-                const historial = safeLocalGet('historial_produccion', []);
-                const registros = historial.filter(h =>
-                    h.pedidoId == miPedidoId &&
-                    (h.procesoNombre || '').toLowerCase().trim() === miProcesoNombreLower &&
-                    h.estacionId === estacionId
-                );
-                if (registros.length > 0) {
-                    piezasCapturadas = registros.reduce((sum, r) => sum + (r.cantidad || 0), 0);
-                }
-            }
+            // Piezas: buscar en estado_maquinas
+            var piezasCapturadas = em.piezasHoy || 0;
 
             otrasOperadoras.push({
-                estacionId,
-                operadoraId,
+                estacionId: estacionId,
+                operadoraId: operadoraId,
                 nombre: operadoraNombre || 'Operadora',
-                iniciales,
+                iniciales: iniciales,
                 piezas: piezasCapturadas,
+                procesoEnComun: procesoEnComun,
                 meta: asignacion.meta || operadoraState.piezasMeta || 0
             });
         }
 
-        DEBUG_MODE && console.log('[OPERADORA] Otras operadoras en proceso "' + miProcesoNombre + '":', otrasOperadoras);
+        DEBUG_MODE && console.log('[OPERADORA] Otras operadoras en proceso:', otrasOperadoras, 'misProcesos:', misProcesosNombres);
     } catch (e) {
         console.error('[OPERADORA] Error obteniendo otras operadoras:', e);
     }
