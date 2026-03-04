@@ -2141,7 +2141,7 @@ function renderProcesoItem(proceso, pedidoId) {
             </div>
             <div class="proceso-drag-status ${tieneInventario ? 'completado' : proceso.estado}"></div>
             ${!tieneInventario ? `
-            <div class="proceso-ver-mas">
+            <div class="proceso-ver-mas" onclick="event.stopPropagation(); abrirDetalleProceso('${procesoIdEscapado}', ${pedidoId})">
                 <i class="fas fa-eye"></i>
             </div>
             ` : ''}

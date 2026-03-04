@@ -5198,12 +5198,20 @@ body.day-mode .liberacion-lista li {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     color: #667eea;
-    opacity: 0;
+    opacity: 0.6;
     transition: all 0.2s;
     flex-shrink: 0;
+    cursor: pointer;
+    border-radius: 6px;
+    z-index: 10;
+}
+
+.proceso-ver-mas:hover {
+    opacity: 1;
+    background: rgba(102, 126, 234, 0.15);
 }
 
 .proceso-drag-item:hover .proceso-ver-mas {
