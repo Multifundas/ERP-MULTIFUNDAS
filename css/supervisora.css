@@ -41,12 +41,15 @@ body {
     flex-shrink: 0;
     contain: layout style;
     z-index: 10;
+    overflow: hidden;
 }
 
 .header-left {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
+    min-width: 0;
 }
 
 .back-link {
@@ -98,6 +101,8 @@ body {
     flex: 1;
     display: flex;
     justify-content: center;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .stats-bar {
@@ -138,6 +143,8 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
+    flex-shrink: 0;
+    min-width: 0;
 }
 
 .btn-icon {
@@ -1825,6 +1832,20 @@ body.day-mode .area-station-id {
 
     .stat-label {
         font-size: 0.55rem;
+    }
+
+    /* Colapsar botones Inventario/Planta a solo iconos en pantallas medianas */
+    .btn-inventario {
+        font-size: 0;
+        padding: 5px 8px;
+        gap: 0;
+    }
+    .btn-inventario i {
+        font-size: 0.75rem;
+    }
+
+    .header-right {
+        gap: 4px;
     }
 
     .semaforo-metricas {

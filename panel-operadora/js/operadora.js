@@ -5642,18 +5642,13 @@ function marcarMensajeLeido(mensajeId) {
  */
 function verificarSolicitudSuspension() {
     // Solo verificar si hay un proceso activo
-    if (!operadoraState.procesoIniciado || !operadoraState.pedidoActual) {
-        console.log('[SUSPENSION-DEBUG] No hay proceso activo. procesoIniciado:', operadoraState.procesoIniciado, 'pedidoActual:', !!operadoraState.pedidoActual);
-        return;
-    }
+    if (!operadoraState.procesoIniciado || !operadoraState.pedidoActual) return;
 
     var solicitudes = safeLocalGet('solicitudes_suspension', []);
-    console.log('[SUSPENSION-DEBUG] solicitudes_suspension:', solicitudes.length, 'items:', JSON.stringify(solicitudes.map(function(s){ return {id:s.id, est:s.estacionId, estado:s.estado, proc:s.procesoNombre}; })));
     if (!solicitudes || solicitudes.length === 0) return;
 
     var miEstacionId = CONFIG_ESTACION.id;
     var miIdNormalizado = miEstacionId.toLowerCase().replace(/[-_\s]/g, '');
-    console.log('[SUSPENSION-DEBUG] Mi estación:', miEstacionId, 'normalizado:', miIdNormalizado);
 
     // Buscar solicitudes pendientes para mi estación
     var solicitudPendiente = null;
@@ -5668,32 +5663,12 @@ function verificarSolicitudSuspension() {
                        miIdNormalizado.includes(solEstId) ||
                        s.estacionId === miEstacionId;
 
-        console.log('[SUSPENSION-DEBUG] Solicitud', s.id, '- estacionId solicitud:', s.estacionId, 'normalizado:', solEstId, 'esParaMi:', esParaMi);
         if (!esParaMi) continue;
 
-        // Verificar que el procesoId coincida con el proceso actual
-        var procesoActual = operadoraState.procesoActual;
-        console.log('[SUSPENSION-DEBUG] procesoActual:', procesoActual ? {procesoId: procesoActual.procesoId, procesoNombre: procesoActual.procesoNombre, pedidoId: procesoActual.pedidoId} : 'null');
-        if (procesoActual) {
-            var procesoIdActual = String(procesoActual.procesoId || '');
-            var procesoIdSolicitud = String(s.procesoId || '');
-            var procesoNombreActual = (procesoActual.procesoNombre || procesoActual.nombre || '').toLowerCase().trim();
-            var procesoNombreSolicitud = (s.procesoNombre || '').toLowerCase().trim();
-
-            var coincideProceso = procesoIdActual === procesoIdSolicitud ||
-                                  (procesoNombreActual && procesoNombreActual === procesoNombreSolicitud &&
-                                   procesoActual.pedidoId == s.pedidoId);
-            console.log('[SUSPENSION-DEBUG] Comparando procesos - idActual:', procesoIdActual, 'idSolicitud:', procesoIdSolicitud, 'nombreActual:', procesoNombreActual, 'nombreSolicitud:', procesoNombreSolicitud, 'coincide:', coincideProceso);
-
-            if (!coincideProceso) {
-                // Marcar como obsoleta si no coincide
-                solicitudes[i].estado = 'obsoleta';
-                localStorage.setItem('solicitudes_suspension', JSON.stringify(solicitudes));
-                DEBUG_MODE && console.log('[OPERADORA] Solicitud suspensión obsoleta (proceso no coincide):', s.id);
-                continue;
-            }
-        }
-
+        // Si la estación coincide, aceptar la solicitud.
+        // La supervisora ya validó que este proceso está asignado a esta estación.
+        // No marcar como obsoleta por mismatch de procesoId/nombre ya que los formatos
+        // pueden diferir entre supervisora (pedido.procesos[].id) y operadora (asignación).
         solicitudPendiente = s;
         break;
     }
