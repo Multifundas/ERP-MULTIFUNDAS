@@ -3573,6 +3573,14 @@ function initTouchDragDrop() {
 
     document.addEventListener('touchend', function(e) {
         if (!touchDragData || !touchDragData.isDragging) {
+            // Fue un tap sin arrastre: disparar click en el elemento
+            if (touchDragData && touchDragData.element) {
+                var tappedElement = touchDragData.element;
+                touchDragData = null;
+                // Disparar click manualmente para que funcione abrirDetalleProceso
+                tappedElement.click();
+                return;
+            }
             touchDragData = null;
             return;
         }
