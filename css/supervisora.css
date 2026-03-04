@@ -3926,7 +3926,7 @@ body.day-mode .filter-btn.active {
     background: linear-gradient(145deg, #1e2433, #151a25);
     border-radius: 8px;
     margin-bottom: 6px;
-    cursor: grab;
+    cursor: pointer;
     transition: all 0.2s;
     border: 1px solid transparent;
 }
@@ -3938,7 +3938,7 @@ body.day-mode .filter-btn.active {
 }
 
 .proceso-drag-item:active {
-    cursor: grabbing;
+    cursor: pointer;
 }
 
 .proceso-drag-item.dragging {
@@ -4178,7 +4178,7 @@ body.day-mode .proceso-mini-progress {
 /* Estados de dependencias */
 .proceso-drag-item.bloqueado {
     opacity: 0.5;
-    cursor: not-allowed;
+    cursor: pointer;
     border-left: 3px solid #6b7280;
     position: relative;
 }
