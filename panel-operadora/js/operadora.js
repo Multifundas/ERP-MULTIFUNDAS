@@ -2266,8 +2266,9 @@ function obtenerOtrasOperadorasEnProceso() {
                 // Si no tiene operadora asignada, saltar
                 if (!operadoraId && !operadoraNombre) continue;
 
-                // Verificar que está activo (tiene proceso activo o ha capturado recientemente)
+                // Verificar que está activo (tiene proceso activo, estado trabajando, o ha capturado recientemente)
                 const estaActivo = estadoMaquina.procesoActivo ||
+                                   estadoMaquina.estado === 'trabajando' ||
                                    (estadoMaquina.ultimaCaptura &&
                                     (new Date() - new Date(estadoMaquina.ultimaCaptura)) < 3600000); // última hora
 
@@ -2334,28 +2335,46 @@ function obtenerOtrasOperadorasEnProceso() {
  */
 function obtenerTotalPiezasProceso() {
     const pedidoId = operadoraState.pedidoActual?.id;
-    const procesoId = operadoraState.procesoActual?.procesoId;
     const procesoNombre = operadoraState.procesoActual?.procesoNombre;
+    const miEstacionId = CONFIG_ESTACION?.id;
 
-    if (!pedidoId) return operadoraState.piezasCapturadas;
+    if (!pedidoId || !procesoNombre) return operadoraState.piezasCapturadas;
 
     try {
+        // Sumar piezas en tiempo real desde estado_maquinas de todas las estaciones
+        const estadoMaquinas = safeLocalGet('estado_maquinas', {});
+        const asignaciones = safeLocalGet('asignaciones_estaciones', {});
+        const procesoNombreLower = procesoNombre.toLowerCase().trim();
+        let totalPiezas = operadoraState.piezasCapturadas; // Mis piezas
+
+        for (const [estacionId, asignacion] of Object.entries(asignaciones)) {
+            if (estacionId === miEstacionId) continue; // Ya conté mis piezas
+
+            const procesoNombreAsig = (asignacion.procesoNombre || '').toLowerCase().trim();
+            if (procesoNombreAsig === procesoNombreLower && asignacion.pedidoId == pedidoId) {
+                const em = estadoMaquinas[estacionId] || {};
+                const emProcesoNombre = (em.procesoNombre || '').toLowerCase().trim();
+                if (emProcesoNombre === procesoNombreLower && em.pedidoId == pedidoId) {
+                    totalPiezas += (em.piezasHoy || 0);
+                }
+            }
+        }
+
+        // También comparar con pedidos_erp por si hay piezas previas que no están en estado_maquinas
         const pedidosERP = safeLocalGet('pedidos_erp', []);
         const pedido = pedidosERP.find(p => p.id == pedidoId);
-        if (!pedido || !pedido.procesos) return operadoraState.piezasCapturadas;
-
-        let proceso = pedido.procesos.find(p => p.id == procesoId);
-        if (!proceso && procesoNombre) {
-            proceso = pedido.procesos.find(p =>
-                (p.nombre || '').toLowerCase() === procesoNombre.toLowerCase()
+        if (pedido && pedido.procesos) {
+            let proceso = pedido.procesos.find(p =>
+                (p.nombre || '').toLowerCase().trim() === procesoNombreLower
             );
+            if (proceso && typeof proceso.piezas === 'number' && proceso.piezas > totalPiezas) {
+                return proceso.piezas;
+            }
         }
 
-        if (proceso && typeof proceso.piezas === 'number') {
-            return proceso.piezas;
-        }
+        return totalPiezas;
     } catch (e) {
-        console.error('[OPERADORA] Error leyendo total piezas de pedidos_erp:', e);
+        console.error('[OPERADORA] Error calculando total piezas:', e);
     }
 
     return operadoraState.piezasCapturadas;
@@ -2444,9 +2463,8 @@ function actualizarProgresoEquipo() {
     }
 
     DEBUG_MODE && console.log('[OPERADORA] Progreso equipo actualizado:', {
-        misPiezas,
+        misPiezas: operadoraState.piezasCapturadas,
         otrasOperadoras: otrasOperadoras.length,
-        totalOtras,
         granTotal,
         meta,
         porcentajeTotal
@@ -4707,7 +4725,11 @@ function guardarEstadoTemporizador() {
         tiempoProcesoAcumulado: operadoraState.tiempoProcesoAcumulado,
         tiempoPausaInicio: operadoraState.tiempoPausaInicio?.toISOString(),
         motivoPausaActual: operadoraState.motivoPausaActual,
-        historialPausas: operadoraState.historialPausas
+        historialPausas: operadoraState.historialPausas,
+        piezasCapturadas: operadoraState.piezasCapturadas || 0,
+        capturasDia: operadoraState.capturasDia || [],
+        procesoId: operadoraState.procesoActual?.procesoId,
+        procesoNombre: operadoraState.procesoActual?.procesoNombre
     };
     localStorage.setItem(`temporizador_${CONFIG_ESTACION.id}`, JSON.stringify(estado));
 }
@@ -4726,6 +4748,26 @@ function restaurarEstadoTemporizador() {
         operadoraState.tiempoPausaInicio = estado.tiempoPausaInicio ? new Date(estado.tiempoPausaInicio) : null;
         operadoraState.motivoPausaActual = estado.motivoPausaActual;
         operadoraState.historialPausas = estado.historialPausas || [];
+
+        // Restaurar piezas capturadas si corresponde al mismo proceso
+        if (estado.piezasCapturadas > 0) {
+            const mismoProcesoId = estado.procesoId && operadoraState.procesoActual?.procesoId &&
+                                   estado.procesoId == operadoraState.procesoActual.procesoId;
+            const mismoProcesoNombre = estado.procesoNombre && operadoraState.procesoActual?.procesoNombre &&
+                                       estado.procesoNombre.toLowerCase() === operadoraState.procesoActual.procesoNombre.toLowerCase();
+
+            if (mismoProcesoId || mismoProcesoNombre) {
+                // Solo restaurar si el valor actual es menor (no sobreescribir datos ya cargados)
+                if (estado.piezasCapturadas > operadoraState.piezasCapturadas) {
+                    operadoraState.piezasCapturadas = estado.piezasCapturadas;
+                }
+                if (estado.capturasDia && estado.capturasDia.length > operadoraState.capturasDia.length) {
+                    operadoraState.capturasDia = estado.capturasDia;
+                }
+                // Persistir en guardarDatos para que cargarDatosGuardados los encuentre
+                guardarDatos();
+            }
+        }
 
         // Restaurar UI
         if (operadoraState.procesoIniciado) {
