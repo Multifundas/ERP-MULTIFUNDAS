@@ -2011,25 +2011,6 @@ function renderProcesoItem(proceso, pedidoId) {
     const estacionesAsignadas = estacionesConProceso.map(([id, m]) => id);
     const cantidadAsignadas = estacionesAsignadas.length;
 
-    // DEBUG: Log detallado para diagnosticar procesos simultáneos
-    if (cantidadAsignadas > 0) {
-        estacionesConProceso.forEach(function([id, m]) {
-            var ae = asignacionesEstaciones[id];
-            var em = estadoMaquinas[id];
-            console.log('[SUPERVISORA-DEBUG] Proceso "' + proceso.nombre + '" (id=' + proceso.id + ', tipo=' + typeof proceso.id + ') en estación ' + id + ':', {
-                'm.procesoId': m.procesoId, 'tipo_m.procesoId': typeof m.procesoId,
-                'esDirecto': String(m.procesoId) === procesoIdStr,
-                'm.estado': m.estado, 'm.piezasHoy': m.piezasHoy,
-                'ae.modoSimultaneo': ae?.modoSimultaneo,
-                'ae.procesosSimultaneosActivos': ae?.procesosSimultaneosActivos,
-                'em.modoSimultaneo': em?.modoSimultaneo,
-                'em.estado': em?.estado,
-                'em.procesosSimultaneos': em?.procesosSimultaneos?.map(function(p) { return p.procesoId + '(' + typeof p.procesoId + ')=' + p.procesoNombre; }),
-                'colaProcesos': m.colaProcesos?.map(function(p) { return p.procesoId + '=' + p.procesoNombre; })
-            });
-        });
-    }
-
     // Verificar si alguna estación está trabajando activamente en este proceso
     // Un operador está "trabajando" si:
     // 1. El proceso tiene piezas registradas (ha capturado algo), O
@@ -2039,56 +2020,19 @@ function renderProcesoItem(proceso, pedidoId) {
         const asignacionEstacion = asignacionesEstaciones[id];
         const estadoEstacion = estadoMaquinas[id];
 
-        // Verificar si el proceso está asignado directamente (por ID o por nombre+pedido)
-        const esProcesoDirecto = String(m.procesoId) === procesoIdStr ||
-            (m.procesoNombre && m.procesoNombre.toLowerCase().trim() === procesoNombreLower && m.pedidoId == pedidoId) ||
-            (asignacionEstacion && (asignacionEstacion.procesoNombre || '').toLowerCase().trim() === procesoNombreLower && asignacionEstacion.pedidoId == pedidoId);
+        // Si la estación está activa/trabajando, TODOS sus procesos asignados se consideran trabajándose
+        // Esto cubre modo simultáneo, proceso directo, y procesos en cola de una estación activa
+        const estacionActiva = m.estado === 'activo' || m.estado === 'adelantado' || m.estado === 'retrasado' ||
+                               (estadoEstacion && estadoEstacion.estado === 'trabajando') ||
+                               (estadoEstacion && estadoEstacion.procesoActivo === true);
 
-        // Verificar si hay piezas capturadas o si el estado indica trabajo activo
-        const tienePiezas = m.piezasHoy > 0 || (proceso.piezas && proceso.piezas > 0);
-        const estadoActivo = m.estado === 'activo' || m.estado === 'adelantado' || m.estado === 'retrasado';
-
-        // Verificar modo simultáneo activo de múltiples formas
-        const enProcesosSimultaneos = (
-            // Check 1: procesosSimultaneosActivos en asignaciones (array de IDs)
-            (asignacionEstacion?.procesosSimultaneosActivos && (
-                asignacionEstacion.procesosSimultaneosActivos.some(function(pid) {
-                    return String(pid) === procesoIdStr;
-                })
-            )) ||
-            // Check 2: procesosSimultaneos en estado_maquinas (array de objetos con nombre)
-            (estadoEstacion?.procesosSimultaneos && estadoEstacion.procesosSimultaneos.some(function(p) {
-                return String(p.procesoId) === procesoIdStr ||
-                       (p.procesoNombre || '').toLowerCase().trim() === procesoNombreLower;
-            })) ||
-            // Check 3: Si la estación tiene modoSimultaneo activo y está trabajando, todos sus procesos son activos
-            (estadoEstacion?.modoSimultaneo && estadoEstacion?.estado === 'trabajando') ||
-            (asignacionEstacion?.modoSimultaneo && estadoEstacion?.estado === 'trabajando') ||
-            // Check 4: Si la estación tiene modoSimultaneo y procesoActivo
-            (estadoEstacion?.modoSimultaneo && estadoEstacion?.procesoActivo)
-        );
-
-        // DEBUG: Log resultado de cada check
-        console.log('[SUPERVISORA-DEBUG] estacionesTrabajando para "' + proceso.nombre + '" (id=' + proceso.id + ') en ' + id + ':', {
-            esProcesoDirecto, tienePiezas, estadoActivo, enProcesosSimultaneos,
-            'em.modoSimultaneo': estadoEstacion?.modoSimultaneo,
-            'em.estado': estadoEstacion?.estado,
-            'em.procesoActivo': estadoEstacion?.procesoActivo,
-            'ae.modoSimultaneo': asignacionEstacion?.modoSimultaneo,
-            'ae.procesosSimultaneosActivos': asignacionEstacion?.procesosSimultaneosActivos,
-            'em.procesosSimultaneos': estadoEstacion?.procesosSimultaneos?.map(function(p) { return String(p.procesoId) + '=' + p.procesoNombre; }),
-            'resultado': enProcesosSimultaneos ? 'VERDE(simultaneo)' : (esProcesoDirecto ? ((tienePiezas || estadoActivo) ? 'VERDE(directo)' : 'AMARILLO') : 'AMARILLO(no directo)')
-        });
-
-        // Si está en procesos simultáneos activos, está trabajándose
-        if (enProcesosSimultaneos) {
+        if (estacionActiva) {
             return true;
         }
 
-        // Si no es el proceso directo, no cuenta como trabajando por este método
-        if (!esProcesoDirecto) return false;
-
-        return tienePiezas || estadoActivo;
+        // Fallback: verificar piezas
+        const tienePiezas = m.piezasHoy > 0 || (proceso.piezas && proceso.piezas > 0);
+        return tienePiezas;
     });
     const estaTrabajandose = estacionesTrabajando.length > 0;
 
