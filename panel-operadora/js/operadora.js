@@ -537,15 +537,26 @@ function cargarDatosGuardados() {
             DEBUG_MODE && console.log('[OPERADORA] Sin proceso actual, capturas reseteadas');
         }
 
-        // Si hay piezasCapturadas guardadas para este proceso, restaurarlas
+        // Restaurar piezasCapturadas SOLO si corresponde exactamente al proceso actual
+        // y al mismo pedido (evita restaurar piezas de procesos anteriores/finalizados)
         const procesoIdActual = operadoraState.procesoActual?.procesoId;
         const procesoNombreActual = operadoraState.procesoActual?.procesoNombre;
-        if (datos.piezasCapturadas > 0 &&
+        const pedidoIdActual = operadoraState.pedidoActual?.id;
+
+        const mismoProcesoGuardado = datos.piezasCapturadas > 0 &&
             ((datos.procesoActualId && datos.procesoActualId == procesoIdActual) ||
-             (datos.procesoActualNombre && procesoNombreActual && datos.procesoActualNombre.toLowerCase() === procesoNombreActual.toLowerCase()))) {
+             (datos.procesoActualNombre && procesoNombreActual && datos.procesoActualNombre.toLowerCase() === procesoNombreActual.toLowerCase()));
+
+        // Verificar también que el pedido coincida (si hay dato de pedido guardado)
+        const mismoPedido = !datos.pedidoId || datos.pedidoId == pedidoIdActual;
+
+        if (mismoProcesoGuardado && mismoPedido) {
             operadoraState.piezasCapturadas = datos.piezasCapturadas;
+            DEBUG_MODE && console.log('[OPERADORA] Restaurando piezas guardadas:', datos.piezasCapturadas, 'para proceso:', procesoNombreActual);
         } else {
+            // Sumar solo las capturas filtradas del proceso actual
             operadoraState.piezasCapturadas = operadoraState.capturasDia.reduce((sum, c) => sum + c.cantidad, 0);
+            DEBUG_MODE && console.log('[OPERADORA] Piezas calculadas desde capturas filtradas:', operadoraState.piezasCapturadas);
         }
         operadoraState.ultimaCaptura = datos.ultimaCaptura ? new Date(datos.ultimaCaptura) : null;
     } else {
@@ -567,7 +578,8 @@ function guardarDatos() {
         ultimaCaptura: operadoraState.ultimaCaptura?.toISOString(),
         piezasCapturadas: operadoraState.piezasCapturadas,
         procesoActualId: operadoraState.procesoActual?.procesoId || null,
-        procesoActualNombre: operadoraState.procesoActual?.procesoNombre || null
+        procesoActualNombre: operadoraState.procesoActual?.procesoNombre || null,
+        pedidoId: operadoraState.pedidoActual?.id || null
     };
 
     localStorage.setItem(key, JSON.stringify(datos));
@@ -3876,6 +3888,9 @@ function finalizarProcesoAutomatico() {
     operadoraState.procesosSimultaneos = [];
     operadoraState.capturasDia = [];
 
+    // Persistir el estado limpio en localStorage para que cargarDatosGuardados() no restaure piezas viejas
+    guardarDatos();
+
     DEBUG_MODE && console.log('[OPERADORA] Proceso finalizado automáticamente');
 
     // 7. Mostrar pantalla correspondiente
@@ -4230,7 +4245,10 @@ function finalizarProceso() {
     operadoraState.piezasMeta = 0;
     operadoraState.modoSimultaneo = false;
     operadoraState.procesosSimultaneos = [];
-    operadoraState.capturasDia = []; // Limpiar capturas en memoria (las del día siguen en localStorage filtradas por proceso)
+    operadoraState.capturasDia = [];
+
+    // Persistir el estado limpio en localStorage para que cargarDatosGuardados() no restaure piezas viejas
+    guardarDatos();
 
     DEBUG_MODE && console.log('[OPERADORA] Proceso finalizado y sincronizado con supervisora');
 
