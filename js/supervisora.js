@@ -9468,6 +9468,7 @@ function verificarProcesosCompletados() {
     const asignacionesSync = safeLocalGet('asignaciones_estaciones', {});
 
     // Construir mapa: pedidoId → procesoNombre → totalPiezas (sumando todas las estaciones)
+    // Usar procesosNombres (array) para incluir procesos simultáneos
     const piezasRealTimePorProceso = {};
     for (const estId in estadoMaquinasSync) {
         if (!estadoMaquinasSync.hasOwnProperty(estId)) continue;
@@ -9476,11 +9477,19 @@ function verificarProcesosCompletados() {
         if (!em.operadoraPedidoId || !em.procesoActivo) continue;
 
         const pedId = String(em.operadoraPedidoId);
-        const procNombre = (em.procesoNombre || '').toLowerCase().trim();
-        if (!procNombre) continue;
+        const piezas = em.piezasHoy || 0;
 
-        const key = pedId + '-' + procNombre;
-        piezasRealTimePorProceso[key] = (piezasRealTimePorProceso[key] || 0) + (em.piezasHoy || 0);
+        // Usar procesosNombres (incluye principal + simultáneos) o fallback a procesoNombre
+        const nombres = em.procesosNombres && em.procesosNombres.length > 0
+            ? em.procesosNombres
+            : (em.procesoNombre ? [em.procesoNombre] : []);
+
+        nombres.forEach(function(nombre) {
+            const procNorm = (nombre || '').toLowerCase().trim();
+            if (!procNorm) return;
+            const key = pedId + '-' + procNorm;
+            piezasRealTimePorProceso[key] = (piezasRealTimePorProceso[key] || 0) + piezas;
+        });
     }
 
     // Aplicar piezas reales a los procesos en-proceso

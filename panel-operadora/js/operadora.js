@@ -2204,6 +2204,17 @@ function publicarEstadoMaquina() {
     var estadoMaquinas = safeLocalGet('estado_maquinas', {});
     var estadoActual = estadoMaquinas[CONFIG_ESTACION.id] || {};
 
+    // Construir lista de todos los procesos activos (principal + simultáneos)
+    var todosProcesoNombres = [];
+    var procPrincipal = operadoraState.procesoActual?.procesoNombre;
+    if (procPrincipal) todosProcesoNombres.push(procPrincipal);
+    if (operadoraState.modoSimultaneo && operadoraState.procesosSimultaneos) {
+        operadoraState.procesosSimultaneos.forEach(function(p) {
+            var n = p.procesoNombre;
+            if (n && todosProcesoNombres.indexOf(n) === -1) todosProcesoNombres.push(n);
+        });
+    }
+
     estadoMaquinas[CONFIG_ESTACION.id] = {
         ...estadoActual,
         estado: operadoraState.procesoEnPausa ? 'pausado' : 'trabajando',
@@ -2212,10 +2223,10 @@ function publicarEstadoMaquina() {
         pedidoId: operadoraState.pedidoActual?.id,
         procesoId: operadoraState.procesoActual?.procesoId,
         procesoNombre: operadoraState.procesoActual?.procesoNombre,
+        procesosNombres: todosProcesoNombres,
         piezasHoy: operadoraState.piezasCapturadas || 0,
         procesoActivo: true,
         // Campo exclusivo de operadora: confirma que ELLA publicó estos datos
-        // La supervisora no escribe este campo, así que si no coincide = dato stale
         operadoraPedidoId: operadoraState.pedidoActual?.id,
         ultimaActualizacion: new Date().toISOString()
     };
