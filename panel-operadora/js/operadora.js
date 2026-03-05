@@ -2214,6 +2214,9 @@ function publicarEstadoMaquina() {
         procesoNombre: operadoraState.procesoActual?.procesoNombre,
         piezasHoy: operadoraState.piezasCapturadas || 0,
         procesoActivo: true,
+        // Campo exclusivo de operadora: confirma que ELLA publicó estos datos
+        // La supervisora no escribe este campo, así que si no coincide = dato stale
+        operadoraPedidoId: operadoraState.pedidoActual?.id,
         ultimaActualizacion: new Date().toISOString()
     };
 
@@ -2417,10 +2420,12 @@ function obtenerOtrasOperadorasEnProceso() {
                 iniciales = obtenerIniciales(operadoraNombre);
             }
 
-            // Piezas: buscar SOLO en estado_maquinas si corresponde al mismo pedido
-            // Y si el operador ya inició (procesoActivo=true), de lo contrario es dato stale
+            // Piezas: buscar SOLO en estado_maquinas usando operadoraPedidoId
+            // operadoraPedidoId es escrito SOLO por la operadora (no por la supervisora)
+            // Esto evita race conditions donde la supervisora actualiza pedidoId
+            // pero las piezas aún son del pedido anterior
             var piezasCapturadas = 0;
-            if (em.pedidoId == miPedidoId && em.procesoActivo === true) {
+            if (em.operadoraPedidoId && em.operadoraPedidoId == miPedidoId && em.procesoActivo === true) {
                 piezasCapturadas = em.piezasHoy || 0;
             }
 

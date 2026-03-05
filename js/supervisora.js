@@ -4000,12 +4000,15 @@ function assignProcesoToEstacion(procesoId, pedidoId, estacionId) {
         var emEstacion = emData[estacionId];
         if (emEstacion && emEstacion.pedidoId != pedidoId) {
             // Pedido diferente → resetear contadores
+            // IMPORTANTE: borrar operadoraPedidoId para que la lectura no confíe
+            // en datos stale hasta que la operadora publique con el nuevo pedido
             emData[estacionId] = Object.assign({}, emEstacion, {
                 pedidoId: pedidoId,
                 procesoId: procesoId,
                 procesoNombre: proceso.nombre,
                 piezasHoy: 0,
                 procesoActivo: false,
+                operadoraPedidoId: null,
                 ultimaActualizacion: new Date().toISOString()
             });
             localStorage.setItem('estado_maquinas', JSON.stringify(emData));
