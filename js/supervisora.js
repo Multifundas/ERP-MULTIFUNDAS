@@ -4320,6 +4320,20 @@ function resaltarFlujoPedido(pedidoId) {
 // ========================================
 
 function refreshData(manual) {
+    // Si hay db con refreshPedidos (Supabase), recargar pedidos antes de procesar
+    if (typeof db !== 'undefined' && typeof db.refreshPedidos === 'function') {
+        db.refreshPedidos().then(function() {
+            _doRefresh(manual);
+        }).catch(function(err) {
+            console.error('[SUPERVISORA] Error refrescando pedidos:', err);
+            _doRefresh(manual);
+        });
+    } else {
+        _doRefresh(manual);
+    }
+}
+
+function _doRefresh(manual) {
     loadDataFromERP();
     loadEstadoMaquinas();
 

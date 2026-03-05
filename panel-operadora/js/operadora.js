@@ -737,9 +737,14 @@ function cargarPedidoAsignado() {
             localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignTemp));
         }
     } else if (operadoraState.piezasCapturadas > 0 && operadoraState.capturasDia.length > 0 &&
-               operadoraState.capturasDia.some(c => c.procesoId == miAsignacion.procesoId || c.procesoNombre === miAsignacion.procesoNombre)) {
-        // Ya hay piezas capturadas del MISMO proceso (polling recargó) - NO resetear
-        DEBUG_MODE && console.log('[OPERADORA] Mismo proceso con', operadoraState.piezasCapturadas, 'piezas activas - no resetear');
+               operadoraState.capturasDia.some(c => {
+                   // Las capturas deben ser del MISMO pedido Y mismo proceso
+                   const mismoPedido = c.pedidoId && c.pedidoId == miAsignacion.pedidoId;
+                   const mismoProceso = c.procesoId == miAsignacion.procesoId || c.procesoNombre === miAsignacion.procesoNombre;
+                   return mismoPedido && mismoProceso;
+               })) {
+        // Ya hay piezas capturadas del MISMO proceso Y MISMO pedido (polling recargó) - NO resetear
+        DEBUG_MODE && console.log('[OPERADORA] Mismo proceso/pedido con', operadoraState.piezasCapturadas, 'piezas activas - no resetear');
     } else {
         // Resetear piezas capturadas para el nuevo proceso
         operadoraState.piezasCapturadas = 0;
@@ -2381,9 +2386,13 @@ function obtenerOtrasOperadorasEnProceso() {
             }
 
             // Piezas: buscar en estado_maquinas, asignación, y como fallback en pedidos_erp
-            var piezasCapturadas = em.piezasHoy || 0;
+            // IMPORTANTE: Solo usar piezasHoy si el estado_maquinas corresponde al mismo pedido
+            var piezasCapturadas = 0;
+            if (em.pedidoId == miPedidoId) {
+                piezasCapturadas = em.piezasHoy || 0;
+            }
 
-            // Si estado_maquinas no tiene piezas, intentar desde la asignación
+            // Si estado_maquinas no tiene piezas, intentar desde la asignación (ya validada por pedidoId)
             if (piezasCapturadas === 0 && asignacion.piezasProducidas) {
                 piezasCapturadas = asignacion.piezasProducidas;
             }

@@ -552,6 +552,28 @@ class SupabaseDatabase {
     // ========================================
     // PEDIDOS
     // ========================================
+
+    /**
+     * Recarga pedidos desde Supabase para reflejar cambios hechos en otras pestañas/dispositivos
+     */
+    async refreshPedidos() {
+        try {
+            const [pedidos, pedidoProductos] = await Promise.all([
+                SupabaseClient.getAll('pedidos'),
+                SupabaseClient.getAll('pedido_productos')
+            ]);
+            this.data.pedidos = pedidos.map(p => ({
+                ...this._mapPedidoFromDB(p),
+                productos: pedidoProductos
+                    .filter(pp => pp.pedido_id === p.id)
+                    .map(pp => this._mapPedidoProductoFromDB(pp))
+            }));
+            DEBUG_MODE && console.log('[SupabaseDB] Pedidos refrescados:', this.data.pedidos.length);
+        } catch (err) {
+            console.error('[SupabaseDB] Error refrescando pedidos:', err);
+        }
+    }
+
     getPedidos() {
         return this.data.pedidos;
     }
