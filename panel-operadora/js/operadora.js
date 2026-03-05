@@ -524,9 +524,12 @@ function cargarDatosGuardados() {
         if (procesoActualId || procesoActualNombre) {
             // Solo cargar capturas que correspondan al proceso actual Y al mismo pedido
             operadoraState.capturasDia = todasCapturas.filter(c => {
-                // Primero verificar que sea del mismo pedido (si la captura tiene pedidoId)
-                if (c.pedidoId && pedidoIdActual && c.pedidoId != pedidoIdActual) {
-                    return false;
+                // ESTRICTO: Si hay pedido actual, la captura DEBE tener pedidoId Y coincidir
+                // Capturas sin pedidoId (datos viejos) se descartan cuando hay pedido activo
+                if (pedidoIdActual) {
+                    if (!c.pedidoId || c.pedidoId != pedidoIdActual) {
+                        return false;
+                    }
                 }
                 // Si la captura tiene procesoId, comparar con el actual
                 if (c.procesoId && procesoActualId) {
@@ -753,6 +756,24 @@ function cargarPedidoAsignado() {
         cargarDatosGuardados();
     }
 
+    // Limpiar estado_maquinas propio para que no muestre datos de pedido anterior
+    // y otros operadores no lean piezasHoy stale de esta estación
+    if (CONFIG_ESTACION?.id) {
+        var emClean = safeLocalGet('estado_maquinas', {});
+        var miEstado = emClean[CONFIG_ESTACION.id];
+        if (miEstado && miEstado.pedidoId != miAsignacion.pedidoId) {
+            emClean[CONFIG_ESTACION.id] = {
+                ...miEstado,
+                pedidoId: miAsignacion.pedidoId,
+                procesoId: miAsignacion.procesoId,
+                procesoNombre: miAsignacion.procesoNombre,
+                piezasHoy: operadoraState.piezasCapturadas || 0,
+                ultimaActualizacion: new Date().toISOString()
+            };
+            localStorage.setItem('estado_maquinas', JSON.stringify(emClean));
+        }
+    }
+
     mostrarPedido(pedido, miAsignacion);
 }
 
@@ -851,6 +872,12 @@ function mostrarPedido(pedido, asignacion) {
     document.getElementById('metaPorMinuto').textContent = operadoraState.metaPorMinuto.toFixed(1);
 
     actualizarAvance();
+
+    // Asegurar que captura esté deshabilitada si el temporizador no está iniciado
+    if (!operadoraState.procesoIniciado) {
+        actualizarBotonesTemporizador('sin-iniciar');
+        actualizarEstadoProceso('sin-iniciar');
+    }
 }
 
 function mostrarSinPedido() {
@@ -1899,6 +1926,11 @@ function capturarPiezas() {
 
     if (!operadoraState.pedidoActual) {
         mostrarToast('No tienes un pedido asignado', 'error');
+        return;
+    }
+
+    if (!operadoraState.procesoIniciado) {
+        mostrarToast('Debes iniciar el tiempo antes de capturar piezas', 'warning');
         return;
     }
 
@@ -4868,6 +4900,24 @@ function actualizarBotonesTemporizador(estado) {
     if (btnReanudar) btnReanudar.style.display = 'none';
     if (btnFinalizar) btnFinalizar.style.display = 'none';
     if (btnSuspender) btnSuspender.style.display = 'none';
+
+    // Habilitar/deshabilitar sección de captura según estado del temporizador
+    const btnCapturar = document.querySelector('.btn-capturar');
+    const cantidadInput = document.getElementById('cantidadCaptura');
+    const botonesRapidos = document.querySelectorAll('.btn-rapido');
+    const capturaDeshabilitada = estado === 'sin-iniciar';
+
+    if (btnCapturar) {
+        btnCapturar.disabled = capturaDeshabilitada;
+        btnCapturar.style.opacity = capturaDeshabilitada ? '0.4' : '1';
+    }
+    if (cantidadInput) {
+        cantidadInput.disabled = capturaDeshabilitada;
+    }
+    botonesRapidos.forEach(function(btn) {
+        btn.disabled = capturaDeshabilitada;
+        btn.style.opacity = capturaDeshabilitada ? '0.4' : '1';
+    });
 
     switch(estado) {
         case 'sin-iniciar':
