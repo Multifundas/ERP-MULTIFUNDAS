@@ -517,9 +517,17 @@ function cargarDatosGuardados() {
         const procesoActualId = operadoraState.procesoActual?.procesoId;
         const procesoActualNombre = operadoraState.procesoActual?.procesoNombre;
 
+        const procesoIdActual = operadoraState.procesoActual?.procesoId;
+        const procesoNombreActual = operadoraState.procesoActual?.procesoNombre;
+        const pedidoIdActual = operadoraState.pedidoActual?.id;
+
         if (procesoActualId || procesoActualNombre) {
-            // Solo cargar capturas que correspondan al proceso actual
+            // Solo cargar capturas que correspondan al proceso actual Y al mismo pedido
             operadoraState.capturasDia = todasCapturas.filter(c => {
+                // Primero verificar que sea del mismo pedido (si la captura tiene pedidoId)
+                if (c.pedidoId && pedidoIdActual && c.pedidoId != pedidoIdActual) {
+                    return false;
+                }
                 // Si la captura tiene procesoId, comparar con el actual
                 if (c.procesoId && procesoActualId) {
                     return c.procesoId == procesoActualId;
@@ -539,20 +547,17 @@ function cargarDatosGuardados() {
 
         // Restaurar piezasCapturadas SOLO si corresponde exactamente al proceso actual
         // y al mismo pedido (evita restaurar piezas de procesos anteriores/finalizados)
-        const procesoIdActual = operadoraState.procesoActual?.procesoId;
-        const procesoNombreActual = operadoraState.procesoActual?.procesoNombre;
-        const pedidoIdActual = operadoraState.pedidoActual?.id;
-
         const mismoProcesoGuardado = datos.piezasCapturadas > 0 &&
             ((datos.procesoActualId && datos.procesoActualId == procesoIdActual) ||
              (datos.procesoActualNombre && procesoNombreActual && datos.procesoActualNombre.toLowerCase() === procesoNombreActual.toLowerCase()));
 
-        // Verificar también que el pedido coincida (si hay dato de pedido guardado)
-        const mismoPedido = !datos.pedidoId || datos.pedidoId == pedidoIdActual;
+        // ESTRICTO: El pedido DEBE coincidir. Si no hay pedidoId guardado, NO restaurar
+        // (datos viejos sin pedidoId son de antes del fix y no son confiables)
+        const mismoPedido = datos.pedidoId && datos.pedidoId == pedidoIdActual;
 
         if (mismoProcesoGuardado && mismoPedido) {
             operadoraState.piezasCapturadas = datos.piezasCapturadas;
-            DEBUG_MODE && console.log('[OPERADORA] Restaurando piezas guardadas:', datos.piezasCapturadas, 'para proceso:', procesoNombreActual);
+            DEBUG_MODE && console.log('[OPERADORA] Restaurando piezas guardadas:', datos.piezasCapturadas, 'para proceso:', procesoNombreActual, 'pedido:', pedidoIdActual);
         } else {
             // Sumar solo las capturas filtradas del proceso actual
             operadoraState.piezasCapturadas = operadoraState.capturasDia.reduce((sum, c) => sum + c.cantidad, 0);
