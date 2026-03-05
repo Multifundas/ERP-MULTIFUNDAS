@@ -1956,20 +1956,19 @@ function capturarPiezas() {
         celebrarMeta();
     }
 
-    // *** NUEVA LÓGICA: Auto-finalizar cuando se alcanza la meta del EQUIPO ***
-    // Usar pedidos_erp como fuente única de verdad (acumula piezas de TODOS los operadores)
-    const granTotal = obtenerTotalPiezasProceso();
+    // *** VERIFICAR META DEL EQUIPO ***
+    // Calcular total del equipo (mis piezas + las de las otras operadoras)
+    var otrasOpsCheck = obtenerOtrasOperadorasEnProceso();
+    var granTotalEquipo = obtenerTotalPiezasProceso(otrasOpsCheck);
 
-    if (operadoraState.piezasMeta > 0 && granTotal >= operadoraState.piezasMeta) {
-        DEBUG_MODE && console.log('[OPERADORA] Meta del EQUIPO alcanzada. Gran total:', granTotal, '/', operadoraState.piezasMeta);
+    if (operadoraState.piezasMeta > 0 && granTotalEquipo >= operadoraState.piezasMeta && !window._metaEquipoNotificada) {
+        window._metaEquipoNotificada = true;
+        DEBUG_MODE && console.log('[OPERADORA] Meta del EQUIPO alcanzada. Gran total:', granTotalEquipo, '/', operadoraState.piezasMeta);
 
-        // Solo auto-finalizar si mis piezas contribuyen (para evitar finalizar sin haber trabajado)
         if (operadoraState.piezasCapturadas > 0) {
-            DEBUG_MODE && console.log('[OPERADORA] Iniciando auto-finalización por meta de equipo...');
-            setTimeout(() => {
-                mostrarToast('¡El equipo completó la meta del proceso!', 'success');
-                finalizarProcesoAutomatico();
-            }, 1500);
+            setTimeout(function() {
+                mostrarModalMetaEquipoAlcanzada(granTotalEquipo);
+            }, 1000);
         }
     }
 
@@ -2470,6 +2469,14 @@ function actualizarProgresoEquipo() {
             granTotalFill.classList.remove('completo');
             granTotalContainer.classList.remove('completo');
         }
+    }
+
+    // Verificar si el equipo alcanzó la meta (detecta cuando OTRA operadora completa)
+    if (meta > 0 && granTotal >= meta && !window._metaEquipoNotificada && operadoraState.procesoIniciado) {
+        window._metaEquipoNotificada = true;
+        setTimeout(function() {
+            mostrarModalMetaEquipoAlcanzada(granTotal);
+        }, 500);
     }
 
     DEBUG_MODE && console.log('[OPERADORA] Progreso equipo actualizado:', {
@@ -3194,6 +3201,7 @@ function _ejecutarSuspensionInterna(motivo, solicitudId) {
     operadoraState.tiempoProcesoAcumulado = 0;
     operadoraState.motivoPausaActual = null;
     operadoraState.historialPausas = [];
+    window._metaEquipoNotificada = false;
     operadoraState.pedidoActual = null;
     operadoraState.procesoActual = null;
     operadoraState.piezasCapturadas = 0;
@@ -3362,13 +3370,80 @@ function reanudarProcesoDeCola(index) {
 }
 
 /**
+ * Muestra modal cuando el equipo alcanzó la meta.
+ * Opciones: capturar últimas piezas o finalizar inmediatamente.
+ */
+function mostrarModalMetaEquipoAlcanzada(granTotal) {
+    var meta = operadoraState.piezasMeta || 0;
+    var misPiezas = operadoraState.piezasCapturadas || 0;
+    var procesoNombre = operadoraState.procesoActual?.procesoNombre || 'el proceso';
+
+    // Sonido de notificación
+    if (typeof reproducirSonido === 'function') reproducirSonido('exito');
+
+    var htmlContenido = '<div style="text-align:center;padding:20px;">' +
+        '<div style="font-size:48px;color:#10b981;margin-bottom:15px;"><i class="fas fa-check-circle"></i></div>' +
+        '<h3 style="color:#10b981;margin-bottom:10px;">Meta del Equipo Alcanzada</h3>' +
+        '<p style="font-size:16px;margin-bottom:10px;">El equipo completó <strong>' + granTotal + '/' + meta + '</strong> piezas para:</p>' +
+        '<p style="font-size:18px;font-weight:bold;color:#2c3e50;margin-bottom:15px;">' + S(procesoNombre) + '</p>' +
+        '<p style="font-size:14px;color:#7f8c8d;margin-bottom:5px;">Tu aporte: <strong>' + misPiezas + '</strong> piezas</p>' +
+        '<p style="font-size:14px;color:#e67e22;margin-bottom:0;">' +
+        '¿Tienes piezas pendientes por capturar?</p>' +
+        '</div>';
+
+    mostrarModal('Proceso Completado', htmlContenido, [
+        { class: 'btn-warning', onclick: "cerrarModal(); mostrarToast('Captura tus piezas pendientes y luego finaliza', 'info'); mostrarBannerFinalizarProceso();", text: 'Capturar piezas primero' },
+        { class: 'btn-success', onclick: "cerrarModal(); finalizarProcesoAutomatico();", text: 'Finalizar ahora' }
+    ]);
+}
+
+/**
+ * Muestra un banner persistente para recordar que el proceso está listo para finalizar
+ */
+function mostrarBannerFinalizarProceso() {
+    // Reutilizar el banner de suspensión cambiando contenido, o crear uno propio
+    var banner = document.getElementById('bannerSuspensionPendiente');
+    if (banner) {
+        banner.innerHTML = '<i class="fas fa-check-circle"></i> <span>Meta alcanzada — Toca aquí para finalizar</span>';
+        banner.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        banner.style.display = 'flex';
+        banner.onclick = function() {
+            banner.style.display = 'none';
+            mostrarModalConfirmarFinalizacion();
+        };
+    }
+}
+
+/**
+ * Modal de confirmación para finalizar después de capturar últimas piezas
+ */
+function mostrarModalConfirmarFinalizacion() {
+    var misPiezas = operadoraState.piezasCapturadas || 0;
+    var procesoNombre = operadoraState.procesoActual?.procesoNombre || 'el proceso';
+
+    var htmlContenido = '<div style="text-align:center;padding:20px;">' +
+        '<div style="font-size:48px;color:#10b981;margin-bottom:15px;"><i class="fas fa-check-circle"></i></div>' +
+        '<h3 style="margin-bottom:10px;">¿Finalizar proceso?</h3>' +
+        '<p style="font-size:16px;margin-bottom:10px;">' + S(procesoNombre) + '</p>' +
+        '<p style="font-size:14px;color:#7f8c8d;">Tus piezas: <strong>' + misPiezas + '</strong></p>' +
+        '</div>';
+
+    mostrarModal('Finalizar Proceso', htmlContenido, [
+        { class: 'btn-secondary', onclick: "cerrarModal(); mostrarBannerFinalizarProceso();", text: 'Cancelar' },
+        { class: 'btn-success', onclick: "cerrarModal(); finalizarProcesoAutomatico();", text: 'Finalizar' }
+    ]);
+}
+
+/**
  * Finaliza el proceso automáticamente cuando se alcanza la meta de piezas
  * Similar a finalizarProceso pero sin confirmación del usuario
  */
 function finalizarProcesoAutomatico() {
     DEBUG_MODE && console.log('[OPERADORA] === FINALIZANDO PROCESO AUTOMÁTICAMENTE ===');
-    DEBUG_MODE && console.log('[OPERADORA] Piezas capturadas:', operadoraState.piezasCapturadas, 'Meta:', operadoraState.piezasMeta);
-    DEBUG_MODE && console.log('[OPERADORA] Área de estación:', CONFIG_ESTACION.area);
+
+    // Ocultar banner si estaba visible
+    var bannerFin = document.getElementById('bannerSuspensionPendiente');
+    if (bannerFin) bannerFin.style.display = 'none';
 
     if (!operadoraState.procesoIniciado) {
         DEBUG_MODE && console.warn('[OPERADORA] Proceso no iniciado, no se puede auto-finalizar');
@@ -3435,6 +3510,7 @@ function finalizarProcesoAutomatico() {
     operadoraState.tiempoProcesoAcumulado = 0;
     operadoraState.motivoPausaActual = null;
     operadoraState.historialPausas = [];
+    window._metaEquipoNotificada = false;
 
     // Actualizar UI
     actualizarBotonesTemporizador('sin-iniciar');
@@ -3732,6 +3808,7 @@ function finalizarProceso() {
     operadoraState.tiempoProcesoAcumulado = 0;
     operadoraState.motivoPausaActual = null;
     operadoraState.historialPausas = [];
+    window._metaEquipoNotificada = false;
 
     // Actualizar UI
     actualizarBotonesTemporizador('sin-iniciar');
