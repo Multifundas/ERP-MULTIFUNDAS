@@ -9252,16 +9252,18 @@ function verificarProcesosCompletados() {
                 // Si no se encontró por ID exacto, buscar por nombre y orden
                 if (!proceso && procesoERP.nombre) {
                     proceso = pedido.procesos.find(p =>
-                        (p.nombre || '').toLowerCase() === (procesoERP.nombre || '').toLowerCase() &&
+                        (p.nombre || '').toLowerCase().trim() === (procesoERP.nombre || '').toLowerCase().trim() &&
                         (p.orden === procesoERP.orden || !procesoERP.orden)
                     );
                 }
 
-                // Si aún no se encontró, buscar solo por nombre
+                // Si aún no se encontró, buscar solo por nombre (trim + lowercase)
                 if (!proceso && procesoERP.nombre) {
-                    proceso = pedido.procesos.find(p =>
-                        (p.nombre || '').toLowerCase() === (procesoERP.nombre || '').toLowerCase()
-                    );
+                    const erpNombreNorm = (procesoERP.nombre || '').toLowerCase().trim().replace(/\s+/g, ' ');
+                    proceso = pedido.procesos.find(p => {
+                        const pNombreNorm = (p.nombre || '').toLowerCase().trim().replace(/\s+/g, ' ');
+                        return pNombreNorm === erpNombreNorm;
+                    });
                 }
 
                 // También buscar por ID que contenga el procesoId (formato "pedidoId-prodId-procIdx")

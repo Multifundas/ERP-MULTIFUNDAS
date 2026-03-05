@@ -3378,6 +3378,27 @@ function mostrarModalMetaEquipoAlcanzada(granTotal) {
     var misPiezas = operadoraState.piezasCapturadas || 0;
     var procesoNombre = operadoraState.procesoActual?.procesoNombre || 'el proceso';
 
+    // Recopilar todos los nombres de procesos del grupo simultáneo
+    var nombresProcesos = [procesoNombre];
+    if (operadoraState.modoSimultaneo && operadoraState.procesosSimultaneos && operadoraState.procesosSimultaneos.length > 0) {
+        operadoraState.procesosSimultaneos.forEach(function(p) {
+            if (p.procesoNombre && nombresProcesos.indexOf(p.procesoNombre) === -1) {
+                nombresProcesos.push(p.procesoNombre);
+            }
+        });
+    }
+
+    var procesosHtml = '';
+    if (nombresProcesos.length > 1) {
+        procesosHtml = '<div style="margin-bottom:15px;">';
+        nombresProcesos.forEach(function(nombre) {
+            procesosHtml += '<span style="display:inline-block;background:#e8f5e9;color:#2e7d32;padding:4px 10px;border-radius:12px;font-size:13px;font-weight:600;margin:3px;">' + S(nombre) + '</span>';
+        });
+        procesosHtml += '</div>';
+    } else {
+        procesosHtml = '<p style="font-size:18px;font-weight:bold;color:#2c3e50;margin-bottom:15px;">' + S(procesoNombre) + '</p>';
+    }
+
     // Sonido de notificación
     if (typeof reproducirSonido === 'function') reproducirSonido('exito');
 
@@ -3385,7 +3406,7 @@ function mostrarModalMetaEquipoAlcanzada(granTotal) {
         '<div style="font-size:48px;color:#10b981;margin-bottom:15px;"><i class="fas fa-check-circle"></i></div>' +
         '<h3 style="color:#10b981;margin-bottom:10px;">Meta del Equipo Alcanzada</h3>' +
         '<p style="font-size:16px;margin-bottom:10px;">El equipo completó <strong>' + granTotal + '/' + meta + '</strong> piezas para:</p>' +
-        '<p style="font-size:18px;font-weight:bold;color:#2c3e50;margin-bottom:15px;">' + S(procesoNombre) + '</p>' +
+        procesosHtml +
         '<p style="font-size:14px;color:#7f8c8d;margin-bottom:5px;">Tu aporte: <strong>' + misPiezas + '</strong> piezas</p>' +
         '<p style="font-size:14px;color:#e67e22;margin-bottom:0;">' +
         '¿Tienes piezas pendientes por capturar?</p>' +
@@ -3421,10 +3442,24 @@ function mostrarModalConfirmarFinalizacion() {
     var misPiezas = operadoraState.piezasCapturadas || 0;
     var procesoNombre = operadoraState.procesoActual?.procesoNombre || 'el proceso';
 
+    // Recopilar todos los nombres de procesos del grupo simultáneo
+    var nombresProcesos = [procesoNombre];
+    if (operadoraState.modoSimultaneo && operadoraState.procesosSimultaneos && operadoraState.procesosSimultaneos.length > 0) {
+        operadoraState.procesosSimultaneos.forEach(function(p) {
+            if (p.procesoNombre && nombresProcesos.indexOf(p.procesoNombre) === -1) {
+                nombresProcesos.push(p.procesoNombre);
+            }
+        });
+    }
+
+    var procesosTexto = nombresProcesos.length > 1
+        ? nombresProcesos.map(function(n) { return S(n); }).join(', ')
+        : S(procesoNombre);
+
     var htmlContenido = '<div style="text-align:center;padding:20px;">' +
         '<div style="font-size:48px;color:#10b981;margin-bottom:15px;"><i class="fas fa-check-circle"></i></div>' +
         '<h3 style="margin-bottom:10px;">¿Finalizar proceso?</h3>' +
-        '<p style="font-size:16px;margin-bottom:10px;">' + S(procesoNombre) + '</p>' +
+        '<p style="font-size:16px;margin-bottom:10px;">' + procesosTexto + '</p>' +
         '<p style="font-size:14px;color:#7f8c8d;">Tus piezas: <strong>' + misPiezas + '</strong></p>' +
         '</div>';
 
@@ -3534,21 +3569,40 @@ function finalizarProcesoAutomatico() {
     const pedidoId = operadoraState.pedidoActual?.id;
     const piezasProducidas = operadoraState.piezasCapturadas;
 
+    // Recopilar TODOS los procesos a marcar como completados (principal + simultáneos)
+    var procesosACompletar = [];
+    if (procesoId) procesosACompletar.push({ procesoId: procesoId, procesoNombre: procesoNombre });
+    if (operadoraState.modoSimultaneo && operadoraState.procesosSimultaneos.length > 0) {
+        operadoraState.procesosSimultaneos.forEach(function(p) {
+            var yaIncluido = procesosACompletar.some(function(pc) { return String(pc.procesoId) === String(p.procesoId); });
+            if (!yaIncluido) {
+                procesosACompletar.push({ procesoId: p.procesoId, procesoNombre: p.procesoNombre });
+            }
+        });
+    }
+
     // === SINCRONIZACIÓN CON SUPERVISORA ===
 
-    // 1. Actualizar avance del proceso en pedidos_erp
+    // 1. Actualizar avance de TODOS los procesos (grupo simultáneo) en pedidos_erp
     const pedidosERP = safeLocalGet('pedidos_erp', []);
     const pedidoIndex = pedidosERP.findIndex(p => p.id == pedidoId);
     if (pedidoIndex >= 0) {
         const pedido = pedidosERP[pedidoIndex];
         if (pedido.procesos) {
-            const procesoIndex = pedido.procesos.findIndex(p => p.id == procesoId);
-            if (procesoIndex >= 0) {
-                pedido.procesos[procesoIndex].piezas = piezasProducidas;
-                pedido.procesos[procesoIndex].estado = 'completado';
-                pedido.procesos[procesoIndex].fechaCompletado = new Date().toISOString();
-                pedido.procesos[procesoIndex].finalizadoAutomaticamente = true;
-            }
+            // Marcar cada proceso del grupo como completado
+            procesosACompletar.forEach(function(proc) {
+                var idx = pedido.procesos.findIndex(function(p) {
+                    return p.id == proc.procesoId ||
+                           (p.nombre || '').toLowerCase().trim() === (proc.procesoNombre || '').toLowerCase().trim();
+                });
+                if (idx >= 0) {
+                    pedido.procesos[idx].piezas = piezasProducidas;
+                    pedido.procesos[idx].estado = 'completado';
+                    pedido.procesos[idx].fechaCompletado = new Date().toISOString();
+                    pedido.procesos[idx].finalizadoAutomaticamente = true;
+                    DEBUG_MODE && console.log('[OPERADORA] Proceso completado (auto):', pedido.procesos[idx].nombre || proc.procesoNombre);
+                }
+            });
 
             // Verificar si TODOS los procesos del pedido están completados
             const todosCompletadosAuto = pedido.procesos.every(p => p.estado === 'completado');
@@ -3839,26 +3893,40 @@ function finalizarProceso() {
     const pedidoId = operadoraState.pedidoActual?.id;
     const piezasProducidas = operadoraState.piezasCapturadas;
 
-    // 1. Actualizar avance del proceso en el pedido (para supervisora)
+    // Recopilar TODOS los procesos a marcar como completados (principal + simultáneos)
+    var procesosACompletar = [];
+    if (procesoId) procesosACompletar.push({ procesoId: procesoId, procesoNombre: procesoNombre });
+    if (operadoraState.modoSimultaneo && operadoraState.procesosSimultaneos.length > 0) {
+        operadoraState.procesosSimultaneos.forEach(function(p) {
+            var yaIncluido = procesosACompletar.some(function(pc) { return String(pc.procesoId) === String(p.procesoId); });
+            if (!yaIncluido) {
+                procesosACompletar.push({ procesoId: p.procesoId, procesoNombre: p.procesoNombre });
+            }
+        });
+    }
+
+    // 1. Actualizar avance de TODOS los procesos (grupo simultáneo) en pedidos_erp
     const pedidosERP = safeLocalGet('pedidos_erp', []);
-    // Usar == para comparación flexible (string/number)
     const pedidoIndex = pedidosERP.findIndex(p => p.id == pedidoId);
     if (pedidoIndex >= 0) {
         const pedido = pedidosERP[pedidoIndex];
         if (pedido.procesos) {
-            // Usar == para comparación flexible (string/number)
-            const procesoIndex = pedido.procesos.findIndex(p => p.id == procesoId);
-            if (procesoIndex >= 0) {
-                pedido.procesos[procesoIndex].piezas = piezasProducidas;
-                pedido.procesos[procesoIndex].estado = 'completado';
-                pedido.procesos[procesoIndex].fechaCompletado = new Date().toISOString();
-                pedido.procesos[procesoIndex].operadoraId = authState.operadoraActual?.id;
-                pedido.procesos[procesoIndex].operadoraNombre = authState.operadoraActual?.nombre;
-                pedido.procesos[procesoIndex].estacionId = CONFIG_ESTACION.id;
-                DEBUG_MODE && console.log('[OPERADORA] Proceso marcado como completado en pedidos_erp:', procesoId, 'piezas:', piezasProducidas);
-            } else {
-                DEBUG_MODE && console.warn('[OPERADORA] Proceso no encontrado en pedido:', procesoId, 'procesos disponibles:', pedido.procesos.map(p => p.id));
-            }
+            // Marcar cada proceso del grupo como completado
+            procesosACompletar.forEach(function(proc) {
+                var idx = pedido.procesos.findIndex(function(p) {
+                    return p.id == proc.procesoId ||
+                           (p.nombre || '').toLowerCase().trim() === (proc.procesoNombre || '').toLowerCase().trim();
+                });
+                if (idx >= 0) {
+                    pedido.procesos[idx].piezas = piezasProducidas;
+                    pedido.procesos[idx].estado = 'completado';
+                    pedido.procesos[idx].fechaCompletado = new Date().toISOString();
+                    pedido.procesos[idx].operadoraId = authState.operadoraActual?.id;
+                    pedido.procesos[idx].operadoraNombre = authState.operadoraActual?.nombre;
+                    pedido.procesos[idx].estacionId = CONFIG_ESTACION.id;
+                    DEBUG_MODE && console.log('[OPERADORA] Proceso completado (grupo):', pedido.procesos[idx].nombre || proc.procesoNombre);
+                }
+            });
         }
         // Verificar si TODOS los procesos del pedido están completados
         const todosCompletados = pedido.procesos.every(p => p.estado === 'completado');

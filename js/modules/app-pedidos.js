@@ -497,6 +497,67 @@ async function savePedido() {
     }
 }
 
+/**
+ * Duplica un pedido existente creando una copia con estado pendiente
+ */
+async function duplicatePedido(id) {
+    const pedido = db.getPedido(id);
+    if (!pedido) {
+        console.error('[duplicatePedido] Pedido no encontrado:', id);
+        if (typeof showToast === 'function') showToast('Pedido no encontrado', 'error');
+        return;
+    }
+
+    const nuevoCodigo = prompt('Ingrese el # del nuevo pedido (copia de ' + (pedido.codigo || pedido.id) + '):', (pedido.codigo || '') + '-COPIA');
+    if (!nuevoCodigo || !nuevoCodigo.trim()) return;
+
+    // Clonar productos reseteando avance
+    const productosClonados = (pedido.productos || []).map(prod => ({
+        productoId: prod.productoId,
+        cantidad: prod.cantidad,
+        completadas: 0,
+        precioUnitario: prod.precioUnitario || 0,
+        avanceProcesos: (prod.avanceProcesos || []).map(proc => ({
+            procesoId: proc.procesoId,
+            procesoOrden: proc.procesoOrden,
+            nombre: proc.nombre,
+            completadas: 0,
+            estado: 'pendiente'
+        }))
+    }));
+
+    const nuevoPedido = {
+        codigo: nuevoCodigo.trim(),
+        clienteId: pedido.clienteId,
+        productos: productosClonados,
+        prioridad: pedido.prioridad || 'media',
+        fechaEntrega: pedido.fechaEntrega || '',
+        notas: pedido.notas ? 'Copia de pedido #' + (pedido.codigo || pedido.id) + '. ' + pedido.notas : 'Copia de pedido #' + (pedido.codigo || pedido.id),
+        presupuestoEstimado: pedido.presupuestoEstimado || 0,
+        imagenesApoyo: pedido.imagenesApoyo || []
+    };
+
+    try {
+        const resultado = await db.addPedido(nuevoPedido);
+        DEBUG_MODE && console.log('[duplicatePedido] Pedido duplicado:', resultado);
+
+        if (app.currentSection === 'dashboard') {
+            loadPedidosPendientes();
+            if (typeof loadPedidosCriticos === 'function') loadPedidosCriticos();
+            if (typeof updateDashboardKPIs === 'function') updateDashboardKPIs();
+        } else {
+            loadPedidos();
+        }
+
+        if (typeof showToast === 'function') {
+            showToast('Pedido #' + nuevoCodigo.trim() + ' duplicado correctamente', 'success');
+        }
+    } catch (e) {
+        console.error('[duplicatePedido] Error:', e);
+        if (typeof showToast === 'function') showToast('Error al duplicar pedido', 'error');
+    }
+}
+
 // Exponer funciones de pedidos a window
 window.showNuevoPedidoModal = showNuevoPedidoModal;
 window.updateProductosCliente = updateProductosCliente;
@@ -514,6 +575,7 @@ window.ampliarImagen = ampliarImagen;
 window.updateProductosEditPedido = updateProductosEditPedido;
 window.renderEditProductos = renderEditProductos;
 window.toggleEditProductoFields = toggleEditProductoFields;
+window.duplicatePedido = duplicatePedido;
 
 function viewPedido(id) {
     const pedido = db.getPedido(id);
@@ -1250,6 +1312,9 @@ function loadPedidosEnhanced() {
                                         </button>
                                         <button class="btn-icon-small" onclick="showEditarPedido(${pedido.id})" title="Editar">
                                             <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn-icon-small" onclick="duplicatePedido(${pedido.id})" title="Duplicar Pedido">
+                                            <i class="fas fa-copy"></i>
                                         </button>
                                         <button class="btn-icon-small danger" onclick="deletePedido(${pedido.id})" title="Eliminar">
                                             <i class="fas fa-trash"></i>
