@@ -276,13 +276,13 @@ function initPanelOperadora() {
     // Grupo 2: Cada 5 segundos (conexión)
     window._erpIntervals.push(setInterval(actualizarIndicadorConexion, 5000));
 
-    // Grupo 3: Cada 20 segundos (progreso equipo + nueva asignación + suspensión remota + publicar estado)
+    // Grupo 3: Cada 10 segundos (progreso equipo + nueva asignación + suspensión remota + publicar estado)
     window._erpIntervals.push(setInterval(function() {
         actualizarProgresoEquipo();
         verificarNuevaAsignacion();
         verificarSolicitudSuspension();
         publicarEstadoMaquina();
-    }, 20000));
+    }, 10000));
 
     // Grupo 4: Cada 30 segundos (estadísticas + mensajes coco)
     window._erpIntervals.push(setInterval(function() {

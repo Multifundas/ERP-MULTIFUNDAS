@@ -9390,24 +9390,20 @@ function verificarProcesosCompletados() {
         localStorage.setItem('historial_asignaciones_completadas', JSON.stringify(historialCompletadas));
     }
 
-    // 3. Sincronizar estado de procesos desde pedidos_erp (fuente de verdad del operador)
+    // 3. Sincronizar estado de procesos desde pedidos_erp (SOLO completados y cambio de estado)
     const pedidosERP = safeLocalGet('pedidos_erp', []);
     pedidosERP.forEach(pedidoERP => {
         const pedido = supervisoraState.pedidosHoy.find(p => p.id == pedidoERP.id);
         if (pedido && pedido.procesos && pedidoERP.procesos) {
             pedidoERP.procesos.forEach(procesoERP => {
-                // Buscar proceso por múltiples criterios ya que los IDs pueden no coincidir exactamente
+                // Buscar proceso por múltiples criterios
                 let proceso = pedido.procesos.find(p => p.id == procesoERP.id);
-
-                // Si no se encontró por ID exacto, buscar por nombre y orden
                 if (!proceso && procesoERP.nombre) {
                     proceso = pedido.procesos.find(p =>
                         (p.nombre || '').toLowerCase().trim() === (procesoERP.nombre || '').toLowerCase().trim() &&
                         (p.orden === procesoERP.orden || !procesoERP.orden)
                     );
                 }
-
-                // Si aún no se encontró, buscar solo por nombre (trim + lowercase)
                 if (!proceso && procesoERP.nombre) {
                     const erpNombreNorm = (procesoERP.nombre || '').toLowerCase().trim().replace(/\s+/g, ' ');
                     proceso = pedido.procesos.find(p => {
@@ -9415,8 +9411,6 @@ function verificarProcesosCompletados() {
                         return pNombreNorm === erpNombreNorm;
                     });
                 }
-
-                // También buscar por ID que contenga el procesoId (formato "pedidoId-prodId-procIdx")
                 if (!proceso && procesoERP.id) {
                     const procesoIdStr = String(procesoERP.id);
                     proceso = pedido.procesos.find(p => {
@@ -9426,10 +9420,10 @@ function verificarProcesosCompletados() {
                 }
 
                 if (proceso) {
-                    const piezasAntes = proceso.piezas || 0;
                     const piezasERP = procesoERP.piezas || 0;
 
-                    // Actualizar estado si ERP tiene más avance
+                    // SOLO usar pedidos_erp para cambios de ESTADO (completado, en-proceso)
+                    // Las piezas en-proceso se leen de estado_maquinas (sección 3.5)
                     if (procesoERP.estado === 'completado' && proceso.estado !== 'completado') {
                         proceso.estado = 'completado';
                         proceso.piezas = piezasERP;
@@ -9451,7 +9445,6 @@ function verificarProcesosCompletados() {
                             supervisoraState.maquinas[estacionId].piezasHoy = 0;
                             DEBUG_MODE && console.log('[SUPERVISORA] Estación', estacionId, 'limpiada desde pedidos_erp');
 
-                            // También eliminar de asignaciones_estaciones
                             const asignacionesActuales = safeLocalGet('asignaciones_estaciones', {});
                             if (asignacionesActuales[estacionId]) {
                                 delete asignacionesActuales[estacionId];
@@ -9460,58 +9453,53 @@ function verificarProcesosCompletados() {
                         }
                     } else if (procesoERP.estado === 'en-proceso' && proceso.estado === 'pendiente') {
                         proceso.estado = 'en-proceso';
-                        proceso.piezas = piezasERP;
                         proceso.operadoraId = procesoERP.operadoraId;
                         proceso.operadoraNombre = procesoERP.operadoraNombre;
                         huboCompletados = true;
-                    } else if (piezasERP > piezasAntes) {
-                        // Actualizar piezas si hay más en ERP
-                        DEBUG_MODE && console.log('[SUPERVISORA] Sincronizando piezas desde pedidos_erp:',
-                            proceso.nombre, 'de', piezasAntes, 'a', piezasERP);
-                        proceso.piezas = piezasERP;
-                        proceso.ultimaActualizacion = procesoERP.ultimaActualizacion;
-                        huboCompletados = true;
                     }
-                } else {
-                    DEBUG_MODE && console.log('[SUPERVISORA] Proceso de pedidos_erp no encontrado en pedidosHoy:',
-                        procesoERP.id, procesoERP.nombre, 'pedido:', pedidoERP.id);
                 }
             });
         }
     });
 
-    // 3.5 También leer del historial de producción del día como fuente adicional
-    const historialProduccion = safeLocalGet('historial_produccion', []);
-    const hoy = new Date().toISOString().split('T')[0];
-    const produccionHoy = historialProduccion.filter(h => h.fecha?.startsWith(hoy));
+    // 3.5 Calcular piezas en-proceso desde estado_maquinas (fuente de verdad en tiempo real)
+    // Solo confiar en piezas donde operadoraPedidoId coincide (publicado por la operadora)
+    const estadoMaquinasSync = safeLocalGet('estado_maquinas', {});
+    const asignacionesSync = safeLocalGet('asignaciones_estaciones', {});
 
-    if (produccionHoy.length > 0) {
-        // Agrupar por pedidoId y procesoNombre
-        const piezasPorProceso = {};
-        produccionHoy.forEach(h => {
-            if (h.pedidoId && h.procesoNombre) {
-                const key = `${h.pedidoId}-${h.procesoNombre.toLowerCase().trim()}`;
-                piezasPorProceso[key] = (piezasPorProceso[key] || 0) + (h.cantidad || 0);
-            }
-        });
+    // Construir mapa: pedidoId → procesoNombre → totalPiezas (sumando todas las estaciones)
+    const piezasRealTimePorProceso = {};
+    for (const estId in estadoMaquinasSync) {
+        if (!estadoMaquinasSync.hasOwnProperty(estId)) continue;
+        const em = estadoMaquinasSync[estId];
+        // Solo confiar si la operadora publicó con este pedido
+        if (!em.operadoraPedidoId || !em.procesoActivo) continue;
 
-        // Actualizar procesos con las piezas del historial
-        supervisoraState.pedidosHoy.forEach(pedido => {
-            if (pedido.procesos) {
-                pedido.procesos.forEach(proceso => {
-                    const key = `${pedido.id}-${(proceso.nombre || '').toLowerCase().trim()}`;
-                    const piezasHistorial = piezasPorProceso[key] || 0;
+        const pedId = String(em.operadoraPedidoId);
+        const procNombre = (em.procesoNombre || '').toLowerCase().trim();
+        if (!procNombre) continue;
 
-                    if (piezasHistorial > (proceso.piezas || 0)) {
-                        DEBUG_MODE && console.log('[SUPERVISORA] Actualizando piezas desde historial_produccion:',
-                            proceso.nombre, 'pedido:', pedido.id, 'de', proceso.piezas, 'a', piezasHistorial);
-                        proceso.piezas = piezasHistorial;
-                        huboCompletados = true;
-                    }
-                });
-            }
-        });
+        const key = pedId + '-' + procNombre;
+        piezasRealTimePorProceso[key] = (piezasRealTimePorProceso[key] || 0) + (em.piezasHoy || 0);
     }
+
+    // Aplicar piezas reales a los procesos en-proceso
+    supervisoraState.pedidosHoy.forEach(pedido => {
+        if (!pedido.procesos) return;
+        pedido.procesos.forEach(proceso => {
+            if (proceso.estado === 'completado') return; // No tocar completados
+            const key = String(pedido.id) + '-' + (proceso.nombre || '').toLowerCase().trim();
+            const piezasRT = piezasRealTimePorProceso[key];
+            if (piezasRT !== undefined) {
+                if (piezasRT !== (proceso.piezas || 0)) {
+                    DEBUG_MODE && console.log('[SUPERVISORA] Piezas desde estado_maquinas:',
+                        proceso.nombre, 'pedido:', pedido.id, 'de', proceso.piezas, 'a', piezasRT);
+                    proceso.piezas = piezasRT;
+                    huboCompletados = true;
+                }
+            }
+        });
+    });
 
     // 4. Actualizar dependencias - habilitar procesos que dependían del completado
     if (huboCompletados) {
