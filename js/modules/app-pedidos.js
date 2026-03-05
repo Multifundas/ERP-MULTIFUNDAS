@@ -1560,10 +1560,64 @@ function toggleVisibleSupervisora(id) {
 // Eliminar pedido
 function deletePedido(id) {
     if (confirm('¿Está seguro de eliminar este pedido? Esta acción no se puede deshacer.')) {
+        // Limpiar asignaciones de operadores vinculadas a este pedido
+        limpiarAsignacionesPedido(id);
+
         db.deletePedido(id);
         loadPedidos();
         showToast('Pedido eliminado');
     }
+}
+
+/**
+ * Limpia todas las asignaciones de estaciones/operadores vinculadas a un pedido.
+ * Se usa al eliminar o completar un pedido para liberar a los operadores.
+ */
+function limpiarAsignacionesPedido(pedidoId) {
+    // 1. Limpiar asignaciones_estaciones
+    var asignaciones = JSON.parse(localStorage.getItem('asignaciones_estaciones') || '{}');
+    var modificado = false;
+    for (var estacionId in asignaciones) {
+        if (asignaciones.hasOwnProperty(estacionId) && asignaciones[estacionId].pedidoId == pedidoId) {
+            delete asignaciones[estacionId];
+            modificado = true;
+        }
+    }
+    if (modificado) {
+        localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
+    }
+
+    // 2. Limpiar estado_maquinas de estaciones que tenían este pedido
+    var estadoMaquinas = JSON.parse(localStorage.getItem('estado_maquinas') || '{}');
+    var emModificado = false;
+    for (var estId in estadoMaquinas) {
+        if (estadoMaquinas.hasOwnProperty(estId) && estadoMaquinas[estId].pedidoId == pedidoId) {
+            estadoMaquinas[estId] = {
+                estado: 'disponible',
+                procesoActivo: false,
+                procesoNombre: null,
+                procesoId: null,
+                pedidoId: null,
+                modoSimultaneo: false,
+                procesosSimultaneos: [],
+                operadoraId: estadoMaquinas[estId].operadoraId,
+                ultimaActualizacion: new Date().toISOString()
+            };
+            emModificado = true;
+        }
+    }
+    if (emModificado) {
+        localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
+    }
+
+    // 3. Limpiar pedidos_erp
+    var pedidosERP = JSON.parse(localStorage.getItem('pedidos_erp') || '[]');
+    var erpFiltrado = pedidosERP.filter(function(p) { return p.id != pedidoId; });
+    if (erpFiltrado.length !== pedidosERP.length) {
+        localStorage.setItem('pedidos_erp', JSON.stringify(erpFiltrado));
+    }
+
+    DEBUG_MODE && console.log('[APP-PEDIDOS] Asignaciones limpiadas para pedido:', pedidoId);
 }
 
 // Exportar pedidos a Excel

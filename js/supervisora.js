@@ -1980,29 +1980,33 @@ function renderProcesoItem(proceso, pedidoId) {
         .filter(([id, m]) => {
             var ae = asignacionesEstaciones[id];
             var em = estadoMaquinas[id];
-            // 1. Proceso directo asignado a la estación (por ID o por nombre)
-            if (String(m.procesoId) === procesoIdStr) return true;
+            // IMPORTANTE: siempre verificar que el pedidoId coincida para evitar falsos positivos
+            // entre pedidos diferentes que comparten nombres de procesos
+            var mismoPedidoMaquina = m.pedidoId == pedidoId;
+            var mismoPedidoAsignacion = ae && ae.pedidoId == pedidoId;
+            var mismoPedidoEstado = em && em.pedidoId == pedidoId;
+
+            // 1. Proceso directo asignado a la estación (por ID o por nombre) - REQUIERE mismo pedido
+            if (String(m.procesoId) === procesoIdStr && mismoPedidoMaquina) return true;
             if (m.procesoNombre && m.procesoNombre.toLowerCase().trim() === procesoNombreLower) {
-                // Verificar que es el mismo pedido para evitar falsos positivos
-                if (ae && ae.pedidoId == pedidoId) return true;
-                if (m.pedidoId == pedidoId) return true;
+                if (mismoPedidoAsignacion || mismoPedidoMaquina) return true;
             }
-            // 2. Proceso en la cola de la máquina (por ID o por nombre)
+            // 2. Proceso en la cola de la máquina (por ID o por nombre + pedido)
             if (m.colaProcesos && m.colaProcesos.some(function(p) {
-                return String(p.procesoId) === procesoIdStr ||
+                return (String(p.procesoId) === procesoIdStr && p.pedidoId == pedidoId) ||
                        ((p.procesoNombre || '').toLowerCase().trim() === procesoNombreLower && p.pedidoId == pedidoId);
             })) return true;
             // 3. Proceso en asignación directa (por nombre + pedido)
-            if (ae && (ae.procesoNombre || '').toLowerCase().trim() === procesoNombreLower && ae.pedidoId == pedidoId) return true;
+            if (mismoPedidoAsignacion && (ae.procesoNombre || '').toLowerCase().trim() === procesoNombreLower) return true;
             // 4. Proceso en cola de asignación (por nombre + pedido)
             if (ae && ae.colaProcesos && ae.colaProcesos.some(function(p) {
                 return (p.procesoNombre || '').toLowerCase().trim() === procesoNombreLower && p.pedidoId == pedidoId;
             })) return true;
-            // 5. Proceso en procesos simultáneos activos (estado_maquinas o asignaciones)
-            if (em && em.procesosSimultaneos && em.procesosSimultaneos.some(function(p) {
+            // 5. Proceso en procesos simultáneos activos - REQUIERE mismo pedido
+            if (em && mismoPedidoEstado && em.procesosSimultaneos && em.procesosSimultaneos.some(function(p) {
                 return String(p.procesoId) === procesoIdStr || (p.procesoNombre || '').toLowerCase().trim() === procesoNombreLower;
             })) return true;
-            if (ae && ae.procesosSimultaneosActivos && ae.procesosSimultaneosActivos.some(function(pid) {
+            if (mismoPedidoAsignacion && ae.procesosSimultaneosActivos && ae.procesosSimultaneosActivos.some(function(pid) {
                 return String(pid) === procesoIdStr;
             })) return true;
             return false;
@@ -8848,6 +8852,9 @@ function confirmarCierrePedido(pedidoId) {
         }
     }
 
+    // Limpiar asignaciones de estaciones vinculadas a este pedido
+    limpiarAsignacionesDePedido(pedidoId);
+
     // Notificar a administración (key local)
     const notificacionesAdmin = safeLocalGet('notificaciones_admin', []);
     const notifData = {
@@ -8884,6 +8891,68 @@ function confirmarCierrePedido(pedidoId) {
     }
 
     if (typeof reproducirSonido === 'function') reproducirSonido('exito');
+}
+
+/**
+ * Limpia todas las asignaciones de estaciones/operadores vinculadas a un pedido.
+ * Se usa al cerrar/completar/eliminar un pedido para liberar a los operadores.
+ */
+function limpiarAsignacionesDePedido(pedidoId) {
+    if (!pedidoId) return;
+
+    // 1. Limpiar asignaciones_estaciones
+    const asignaciones = safeLocalGet('asignaciones_estaciones', {});
+    let modificado = false;
+    for (const estacionId in asignaciones) {
+        if (asignaciones.hasOwnProperty(estacionId) && asignaciones[estacionId].pedidoId == pedidoId) {
+            delete asignaciones[estacionId];
+            modificado = true;
+            DEBUG_MODE && console.log('[SUPERVISORA] Asignación liberada para estación:', estacionId, 'pedido:', pedidoId);
+        }
+    }
+    if (modificado) {
+        localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignaciones));
+    }
+
+    // 2. Limpiar estado_maquinas de estaciones que tenían este pedido
+    const estadoMaquinas = safeLocalGet('estado_maquinas', {});
+    let emModificado = false;
+    for (const estId in estadoMaquinas) {
+        if (estadoMaquinas.hasOwnProperty(estId) && estadoMaquinas[estId].pedidoId == pedidoId) {
+            estadoMaquinas[estId] = {
+                estado: 'disponible',
+                procesoActivo: false,
+                procesoNombre: null,
+                procesoId: null,
+                pedidoId: null,
+                modoSimultaneo: false,
+                procesosSimultaneos: [],
+                operadoraId: estadoMaquinas[estId].operadoraId,
+                operadoraNombre: estadoMaquinas[estId].operadoraNombre,
+                ultimaActualizacion: new Date().toISOString()
+            };
+            emModificado = true;
+        }
+    }
+    if (emModificado) {
+        localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
+    }
+
+    // 3. Limpiar maquinas en supervisoraState
+    if (supervisoraState && supervisoraState.maquinas) {
+        Object.entries(supervisoraState.maquinas).forEach(([estId, m]) => {
+            if (m.pedidoId == pedidoId) {
+                m.procesoId = null;
+                m.procesoNombre = '';
+                m.pedidoId = null;
+                m.estado = 'inactivo';
+                m.operadores = [];
+                m.piezasHoy = 0;
+            }
+        });
+    }
+
+    DEBUG_MODE && console.log('[SUPERVISORA] Asignaciones limpiadas para pedido:', pedidoId);
 }
 
 // ========================================
@@ -9367,6 +9436,24 @@ function verificarProcesosCompletados() {
     if (huboCompletados) {
         actualizarDependenciasProcesos();
         DEBUG_MODE && console.log('[SUPERVISORA] Hubo cambios en procesos, actualizando UI...');
+    }
+
+    // 4.5 Limpiar asignaciones huérfanas (de pedidos que ya no existen en pedidosHoy)
+    const asignacionesActivas = safeLocalGet('asignaciones_estaciones', {});
+    const pedidoIdsActivos = new Set(supervisoraState.pedidosHoy.map(p => String(p.id)));
+    let asignacionesLimpiadas = false;
+    for (const estId in asignacionesActivas) {
+        if (asignacionesActivas.hasOwnProperty(estId)) {
+            const pedIdAsignado = String(asignacionesActivas[estId].pedidoId || '');
+            if (pedIdAsignado && !pedidoIdsActivos.has(pedIdAsignado)) {
+                DEBUG_MODE && console.log('[SUPERVISORA] Limpiando asignación huérfana:', estId, 'pedido:', pedIdAsignado);
+                delete asignacionesActivas[estId];
+                asignacionesLimpiadas = true;
+            }
+        }
+    }
+    if (asignacionesLimpiadas) {
+        localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignacionesActivas));
     }
 
     // Re-renderizar para mostrar piezas actualizadas
