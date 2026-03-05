@@ -1339,6 +1339,42 @@ function loadDataFromERP() {
         // Cargar asignaciones existentes de localStorage
         cargarAsignacionesExistentes();
 
+        // Limpiar asignaciones huérfanas: estaciones con pedidoId que ya no existe en pedidosHoy
+        const pedidoIdsActivos = new Set(supervisoraState.pedidosHoy.map(p => String(p.id)));
+        Object.entries(supervisoraState.maquinas).forEach(([estId, m]) => {
+            if (m.pedidoId && !pedidoIdsActivos.has(String(m.pedidoId))) {
+                DEBUG_MODE && console.log('[SUPERVISORA] Limpieza huérfana: estación', estId, 'tenía pedido eliminado', m.pedidoId);
+                m.procesoId = null;
+                m.procesoNombre = '';
+                m.pedidoId = null;
+                m.pedidoCodigo = '';
+                m.productoNombre = '';
+                m.colaProcesos = [];
+                m.piezasHoy = 0;
+                if (!m.operadores || m.operadores.length === 0) {
+                    m.estado = 'inactivo';
+                }
+            }
+            // También limpiar colaProcesos con pedidos que ya no existen
+            if (m.colaProcesos && m.colaProcesos.length > 0) {
+                m.colaProcesos = m.colaProcesos.filter(p => pedidoIdsActivos.has(String(p.pedidoId)));
+            }
+        });
+
+        // Limpiar también asignaciones_estaciones huérfanas en localStorage
+        const asignacionesLS = safeLocalGet('asignaciones_estaciones', {});
+        let asignacionesModificadas = false;
+        for (const estId in asignacionesLS) {
+            if (asignacionesLS.hasOwnProperty(estId) && asignacionesLS[estId].pedidoId && !pedidoIdsActivos.has(String(asignacionesLS[estId].pedidoId))) {
+                delete asignacionesLS[estId];
+                asignacionesModificadas = true;
+                DEBUG_MODE && console.log('[SUPERVISORA] Asignación huérfana eliminada de localStorage para estación:', estId);
+            }
+        }
+        if (asignacionesModificadas) {
+            localStorage.setItem('asignaciones_estaciones', JSON.stringify(asignacionesLS));
+        }
+
         // Limpiar operadores fantasma: quitar de maquinas los operadores que ya no existen en el ERP
         const operadorIdsValidos = new Set(supervisoraState.operadores.map(o => o.id));
         Object.values(supervisoraState.maquinas).forEach(m => {
@@ -8945,11 +8981,17 @@ function limpiarAsignacionesDePedido(pedidoId) {
                 m.procesoId = null;
                 m.procesoNombre = '';
                 m.pedidoId = null;
-                m.estado = 'inactivo';
-                m.operadores = [];
+                m.pedidoCodigo = '';
+                m.productoNombre = '';
+                m.colaProcesos = [];
                 m.piezasHoy = 0;
+                if (!m.operadores || m.operadores.length === 0) {
+                    m.estado = 'inactivo';
+                }
             }
         });
+        // Persistir estado limpio en supervisora_maquinas
+        saveEstadoMaquinas();
     }
 
     DEBUG_MODE && console.log('[SUPERVISORA] Asignaciones limpiadas para pedido:', pedidoId);

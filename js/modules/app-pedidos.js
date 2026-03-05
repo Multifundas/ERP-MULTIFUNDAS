@@ -1617,6 +1617,24 @@ function limpiarAsignacionesPedido(pedidoId) {
         localStorage.setItem('pedidos_erp', JSON.stringify(erpFiltrado));
     }
 
+    // 4. Limpiar supervisora_maquinas (estado persistido del panel supervisora)
+    var supMaquinas = JSON.parse(localStorage.getItem('supervisora_maquinas') || '{}');
+    var supModificado = false;
+    for (var smId in supMaquinas) {
+        if (supMaquinas.hasOwnProperty(smId) && supMaquinas[smId].pedidoId == pedidoId) {
+            supMaquinas[smId].procesoId = null;
+            supMaquinas[smId].procesoNombre = '';
+            supMaquinas[smId].pedidoId = null;
+            supMaquinas[smId].pedidoCodigo = '';
+            supMaquinas[smId].productoNombre = '';
+            supMaquinas[smId].colaProcesos = [];
+            supModificado = true;
+        }
+    }
+    if (supModificado) {
+        localStorage.setItem('supervisora_maquinas', JSON.stringify(supMaquinas));
+    }
+
     DEBUG_MODE && console.log('[APP-PEDIDOS] Asignaciones limpiadas para pedido:', pedidoId);
 }
 
