@@ -2417,35 +2417,11 @@ function obtenerOtrasOperadorasEnProceso() {
                 iniciales = obtenerIniciales(operadoraNombre);
             }
 
-            // Piezas: buscar en estado_maquinas, asignación, y como fallback en pedidos_erp
-            // IMPORTANTE: Solo usar piezasHoy si el estado_maquinas corresponde al mismo pedido
+            // Piezas: buscar SOLO en estado_maquinas si corresponde al mismo pedido
+            // Y si el operador ya inició (procesoActivo=true), de lo contrario es dato stale
             var piezasCapturadas = 0;
-            if (em.pedidoId == miPedidoId) {
+            if (em.pedidoId == miPedidoId && em.procesoActivo === true) {
                 piezasCapturadas = em.piezasHoy || 0;
-            }
-
-            // Si estado_maquinas no tiene piezas, intentar desde la asignación (ya validada por pedidoId)
-            if (piezasCapturadas === 0 && asignacion.piezasProducidas) {
-                piezasCapturadas = asignacion.piezasProducidas;
-            }
-
-            // Fallback: leer piezas del proceso en pedidos_erp (acumulado de todos los operadores)
-            // Solo usar si no hay dato individual (mejor que 0)
-            if (piezasCapturadas === 0) {
-                var pedidosERP = safeLocalGet('pedidos_erp', []);
-                var pedidoERP = pedidosERP.find(function(p) { return p.id == miPedidoId; });
-                if (pedidoERP && pedidoERP.procesos) {
-                    var procesoNormComun = procesoEnComun.toLowerCase().trim();
-                    var procERP = pedidoERP.procesos.find(function(p) {
-                        return (p.nombre || '').toLowerCase().trim() === procesoNormComun ||
-                               String(p.id) === procesoEnComun;
-                    });
-                    if (procERP && procERP.piezas > 0) {
-                        // pedidos_erp tiene el total acumulado por todos - usarlo como referencia
-                        piezasCapturadas = procERP.piezas;
-                        DEBUG_MODE && console.log('[OPERADORA] Piezas de', estacionId, 'leídas desde pedidos_erp:', piezasCapturadas);
-                    }
-                }
             }
 
             otrasOperadoras.push({
@@ -2481,41 +2457,12 @@ function obtenerTotalPiezasProceso(otrasOperadoras) {
         }
     }
 
-    // Cross-check con pedidos_erp que tiene el total acumulado real via DeltaMerge
-    var totalERP = 0;
-    try {
-        var pedidoId = operadoraState.pedidoActual?.id;
-        var procesoNombre = (operadoraState.procesoActual?.procesoNombre || '').toLowerCase().trim();
-        var procesoId = operadoraState.procesoActual?.procesoId;
-        if (pedidoId) {
-            var pedidosERP = safeLocalGet('pedidos_erp', []);
-            var pedidoERP = pedidosERP.find(function(p) { return p.id == pedidoId; });
-            if (pedidoERP && pedidoERP.procesos) {
-                // Sumar piezas de todos los procesos que coincidan con mis procesos activos
-                var misProcesos = [procesoNombre];
-                if (operadoraState.modoSimultaneo && operadoraState.procesosSimultaneos) {
-                    operadoraState.procesosSimultaneos.forEach(function(p) {
-                        var n = (p.procesoNombre || '').toLowerCase().trim();
-                        if (n && misProcesos.indexOf(n) === -1) misProcesos.push(n);
-                    });
-                }
-                pedidoERP.procesos.forEach(function(proc) {
-                    var nomProc = (proc.nombre || '').toLowerCase().trim();
-                    if (misProcesos.indexOf(nomProc) !== -1 || proc.id == procesoId) {
-                        totalERP += (proc.piezas || 0);
-                    }
-                });
-            }
-        }
-    } catch (e) {
-        DEBUG_MODE && console.error('[OPERADORA] Error leyendo total de pedidos_erp:', e);
-    }
+    // Total del equipo = suma directa de piezas reales de cada operador
+    // NO usar pedidos_erp como cross-check porque acumula datos históricos
+    // que no se resetean al asignar nuevos pedidos
+    var resultado = totalSumado;
 
-    // Usar el mayor entre la suma individual y el total de pedidos_erp
-    // pedidos_erp via DeltaMerge es la fuente más confiable del total acumulado
-    var resultado = Math.max(totalSumado, totalERP);
-
-    DEBUG_MODE && console.log('[OPERADORA] Total equipo: sumado=' + totalSumado + ', ERP=' + totalERP + ', resultado=' + resultado);
+    DEBUG_MODE && console.log('[OPERADORA] Total equipo: sumado=' + totalSumado + ', resultado=' + resultado);
 
     return resultado;
 }

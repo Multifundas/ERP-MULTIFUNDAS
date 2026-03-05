@@ -3993,6 +3993,28 @@ function assignProcesoToEstacion(procesoId, pedidoId, estacionId) {
 
     DEBUG_MODE && console.log('[SUPERVISORA] Asignación creada. Proceso activo:', maquina.procesoId, 'Cola:', maquina.colaProcesos.length);
 
+    // Limpiar estado_maquinas de la estación para evitar datos stale
+    // Cuando se asigna un nuevo pedido, resetear piezasHoy y procesoActivo
+    try {
+        var emData = safeLocalGet('estado_maquinas', {});
+        var emEstacion = emData[estacionId];
+        if (emEstacion && emEstacion.pedidoId != pedidoId) {
+            // Pedido diferente → resetear contadores
+            emData[estacionId] = Object.assign({}, emEstacion, {
+                pedidoId: pedidoId,
+                procesoId: procesoId,
+                procesoNombre: proceso.nombre,
+                piezasHoy: 0,
+                procesoActivo: false,
+                ultimaActualizacion: new Date().toISOString()
+            });
+            localStorage.setItem('estado_maquinas', JSON.stringify(emData));
+            DEBUG_MODE && console.log('[SUPERVISORA] estado_maquinas reseteado para', estacionId, '- nuevo pedido:', pedidoId);
+        }
+    } catch(e) {
+        console.error('[SUPERVISORA] Error limpiando estado_maquinas:', e);
+    }
+
     saveEstadoMaquinas();
     renderLayoutInSupervisora(supervisoraState.layout);
     renderPedidosList();
