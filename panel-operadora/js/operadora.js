@@ -276,12 +276,13 @@ function initPanelOperadora() {
     // Grupo 2: Cada 5 segundos (conexión)
     window._erpIntervals.push(setInterval(actualizarIndicadorConexion, 5000));
 
-    // Grupo 3: Cada 15 segundos (progreso equipo + nueva asignación + suspensión remota)
+    // Grupo 3: Cada 20 segundos (progreso equipo + nueva asignación + suspensión remota + publicar estado)
     window._erpIntervals.push(setInterval(function() {
         actualizarProgresoEquipo();
         verificarNuevaAsignacion();
         verificarSolicitudSuspension();
-    }, 15000));
+        publicarEstadoMaquina();
+    }, 20000));
 
     // Grupo 4: Cada 30 segundos (estadísticas + mensajes coco)
     window._erpIntervals.push(setInterval(function() {
@@ -2139,6 +2140,32 @@ function sincronizarConSupervisora(captura) {
     DEBUG_MODE && console.log('[OPERADORA] Captura sincronizada:', registro.cantidad, 'piezas');
 }
 
+/**
+ * Publica el estado actual de la máquina periódicamente para que otros operadores
+ * puedan leer las piezas actualizadas (no solo se publica en cada captura)
+ */
+function publicarEstadoMaquina() {
+    if (!operadoraState.procesoIniciado || !CONFIG_ESTACION?.id) return;
+
+    var estadoMaquinas = safeLocalGet('estado_maquinas', {});
+    var estadoActual = estadoMaquinas[CONFIG_ESTACION.id] || {};
+
+    estadoMaquinas[CONFIG_ESTACION.id] = {
+        ...estadoActual,
+        estado: operadoraState.procesoEnPausa ? 'pausado' : 'trabajando',
+        operadoraId: authState.operadoraActual?.id,
+        operadoraNombre: authState.operadoraActual?.nombre,
+        pedidoId: operadoraState.pedidoActual?.id,
+        procesoId: operadoraState.procesoActual?.procesoId,
+        procesoNombre: operadoraState.procesoActual?.procesoNombre,
+        piezasHoy: operadoraState.piezasCapturadas || 0,
+        procesoActivo: true,
+        ultimaActualizacion: new Date().toISOString()
+    };
+
+    localStorage.setItem('estado_maquinas', JSON.stringify(estadoMaquinas));
+}
+
 function actualizarAvance() {
     const piezas = operadoraState.piezasCapturadas;
     const meta = operadoraState.piezasMeta || 1;
@@ -2336,8 +2363,32 @@ function obtenerOtrasOperadorasEnProceso() {
                 iniciales = obtenerIniciales(operadoraNombre);
             }
 
-            // Piezas: buscar en estado_maquinas
+            // Piezas: buscar en estado_maquinas, asignación, y como fallback en pedidos_erp
             var piezasCapturadas = em.piezasHoy || 0;
+
+            // Si estado_maquinas no tiene piezas, intentar desde la asignación
+            if (piezasCapturadas === 0 && asignacion.piezasProducidas) {
+                piezasCapturadas = asignacion.piezasProducidas;
+            }
+
+            // Fallback: leer piezas del proceso en pedidos_erp (acumulado de todos los operadores)
+            // Solo usar si no hay dato individual (mejor que 0)
+            if (piezasCapturadas === 0) {
+                var pedidosERP = safeLocalGet('pedidos_erp', []);
+                var pedidoERP = pedidosERP.find(function(p) { return p.id == miPedidoId; });
+                if (pedidoERP && pedidoERP.procesos) {
+                    var procesoNormComun = procesoEnComun.toLowerCase().trim();
+                    var procERP = pedidoERP.procesos.find(function(p) {
+                        return (p.nombre || '').toLowerCase().trim() === procesoNormComun ||
+                               String(p.id) === procesoEnComun;
+                    });
+                    if (procERP && procERP.piezas > 0) {
+                        // pedidos_erp tiene el total acumulado por todos - usarlo como referencia
+                        piezasCapturadas = procERP.piezas;
+                        DEBUG_MODE && console.log('[OPERADORA] Piezas de', estacionId, 'leídas desde pedidos_erp:', piezasCapturadas);
+                    }
+                }
+            }
 
             otrasOperadoras.push({
                 estacionId: estacionId,
@@ -2364,15 +2415,51 @@ function obtenerOtrasOperadorasEnProceso() {
  */
 function obtenerTotalPiezasProceso(otrasOperadoras) {
     var misPiezas = operadoraState.piezasCapturadas || 0;
-    var totalEquipo = misPiezas;
+    var totalSumado = misPiezas;
 
     if (otrasOperadoras && otrasOperadoras.length > 0) {
         for (var i = 0; i < otrasOperadoras.length; i++) {
-            totalEquipo += (otrasOperadoras[i].piezas || 0);
+            totalSumado += (otrasOperadoras[i].piezas || 0);
         }
     }
 
-    return totalEquipo;
+    // Cross-check con pedidos_erp que tiene el total acumulado real via DeltaMerge
+    var totalERP = 0;
+    try {
+        var pedidoId = operadoraState.pedidoActual?.id;
+        var procesoNombre = (operadoraState.procesoActual?.procesoNombre || '').toLowerCase().trim();
+        var procesoId = operadoraState.procesoActual?.procesoId;
+        if (pedidoId) {
+            var pedidosERP = safeLocalGet('pedidos_erp', []);
+            var pedidoERP = pedidosERP.find(function(p) { return p.id == pedidoId; });
+            if (pedidoERP && pedidoERP.procesos) {
+                // Sumar piezas de todos los procesos que coincidan con mis procesos activos
+                var misProcesos = [procesoNombre];
+                if (operadoraState.modoSimultaneo && operadoraState.procesosSimultaneos) {
+                    operadoraState.procesosSimultaneos.forEach(function(p) {
+                        var n = (p.procesoNombre || '').toLowerCase().trim();
+                        if (n && misProcesos.indexOf(n) === -1) misProcesos.push(n);
+                    });
+                }
+                pedidoERP.procesos.forEach(function(proc) {
+                    var nomProc = (proc.nombre || '').toLowerCase().trim();
+                    if (misProcesos.indexOf(nomProc) !== -1 || proc.id == procesoId) {
+                        totalERP += (proc.piezas || 0);
+                    }
+                });
+            }
+        }
+    } catch (e) {
+        DEBUG_MODE && console.error('[OPERADORA] Error leyendo total de pedidos_erp:', e);
+    }
+
+    // Usar el mayor entre la suma individual y el total de pedidos_erp
+    // pedidos_erp via DeltaMerge es la fuente más confiable del total acumulado
+    var resultado = Math.max(totalSumado, totalERP);
+
+    DEBUG_MODE && console.log('[OPERADORA] Total equipo: sumado=' + totalSumado + ', ERP=' + totalERP + ', resultado=' + resultado);
+
+    return resultado;
 }
 
 /**
@@ -2903,6 +2990,7 @@ function iniciarProceso() {
         pedidoId: operadoraState.pedidoActual?.id,
         procesoId: operadoraState.procesoActual?.procesoId,
         procesoNombre: operadoraState.procesoActual?.procesoNombre,
+        piezasHoy: operadoraState.piezasCapturadas || 0,
         horaInicio: new Date().toISOString(),
         procesoActivo: true
     };
