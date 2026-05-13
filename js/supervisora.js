@@ -11489,3 +11489,370 @@ function mostrarLoadingState(containerId, mensaje) {
     container.appendChild(overlay);
     return function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); };
 }
+
+// ========================================
+// V2 (Fase 4): TIMELINE DE ACTIVIDAD
+// ========================================
+
+/**
+ * V2: Construye un array unificado de eventos cronológicos a partir de varios historiales locales.
+ * @param {Object} filtros - { fecha?: 'YYYY-MM-DD', tipo?: string, area?: string, busqueda?: string }
+ * @returns {Array<Object>} eventos ordenados de más reciente a más antiguo
+ */
+function construirEventosTimeline(filtros) {
+    filtros = filtros || {};
+    var eventos = [];
+
+    // 1. historial_produccion → capturas de piezas
+    var historialProd = safeLocalGet('historial_produccion', []);
+    historialProd.forEach(function(h) {
+        eventos.push({
+            tipo: 'produccion',
+            fecha: h.fecha || h.timestamp || null,
+            operadora: h.operadoraNombre || h.operador_nombre || h.operadorNombre || '—',
+            operadoraId: h.operadoraId || h.operador_id || h.operadorId,
+            estacion: h.estacionId || h.estacion_id || '',
+            pedidoId: h.pedidoId || h.pedido_id,
+            proceso: h.procesoNombre || h.proceso_nombre || '',
+            piezas: h.cantidad || h.piezas || 0,
+            area: h.area || '',
+            icono: 'fa-cubes',
+            color: '#10b981',
+            texto: (h.operadoraNombre || 'Operadora') + ' capturó ' + (h.cantidad || h.piezas || 0) + ' piezas en pedido #' + (h.pedidoId || '?') + ' (' + (h.procesoNombre || '') + ')'
+        });
+    });
+
+    // 2. historial_procesos → inicios/finalizaciones de procesos
+    var historialProc = safeLocalGet('historial_procesos', []);
+    historialProc.forEach(function(h) {
+        var accion = h.accion || (h.fechaFin ? 'finalizó' : 'inició');
+        eventos.push({
+            tipo: 'procesos',
+            fecha: h.fechaFin || h.fechaInicio || h.fecha || null,
+            operadora: h.operadoraNombre || h.operador_nombre || '—',
+            operadoraId: h.operadoraId || h.operador_id,
+            estacion: h.estacionId || '',
+            pedidoId: h.pedidoId || h.pedido_id,
+            proceso: h.procesoNombre || h.proceso_nombre || '',
+            piezas: h.piezasCompletadas || h.piezas_completadas || 0,
+            area: h.area || '',
+            icono: h.fechaFin ? 'fa-check-circle' : 'fa-play-circle',
+            color: h.fechaFin ? '#3b82f6' : '#f59e0b',
+            texto: (h.operadoraNombre || 'Operadora') + ' ' + accion + ' "' + (h.procesoNombre || 'proceso') + '" en pedido #' + (h.pedidoId || '?') + (h.piezasCompletadas ? ' con ' + h.piezasCompletadas + ' pzas' : '')
+        });
+    });
+
+    // 3. tiempos_muertos → pausas y problemas
+    var tiemposMuertos = safeLocalGet('tiempos_muertos', []);
+    tiemposMuertos.forEach(function(tm) {
+        eventos.push({
+            tipo: 'tiempos_muertos',
+            fecha: tm.fechaFin || tm.fechaInicio || tm.fecha_inicio || null,
+            operadora: tm.operadoraNombre || tm.operador_nombre || '—',
+            operadoraId: tm.operadorId || tm.operador_id,
+            estacion: tm.estacionId || tm.estacion_id || '',
+            pedidoId: tm.pedidoId,
+            proceso: '',
+            motivo: tm.motivoNombre || tm.motivo_nombre || '',
+            duracion: tm.duracionMinutos || tm.duracion_minutos,
+            area: '',
+            icono: 'fa-pause-circle',
+            color: '#ef4444',
+            texto: (tm.operadoraNombre || 'Operadora') + ' tuvo tiempo muerto: ' + (tm.motivoNombre || tm.motivo_nombre || 'motivo') + (tm.duracionMinutos ? ' (' + tm.duracionMinutos + ' min)' : '')
+        });
+    });
+
+    // 4. historial_turnos → cierres de turno
+    var historialTurnos = safeLocalGet('historial_turnos', []);
+    historialTurnos.forEach(function(t) {
+        eventos.push({
+            tipo: 'turnos',
+            fecha: t.fecha || t.fechaCierre || null,
+            operadora: t.operadoraNombre || '—',
+            operadoraId: t.operadoraId,
+            estacion: t.estacionId || '',
+            piezas: t.piezas || 0,
+            eficiencia: t.eficiencia || 0,
+            area: '',
+            icono: 'fa-flag-checkered',
+            color: '#8b5cf6',
+            texto: (t.operadoraNombre || 'Operadora') + ' cerró turno: ' + (t.piezas || 0) + ' pzas, ' + (t.eficiencia || 0) + '% eficiencia'
+        });
+    });
+
+    // Aplicar filtros
+    var filtrados = eventos.filter(function(e) {
+        if (!e.fecha) return false;
+        if (filtros.fecha) {
+            var diaEvento = new Date(e.fecha).toISOString().slice(0, 10);
+            if (diaEvento !== filtros.fecha) return false;
+        }
+        if (filtros.tipo && filtros.tipo !== 'todos' && e.tipo !== filtros.tipo) return false;
+        if (filtros.area && filtros.area !== 'todas') {
+            var areaEv = (e.area || '').toLowerCase();
+            if (areaEv.indexOf(filtros.area.toLowerCase()) === -1) return false;
+        }
+        if (filtros.busqueda) {
+            var q = filtros.busqueda.toLowerCase();
+            var hay = ((e.operadora || '') + ' ' + (e.pedidoId || '') + ' ' + (e.proceso || '') + ' ' + (e.estacion || '')).toLowerCase();
+            if (hay.indexOf(q) === -1) return false;
+        }
+        return true;
+    });
+
+    // Ordenar de más reciente a más antiguo
+    filtrados.sort(function(a, b) {
+        return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
+    });
+
+    // Limitar a 200 más recientes para performance
+    return filtrados.slice(0, 200);
+}
+
+/**
+ * V2: Renderiza el timeline en el contenedor #timelineLista.
+ */
+function renderTimeline(eventos) {
+    var container = document.getElementById('timelineLista');
+    if (!container) return;
+
+    if (!eventos || eventos.length === 0) {
+        container.innerHTML = '<p class="text-muted" style="text-align:center;padding:40px;"><i class="fas fa-inbox"></i> No hay eventos para los filtros seleccionados</p>';
+        return;
+    }
+
+    var html = '<div class="timeline-feed" style="position:relative;padding-left:24px;border-left:2px solid #e5e7eb;">';
+    eventos.forEach(function(ev) {
+        var fechaStr = formatearFechaHoraTimeline(ev.fecha);
+        html += '<div class="timeline-evento" style="position:relative;padding:10px 0 14px 16px;">' +
+            '<span style="position:absolute;left:-31px;top:14px;width:24px;height:24px;border-radius:50%;background:' + ev.color + ';color:white;display:flex;align-items:center;justify-content:center;font-size:11px;"><i class="fas ' + ev.icono + '"></i></span>' +
+            '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap;">' +
+                '<span class="timeline-texto" style="font-size:0.95rem;">' + S(ev.texto) + '</span>' +
+                '<span class="timeline-fecha" style="font-size:0.78rem;color:#6b7280;white-space:nowrap;">' + S(fechaStr) + '</span>' +
+            '</div>' +
+            (ev.estacion ? '<small style="color:#6b7280;"><i class="fas fa-map-marker-alt"></i> ' + S(ev.estacion) + '</small>' : '') +
+        '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function formatearFechaHoraTimeline(fechaISO) {
+    try {
+        var d = new Date(fechaISO);
+        if (isNaN(d.getTime())) return '';
+        var hoy = new Date();
+        var esHoy = d.toDateString() === hoy.toDateString();
+        var hora = d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+        if (esHoy) return 'Hoy ' + hora;
+        var fecha = d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+        return fecha + ' ' + hora;
+    } catch (e) {
+        return '';
+    }
+}
+
+/**
+ * V2: Refresca el timeline aplicando los filtros del UI.
+ */
+function refrescarTimeline() {
+    var filtros = {
+        fecha: (document.getElementById('timelineFiltroFecha') || {}).value || '',
+        tipo: (document.getElementById('timelineFiltroTipo') || {}).value || 'todos',
+        area: (document.getElementById('timelineFiltroArea') || {}).value || 'todas',
+        busqueda: (document.getElementById('timelineFiltroBusqueda') || {}).value || ''
+    };
+    var eventos = construirEventosTimeline(filtros);
+    renderTimeline(eventos);
+}
+
+/**
+ * V2: Llenar el dropdown de áreas en el timeline a partir del catálogo.
+ */
+function llenarFiltroAreasTimeline() {
+    var select = document.getElementById('timelineFiltroArea');
+    if (!select) return;
+    var areas = [];
+    try {
+        if (typeof db !== 'undefined' && db && db.data && Array.isArray(db.data.areas)) {
+            areas = db.data.areas.map(function(a) { return a.nombre; });
+        }
+    } catch (e) {}
+    if (areas.length === 0) {
+        areas = ['costura', 'corte', 'empaque', 'serigrafia', 'calidad'];
+    }
+    var html = '<option value="todas">Todas las áreas</option>';
+    areas.forEach(function(a) {
+        html += '<option value="' + S(a) + '">' + S(a) + '</option>';
+    });
+    select.innerHTML = html;
+}
+
+/**
+ * V2: Inicializa la sección Timeline cuando el usuario hace click en su tab.
+ * showSection() la llamará a través de una pequeña extensión más abajo.
+ */
+function initTimelineSeccion() {
+    llenarFiltroAreasTimeline();
+    // Default: hoy
+    var input = document.getElementById('timelineFiltroFecha');
+    if (input && !input.value) {
+        input.value = new Date().toISOString().slice(0, 10);
+    }
+    refrescarTimeline();
+}
+
+// Hook al cambio de sección: si entran a timeline, inicializar
+(function patchShowSectionForTimeline() {
+    var prev = typeof showSection === 'function' ? showSection : null;
+    if (!prev) return;
+    window.showSection = function(seccion) {
+        prev(seccion);
+        if (seccion === 'timeline') {
+            try { initTimelineSeccion(); } catch (e) { DEBUG_MODE && console.warn('[V2] Error init timeline:', e); }
+        }
+    };
+})();
+
+// Auto-refresh del timeline cuando estamos en esa sección
+setInterval(function() {
+    var sec = document.getElementById('section-timeline');
+    if (sec && sec.classList.contains('active')) {
+        try { refrescarTimeline(); } catch (e) {}
+    }
+}, 30000);
+
+// Exponer al window
+window.refrescarTimeline = refrescarTimeline;
+window.initTimelineSeccion = initTimelineSeccion;
+
+// ========================================
+// V2 (Fase 5): MAPA DE PLANTA CON ESTADO EN VIVO
+// ========================================
+
+/**
+ * V2: Refresh ligero del mapa cada 7 segundos (solo cuando la sección planta está visible).
+ * No re-renderiza todo el layout; solo actualiza datos y clases CSS de cada estación.
+ * También reacciona a sync-update para reflejar cambios remotos inmediatamente.
+ */
+function iniciarRefreshMapaEnVivo() {
+    if (window._v2MapaInterval) {
+        clearInterval(window._v2MapaInterval);
+    }
+
+    window._v2MapaInterval = setInterval(function() {
+        // Solo refrescar si la sección de planta está activa y el usuario no está interactuando
+        var seccionPlanta = document.getElementById('section-planta');
+        if (!seccionPlanta || !seccionPlanta.classList.contains('active')) return;
+        if (_userInteracting) return;
+
+        try {
+            // Recargar estado de máquinas y operadoras desde localStorage
+            if (typeof loadEstadoMaquinas === 'function') loadEstadoMaquinas();
+            // Refrescar solo las estaciones del mapa (no re-renderizar el layout completo)
+            if (typeof actualizarEstacionesEnMapa === 'function' && supervisoraState.layout) {
+                actualizarEstacionesEnMapa();
+            }
+            // Actualizar stats del header sin pestañeo si existe
+            if (typeof updateStats === 'function') updateStats();
+        } catch (e) {
+            DEBUG_MODE && console.warn('[V2 mapa] Error en refresh en vivo:', e);
+        }
+    }, 7000);
+
+    // Reaccionar a cambios remotos al instante (sin esperar el intervalo)
+    if (!window._v2MapaSyncListener) {
+        window._v2MapaSyncListener = function(e) {
+            var key = e && e.detail && e.detail.key;
+            if (!key) return;
+            // Estados que afectan el mapa
+            if (key === 'estado_maquinas' || key === 'estado_operadores' ||
+                key === 'asignaciones_estaciones' || key === 'asignaciones_multi_pedido') {
+                try {
+                    if (typeof loadEstadoMaquinas === 'function') loadEstadoMaquinas();
+                    if (typeof actualizarEstacionesEnMapa === 'function' && supervisoraState.layout) {
+                        actualizarEstacionesEnMapa();
+                    }
+                    DEBUG_MODE && console.log('[V2 mapa] Refresh por sync-update (' + key + ')');
+                } catch (err) {
+                    DEBUG_MODE && console.warn('[V2 mapa] Error sync-update:', err);
+                }
+            }
+        };
+        window.addEventListener('sync-update', window._v2MapaSyncListener);
+    }
+
+    DEBUG_MODE && console.log('[V2 mapa] Refresh en vivo iniciado (cada 7s + sync-update)');
+}
+
+/**
+ * V2: Mejora el tooltip de cada estación del mapa con información en vivo:
+ * - Operadora activa, pedido en curso, tiempo en proceso, piezas hechas/meta.
+ *
+ * Esta función se llama después de actualizarEstacionesEnMapa() para enriquecer
+ * el atributo `title` de cada elemento .station, sin tocar el HTML interno.
+ */
+function actualizarTooltipsMapaEnVivo() {
+    var posiciones = document.querySelectorAll('.plant-map [data-station-id], .plant-map .station[data-station-id]');
+    if (!posiciones || posiciones.length === 0) return;
+
+    var asignaciones = safeLocalGet('asignaciones_estaciones', {});
+    var asignacionesMulti = safeLocalGet('asignaciones_multi_pedido', {});
+
+    posiciones.forEach(function(el) {
+        var sid = el.getAttribute('data-station-id');
+        if (!sid) return;
+        var maquina = (supervisoraState.maquinas || {})[sid];
+        var asignacion = asignaciones[sid];
+        var multi = asignacionesMulti[sid];
+
+        var partes = [sid];
+
+        if (maquina && maquina.estado) {
+            partes.push('Estado: ' + maquina.estado);
+        }
+        if (maquina && maquina.operadores && maquina.operadores.length > 0) {
+            partes.push('Operadora(s): ' + maquina.operadores.map(function(o) { return o.nombre || o.id; }).join(', '));
+        }
+
+        if (Array.isArray(multi) && multi.length > 0) {
+            partes.push('Pedidos en curso: ' + multi.length);
+            multi.slice(0, 3).forEach(function(p) {
+                partes.push('  • #' + (p.pedidoId || p.codigo) + ' — ' + (p.piezasCapturadas || 0) + '/' + (p.piezasMeta || '?'));
+            });
+        } else if (asignacion && asignacion.pedidoId) {
+            partes.push('Pedido: #' + asignacion.pedidoId);
+            if (asignacion.procesoNombre) partes.push('Proceso: ' + asignacion.procesoNombre);
+        }
+
+        if (maquina && maquina.tiempoEnEstadoMin) {
+            partes.push('Tiempo en estado: ' + maquina.tiempoEnEstadoMin + ' min');
+        }
+
+        el.title = partes.join('\n');
+    });
+}
+
+// Hook: cuando se actualizan estaciones, también actualizar tooltips
+(function patchActualizarEstacionesParaTooltips() {
+    if (typeof actualizarEstacionesEnMapa !== 'function') return;
+    var orig = actualizarEstacionesEnMapa;
+    if (orig._v2Wrapped) return;
+    window.actualizarEstacionesEnMapa = function() {
+        orig.apply(this, arguments);
+        try { actualizarTooltipsMapaEnVivo(); } catch (e) { DEBUG_MODE && console.warn('[V2 mapa] tooltip error:', e); }
+    };
+    window.actualizarEstacionesEnMapa._v2Wrapped = true;
+})();
+
+// Arrancar el refresh en vivo cuando el DOM esté listo (tras la inicialización principal)
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(iniciarRefreshMapaEnVivo, 1500);
+} else {
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(iniciarRefreshMapaEnVivo, 1500);
+    });
+}
+
+window.iniciarRefreshMapaEnVivo = iniciarRefreshMapaEnVivo;
+window.actualizarTooltipsMapaEnVivo = actualizarTooltipsMapaEnVivo;

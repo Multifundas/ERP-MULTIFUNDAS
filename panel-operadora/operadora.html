@@ -286,18 +286,30 @@
             </section>
 
             <!-- ========================================
-                 SECCIÓN MULTI-PEDIDOS (CALIDAD/EMPAQUE)
-                 Solo visible para estaciones E1, E2, etc.
+                 SECCIÓN MULTI-PEDIDOS (CALIDAD/EMPAQUE + V2 pull-flow)
+                 Visible para estaciones E1, E2, y todas con MULTIFUNDAS_V2 activo.
                  ======================================== -->
             <section class="panel-column col-multi-pedidos" id="colMultiPedidos" style="display: none;">
                 <div class="column-header">
-                    <h2><i class="fas fa-boxes"></i> Pedidos Activos</h2>
+                    <h2><i class="fas fa-boxes"></i> Pedidos</h2>
                     <div class="header-actions-multi">
                         <span class="pedidos-count-badge" id="pedidosCountBadge">0</span>
                         <button class="btn-refresh-multi" onclick="refrescarAsignacionMulti()" title="Actualizar pedidos">
                             <i class="fas fa-sync-alt"></i>
                         </button>
                     </div>
+                </div>
+
+                <!-- V2: Tabs Mis Pedidos / Disponibles -->
+                <div class="pedido-tabs multi-pedido-tabs">
+                    <button class="pedido-tab active" data-multi-tab="activos" onclick="switchMultiTab('activos')">
+                        <i class="fas fa-tasks"></i> Mis Pedidos
+                        <span class="tab-count" id="multiTabActivosBadge">0</span>
+                    </button>
+                    <button class="pedido-tab" data-multi-tab="disponibles" onclick="switchMultiTab('disponibles')">
+                        <i class="fas fa-inbox"></i> Disponibles
+                        <span class="tab-count" id="multiTabDisponiblesBadge">0</span>
+                    </button>
                 </div>
 
                 <!-- Contenedor de tarjetas de pedidos -->
@@ -311,6 +323,19 @@
                             <i class="fas fa-sync-alt"></i> Verificar
                         </button>
                     </div>
+                </div>
+
+                <!-- V2: Contenedor de pedidos DISPONIBLES (lista pull) -->
+                <div class="multi-disponibles-container" id="multiDisponiblesContainer" style="display: none;">
+                    <div class="sin-disponibles" id="sinDisponibles">
+                        <i class="fas fa-inbox"></i>
+                        <h3>No hay pedidos disponibles</h3>
+                        <p>Cuando lleguen pedidos para tu área aparecerán aquí</p>
+                        <button class="btn btn-secondary" onclick="refrescarPedidosDisponibles()">
+                            <i class="fas fa-sync-alt"></i> Actualizar
+                        </button>
+                    </div>
+                    <!-- Las tarjetas de pedidos disponibles se generan dinámicamente aquí -->
                 </div>
 
                 <!-- Sección de captura rápida para pedido seleccionado -->

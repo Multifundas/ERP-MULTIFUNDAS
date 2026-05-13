@@ -2418,3 +2418,164 @@ function toggleEtapasPedido(pedidoId) {
     }
 }
 
+// ========================================
+// V2 (Fase 4): TIMELINE DE ACTIVIDAD EN ADMIN
+// ========================================
+
+/**
+ * V2 admin: construye eventos cronológicos a partir de los historiales locales.
+ */
+function adminConstruirEventosTimeline(filtros) {
+    filtros = filtros || {};
+    var eventos = [];
+
+    var historialProd = safeLocalGet('historial_produccion', []);
+    historialProd.forEach(function(h) {
+        eventos.push({
+            tipo: 'produccion',
+            fecha: h.fecha || h.timestamp,
+            operadora: h.operadoraNombre || h.operador_nombre || '—',
+            pedidoId: h.pedidoId || h.pedido_id,
+            proceso: h.procesoNombre || h.proceso_nombre || '',
+            estacion: h.estacionId || '',
+            icono: 'fa-cubes',
+            color: '#10b981',
+            texto: (h.operadoraNombre || 'Operadora') + ' capturó ' + (h.cantidad || h.piezas || 0) + ' piezas en #' + (h.pedidoId || '?') + ' (' + (h.procesoNombre || '') + ')'
+        });
+    });
+
+    var historialProc = safeLocalGet('historial_procesos', []);
+    historialProc.forEach(function(h) {
+        var accion = h.accion || (h.fechaFin ? 'finalizó' : 'inició');
+        eventos.push({
+            tipo: 'procesos',
+            fecha: h.fechaFin || h.fechaInicio || h.fecha,
+            operadora: h.operadoraNombre || '—',
+            pedidoId: h.pedidoId,
+            proceso: h.procesoNombre || '',
+            estacion: h.estacionId || '',
+            icono: h.fechaFin ? 'fa-check-circle' : 'fa-play-circle',
+            color: h.fechaFin ? '#3b82f6' : '#f59e0b',
+            texto: (h.operadoraNombre || 'Operadora') + ' ' + accion + ' "' + (h.procesoNombre || 'proceso') + '" en #' + (h.pedidoId || '?')
+        });
+    });
+
+    var tiemposMuertos = safeLocalGet('tiempos_muertos', []);
+    tiemposMuertos.forEach(function(tm) {
+        eventos.push({
+            tipo: 'tiempos_muertos',
+            fecha: tm.fechaFin || tm.fechaInicio,
+            operadora: tm.operadoraNombre || '—',
+            estacion: tm.estacionId || '',
+            icono: 'fa-pause-circle',
+            color: '#ef4444',
+            texto: (tm.operadoraNombre || 'Operadora') + ' tiempo muerto: ' + (tm.motivoNombre || 'motivo') + (tm.duracionMinutos ? ' (' + tm.duracionMinutos + ' min)' : '')
+        });
+    });
+
+    var historialTurnos = safeLocalGet('historial_turnos', []);
+    historialTurnos.forEach(function(t) {
+        eventos.push({
+            tipo: 'turnos',
+            fecha: t.fecha,
+            operadora: t.operadoraNombre || '—',
+            estacion: t.estacionId || '',
+            icono: 'fa-flag-checkered',
+            color: '#8b5cf6',
+            texto: (t.operadoraNombre || 'Operadora') + ' cerró turno: ' + (t.piezas || 0) + ' pzas, ' + (t.eficiencia || 0) + '%'
+        });
+    });
+
+    var filtrados = eventos.filter(function(e) {
+        if (!e.fecha) return false;
+        if (filtros.fecha) {
+            var dia = new Date(e.fecha).toISOString().slice(0, 10);
+            if (dia !== filtros.fecha) return false;
+        }
+        if (filtros.tipo && filtros.tipo !== 'todos' && e.tipo !== filtros.tipo) return false;
+        if (filtros.busqueda) {
+            var q = filtros.busqueda.toLowerCase();
+            var hay = ((e.operadora || '') + ' ' + (e.pedidoId || '') + ' ' + (e.proceso || '') + ' ' + (e.estacion || '')).toLowerCase();
+            if (hay.indexOf(q) === -1) return false;
+        }
+        return true;
+    });
+
+    filtrados.sort(function(a, b) { return new Date(b.fecha).getTime() - new Date(a.fecha).getTime(); });
+    return filtrados.slice(0, 200);
+}
+
+/**
+ * V2 admin: abre un modal con el timeline. Reusa openModal del admin si está disponible.
+ */
+function showTimelineAdmin() {
+    var hoy = new Date().toISOString().slice(0, 10);
+    var content = `
+        <div class="timeline-admin">
+            <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
+                <input type="date" id="adminTimelineFecha" value="${hoy}" onchange="refrescarTimelineAdmin()" style="padding:6px;border-radius:6px;border:1px solid #cbd5e1;">
+                <select id="adminTimelineTipo" onchange="refrescarTimelineAdmin()" style="padding:6px;border-radius:6px;border:1px solid #cbd5e1;">
+                    <option value="todos">Todos los eventos</option>
+                    <option value="produccion">Producción</option>
+                    <option value="procesos">Procesos</option>
+                    <option value="tiempos_muertos">Tiempos muertos</option>
+                    <option value="turnos">Turnos</option>
+                </select>
+                <input type="text" id="adminTimelineBusqueda" placeholder="Buscar operadora o #pedido..." oninput="refrescarTimelineAdmin()" style="padding:6px;border-radius:6px;border:1px solid #cbd5e1;flex:1;min-width:160px;">
+                <button class="btn btn-secondary" onclick="refrescarTimelineAdmin()"><i class="fas fa-sync-alt"></i></button>
+            </div>
+            <div id="adminTimelineLista" style="max-height:60vh;overflow:auto;"></div>
+        </div>
+    `;
+    if (typeof openModal === 'function') {
+        openModal('Timeline de Actividad', content, null);
+    } else {
+        var div = document.createElement('div');
+        div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+        div.innerHTML = '<div style="background:white;border-radius:8px;padding:20px;max-width:900px;width:100%;">' + content + '<div style="margin-top:12px;text-align:right;"><button class="btn btn-secondary" onclick="this.closest(\'div[style*=position]\').remove();">Cerrar</button></div></div>';
+        document.body.appendChild(div);
+    }
+    setTimeout(refrescarTimelineAdmin, 50);
+}
+
+function refrescarTimelineAdmin() {
+    var filtros = {
+        fecha: (document.getElementById('adminTimelineFecha') || {}).value || '',
+        tipo: (document.getElementById('adminTimelineTipo') || {}).value || 'todos',
+        busqueda: (document.getElementById('adminTimelineBusqueda') || {}).value || ''
+    };
+    var eventos = adminConstruirEventosTimeline(filtros);
+    var container = document.getElementById('adminTimelineLista');
+    if (!container) return;
+
+    if (eventos.length === 0) {
+        container.innerHTML = '<p class="text-muted" style="text-align:center;padding:20px;"><i class="fas fa-inbox"></i> Sin eventos</p>';
+        return;
+    }
+
+    var html = '<div style="position:relative;padding-left:24px;border-left:2px solid #e5e7eb;">';
+    eventos.forEach(function(ev) {
+        var fechaStr = '';
+        try {
+            var d = new Date(ev.fecha);
+            var hora = d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+            var esHoy = new Date().toDateString() === d.toDateString();
+            fechaStr = esHoy ? 'Hoy ' + hora : d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) + ' ' + hora;
+        } catch (e) {}
+
+        html += '<div style="position:relative;padding:8px 0 12px 16px;">' +
+            '<span style="position:absolute;left:-31px;top:10px;width:24px;height:24px;border-radius:50%;background:' + ev.color + ';color:white;display:flex;align-items:center;justify-content:center;font-size:11px;"><i class="fas ' + ev.icono + '"></i></span>' +
+            '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap;">' +
+                '<span style="font-size:0.93rem;">' + S(ev.texto) + '</span>' +
+                '<span style="font-size:0.78rem;color:#6b7280;white-space:nowrap;">' + S(fechaStr) + '</span>' +
+            '</div>' +
+            (ev.estacion ? '<small style="color:#6b7280;"><i class="fas fa-map-marker-alt"></i> ' + S(ev.estacion) + '</small>' : '') +
+        '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+window.showTimelineAdmin = showTimelineAdmin;
+window.refrescarTimelineAdmin = refrescarTimelineAdmin;
+

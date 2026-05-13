@@ -242,10 +242,11 @@ function initPanelOperadora() {
     // Actualizar UI con datos de la operadora
     actualizarHeaderOperadora();
 
-    // *** DETECTAR SI ES ESTACIÓN DE CALIDAD/EMPAQUE ***
-    if (esEstacionCalidadEmpaque()) {
-        DEBUG_MODE && console.log('[OPERADORA] Modo Multi-Pedido activado (Calidad/Empaque)');
-        // Inicializar modo multi-pedido para calidad/empaque
+    // *** DETECTAR SI ESTA ESTACIÓN USA MODO MULTI-PEDIDO ***
+    // V2: cualquier área puede usar multi via feature flag; Calidad/Empaque siempre lo usan.
+    if (esEstacionMultiPedido()) {
+        DEBUG_MODE && console.log('[OPERADORA] Modo Multi-Pedido activado para área:', CONFIG_ESTACION.area);
+        // Inicializar modo multi-pedido
         initModoMultiPedido();
     } else {
         // Modo normal para costura, corte, etc.
@@ -4441,6 +4442,32 @@ function esEstacionCalidad() {
            nombreEstacion.includes('quality');
 }
 
+/**
+ * V2: Detecta si esta estación debe usar el modo multi-pedido (pull flow).
+ *
+ * Retorna true si:
+ * - El feature flag MULTIFUNDAS_V2 está habilitado (global o para esta estación), O
+ * - Es una estación de Calidad/Empaque (compatibilidad legacy)
+ *
+ * Cuando retorna true, la operadora ve la UI de múltiples pedidos en paralelo
+ * con cronómetro independiente y puede tomar pedidos de una lista pull.
+ *
+ * @returns {boolean}
+ */
+function esEstacionMultiPedido() {
+    // Compatibilidad: Calidad/Empaque siempre usan multi-pedido (comportamiento histórico)
+    if (esEstacionCalidadEmpaque()) {
+        return true;
+    }
+
+    // V2: cualquier otra área puede activarse via feature flag
+    if (window.MULTIFUNDAS_V2 && typeof window.MULTIFUNDAS_V2.isEnabled === 'function') {
+        return window.MULTIFUNDAS_V2.isEnabled();
+    }
+
+    return false;
+}
+
 // Variable para saber si es finalización automática
 let finalizacionAutomaticaMetros = false;
 
@@ -7015,15 +7042,15 @@ function obtenerInfoPedidoProceso(asignacion) {
 // ========================================
 
 /**
- * Inicializa el modo multi-pedido si es estación de calidad/empaque
+ * Inicializa el modo multi-pedido (Calidad/Empaque siempre, o cualquier área con flag V2 activo)
  */
 function initModoMultiPedido() {
-    if (!esEstacionCalidadEmpaque()) {
-        DEBUG_MODE && console.log('[OPERADORA] No es estación de Calidad/Empaque, usando modo normal');
+    if (!esEstacionMultiPedido()) {
+        DEBUG_MODE && console.log('[OPERADORA] Esta estación no usa modo multi-pedido, usando modo normal');
         return false;
     }
 
-    DEBUG_MODE && console.log('[OPERADORA] Inicializando modo Multi-Pedido para Calidad/Empaque');
+    DEBUG_MODE && console.log('[OPERADORA] Inicializando modo Multi-Pedido para área:', CONFIG_ESTACION.area);
     operadoraState.modoMultiPedido = true;
 
     // Cambiar el panel-main de grid a flex para modo multi-pedido
@@ -7069,6 +7096,20 @@ function initModoMultiPedido() {
 
     // Verificar nuevos pedidos cada 5 segundos
     setInterval(verificarNuevosPedidosMulti, 5000);
+
+    // V2 (Paso 2.5): iniciar auto-refresh de la lista pull (cada 15s + sync-update)
+    if (typeof iniciarAutoRefreshDisponibles === 'function') {
+        iniciarAutoRefreshDisponibles();
+        // Precalcular badge inicial de disponibles
+        if (typeof cargarPedidosDisponibles === 'function') {
+            const lista = cargarPedidosDisponibles();
+            actualizarBadgeDisponibles(lista.length);
+        }
+    }
+
+    // V2: actualizar badge inicial de activos
+    const badgeActivos = document.getElementById('multiTabActivosBadge');
+    if (badgeActivos) badgeActivos.textContent = operadoraState.pedidosActivos.length;
 
     return true;
 }
@@ -7890,6 +7931,29 @@ function mostrarDetallePedido(pedidoId) {
     const procesoNombre = pedido.procesoNombre || pedido.proceso || 'Empaque/Calidad';
     const progreso = Math.round((pedido.piezasCapturadas / pedido.piezasMeta) * 100) || 0;
 
+    // V2: cargar detalles específicos del área (bies, color hilo, tipo tela, etc.)
+    // En modo multi (V2 generalizado), cada pedido muestra sus campos específicos según área.
+    let detallesAreaHTML = '';
+    try {
+        if (typeof cargarDetallesPorArea === 'function') {
+            const asignaciones = safeLocalGet('asignaciones_estaciones', {});
+            const miAsignacion = asignaciones[CONFIG_ESTACION.id];
+            // Combinar pedidoCompleto + pedido: el pedido en memoria tiene prioridad
+            const fuenteCompleta = Object.assign({}, pedidoCompleto || {}, pedido);
+            const detallesInner = cargarDetallesPorArea(fuenteCompleta, miAsignacion);
+            if (detallesInner && !detallesInner.includes('sin-detalles')) {
+                detallesAreaHTML = `
+                    <div class="detalle-seccion">
+                        <h4><i class="fas fa-cog"></i> Especificaciones del Proceso</h4>
+                        ${detallesInner}
+                    </div>
+                `;
+            }
+        }
+    } catch (e) {
+        DEBUG_MODE && console.warn('[V2] Error cargando detalles de área:', e);
+    }
+
     const modalHTML = `
         <div class="modal-overlay-detalle" id="modalDetallePedido">
             <div class="modal-detalle">
@@ -7920,6 +7984,7 @@ function mostrarDetallePedido(pedidoId) {
                         <h4><i class="fas fa-align-left"></i> Descripción</h4>
                         <p class="detalle-descripcion">${descripcion}</p>
                     </div>
+                    ${detallesAreaHTML}
                     <div class="detalle-seccion">
                         <h4><i class="fas fa-boxes"></i> Artículos del Pedido</h4>
                         ${articulosHTML}
@@ -8062,6 +8127,11 @@ function actualizarContadorPedidos() {
     if (badge) {
         badge.textContent = operadoraState.pedidosActivos.length;
     }
+    // V2: mantener sincronizado el badge de la tab 'Mis Pedidos'
+    const badgeTabActivos = document.getElementById('multiTabActivosBadge');
+    if (badgeTabActivos) {
+        badgeTabActivos.textContent = operadoraState.pedidosActivos.length;
+    }
 }
 
 /**
@@ -8168,6 +8238,15 @@ function capturarRapidoMulti(pedidoId, cantidad) {
     if (!pedido.procesoIniciado) {
         mostrarToast('Primero inicia el proceso', 'warning');
         return;
+    }
+
+    // V2: validar captura según reglas del área (empaque: múltiplos; corte: capas)
+    if (typeof validarCapturaArea === 'function') {
+        const validacion = validarCapturaArea(cantidad, pedido);
+        if (!validacion.valido) {
+            mostrarToast(validacion.mensaje, 'warning');
+            return;
+        }
     }
 
     pedido.piezasCapturadas += cantidad;
@@ -8597,6 +8676,419 @@ function actualizarDisplayTimerPedido(pedidoId) {
 function refrescarAsignacionMulti() {
     cargarPedidosMultiples();
     mostrarToast('Verificando nuevos pedidos...', 'info');
+}
+
+// ========================================
+// V2: TABS Mis Pedidos / Disponibles + Pull-Flow
+// ========================================
+
+/**
+ * V2: Carga los pedidos disponibles para el área de esta estación.
+ * Filtro flexible: cualquier pedido con al menos un proceso pendiente/en_proceso del área.
+ * Excluye pedidos que ya están en operadoraState.pedidosActivos.
+ *
+ * @returns {Array<Object>} array de pedidos disponibles
+ */
+function cargarPedidosDisponibles() {
+    const areaTablet = (CONFIG_ESTACION.area || '').toLowerCase().trim();
+    if (!areaTablet) {
+        DEBUG_MODE && console.warn('[V2] CONFIG_ESTACION.area no definida, no se puede filtrar disponibles');
+        return [];
+    }
+
+    // 1. Construir set de IDs y nombres de procesos del área de la tablet
+    let procesoIdsDeMiArea = new Set();
+    let nombreProcesosDeMiArea = new Set();
+    try {
+        if (typeof db !== 'undefined' && db && db.data && Array.isArray(db.data.procesos) && Array.isArray(db.data.areas)) {
+            const areaMia = db.data.areas.find(a => (a.nombre || '').toLowerCase().trim() === areaTablet);
+            if (areaMia) {
+                db.data.procesos.forEach(p => {
+                    if (p.areaId === areaMia.id) {
+                        procesoIdsDeMiArea.add(p.id);
+                        nombreProcesosDeMiArea.add((p.nombre || '').toLowerCase().trim());
+                    }
+                });
+            }
+        }
+    } catch (e) {
+        DEBUG_MODE && console.warn('[V2] Error cruzando área/procesos:', e);
+    }
+
+    // 2. Set de pedidoIds que ya tengo activos (para excluirlos)
+    const idsActivos = new Set((operadoraState.pedidosActivos || []).map(p => String(p.pedidoId || p.id)));
+
+    // 3. Leer pedidos_erp y filtrar
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
+    const disponibles = [];
+
+    pedidosERP.forEach(pedido => {
+        // Excluir si ya está activo o si está completado/cancelado
+        if (idsActivos.has(String(pedido.id))) return;
+        const estado = (pedido.estado || '').toLowerCase();
+        if (estado === 'completado' || estado === 'entregado' || estado === 'cancelado') return;
+
+        // Buscar un proceso pendiente/en_proceso que matchee mi área
+        let procesoMatch = null;
+        (pedido.productos || []).some(prod => {
+            const procs = prod.avanceProcesos || [];
+            return procs.some(proc => {
+                const procEstado = (proc.estado || 'pendiente').toLowerCase();
+                if (procEstado === 'completado') return false;
+
+                // Match por procesoId (fiable) o por nombre (fallback)
+                const matchById = procesoIdsDeMiArea.size > 0 && procesoIdsDeMiArea.has(proc.procesoId);
+                const matchByName = nombreProcesosDeMiArea.size > 0 &&
+                                    nombreProcesosDeMiArea.has((proc.nombre || '').toLowerCase().trim());
+                // Fallback adicional: si no hay catálogo, match si el nombre del proceso incluye el área
+                const matchFallback = procesoIdsDeMiArea.size === 0 &&
+                                      (proc.nombre || '').toLowerCase().includes(areaTablet);
+
+                if (matchById || matchByName || matchFallback) {
+                    procesoMatch = proc;
+                    return true;
+                }
+                return false;
+            });
+        });
+
+        if (procesoMatch) {
+            disponibles.push({
+                id: pedido.id,
+                codigo: pedido.codigo || String(pedido.id),
+                cliente: pedido.cliente || pedido.clienteNombre || 'Cliente',
+                prioridad: pedido.prioridad || 'normal',
+                fechaEntrega: pedido.fechaEntrega || null,
+                imagen: pedido.imagen || (pedido.productos && pedido.productos[0] && pedido.productos[0].imagen) || '',
+                productos: pedido.productos || [],
+                procesoMatch: procesoMatch,
+                _raw: pedido
+            });
+        }
+    });
+
+    // 4. Ordenar por prioridad y fecha de entrega
+    disponibles.sort((a, b) => {
+        const ordenPrio = { urgente: 0, alta: 0, media: 1, normal: 1, baja: 2 };
+        const pa = ordenPrio[a.prioridad] ?? 1;
+        const pb = ordenPrio[b.prioridad] ?? 1;
+        if (pa !== pb) return pa - pb;
+        const fa = a.fechaEntrega ? new Date(a.fechaEntrega).getTime() : Infinity;
+        const fb = b.fechaEntrega ? new Date(b.fechaEntrega).getTime() : Infinity;
+        return fa - fb;
+    });
+
+    DEBUG_MODE && console.log('[V2] Pedidos disponibles para área "' + areaTablet + '":', disponibles.length);
+
+    // 5. Renderizar (lógica real en Paso 2.3) y actualizar badge
+    if (typeof renderizarPedidosDisponibles === 'function') {
+        renderizarPedidosDisponibles(disponibles);
+    }
+    actualizarBadgeDisponibles(disponibles.length);
+
+    return disponibles;
+}
+
+/**
+ * V2: Actualiza el badge numérico de la tab 'Disponibles'.
+ */
+function actualizarBadgeDisponibles(cantidad) {
+    const badge = document.getElementById('multiTabDisponiblesBadge');
+    if (badge) badge.textContent = cantidad;
+}
+
+/**
+ * V2 (Paso 2.3): Renderiza la lista de pedidos disponibles en el contenedor pull.
+ * Reusa clases de pedido-card-multi para heredar estilos.
+ * @param {Array<Object>} disponibles - retorno de cargarPedidosDisponibles()
+ */
+function renderizarPedidosDisponibles(disponibles) {
+    const container = document.getElementById('multiDisponiblesContainer');
+    const sinMsg = document.getElementById('sinDisponibles');
+    if (!container) return;
+
+    // Remover grid anterior
+    const gridAnterior = container.querySelector('.pedidos-grid');
+    if (gridAnterior) gridAnterior.remove();
+
+    if (!disponibles || disponibles.length === 0) {
+        if (sinMsg) sinMsg.style.display = '';
+        return;
+    }
+    if (sinMsg) sinMsg.style.display = 'none';
+
+    let html = '<div class="pedidos-grid">';
+    disponibles.forEach(p => {
+        const prio = (p.prioridad || 'normal').toLowerCase();
+        const fechaEntrega = p.fechaEntrega ? formatearFechaCorta(p.fechaEntrega) : '';
+        const productoNombre = (p.productos && p.productos[0] && (p.productos[0].nombre || p.productos[0].productoNombre)) || '';
+        const procesoNombre = (p.procesoMatch && p.procesoMatch.nombre) || 'Proceso pendiente';
+        const totalPzas = (p.productos || []).reduce((s, pr) => s + (pr.cantidad || 0), 0);
+        const completadasProc = (p.procesoMatch && p.procesoMatch.completadas) || 0;
+        const imgHTML = p.imagen
+            ? `<img src="${S(p.imagen)}" alt="${S(productoNombre)}">`
+            : `<div class="sin-imagen-mini"><i class="fas fa-box"></i></div>`;
+
+        html += `
+            <div class="pedido-card-multi disponible" data-pedido-id="${p.id}">
+                <div class="pedido-card-header-multi">
+                    <span class="pedido-numero-multi">#${S(p.codigo)}</span>
+                    <span class="pedido-prioridad-multi ${prio}">${S(prio)}</span>
+                </div>
+                <div class="pedido-card-info-compact">
+                    <div class="pedido-imagen-mini">${imgHTML}</div>
+                    <div class="pedido-datos-mini">
+                        <div class="pedido-cliente-mini"><i class="fas fa-building"></i> ${S(p.cliente)}</div>
+                        ${productoNombre ? `<div class="pedido-producto-mini">${S(productoNombre)}</div>` : ''}
+                        <div class="pedido-producto-mini"><i class="fas fa-cog"></i> ${S(procesoNombre)}${completadasProc > 0 ? ` <small>(avance: ${completadasProc}/${totalPzas})</small>` : ''}</div>
+                        ${fechaEntrega ? `<div class="pedido-producto-mini"><i class="fas fa-calendar"></i> Entrega: ${S(fechaEntrega)}</div>` : ''}
+                    </div>
+                </div>
+                <div class="pedido-card-footer">
+                    <button class="btn-capturar-piezas" onclick="tomarPedidoDisponible(${p.id})">
+                        <i class="fas fa-hand-pointer"></i> Tomar este pedido
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+
+    container.insertAdjacentHTML('beforeend', html);
+}
+
+/**
+ * V2: Helper para formato corto de fecha en tarjetas disponibles.
+ */
+function formatearFechaCorta(fecha) {
+    try {
+        const d = new Date(fecha);
+        if (isNaN(d.getTime())) return '';
+        return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+    } catch (e) {
+        return '';
+    }
+}
+
+/**
+ * V2 (Paso 2.4): Toma un pedido disponible y lo agrega a los pedidos activos del multi.
+ * - Lee el pedido desde pedidos_erp.
+ * - Construye una entrada compatible con operadoraState.pedidosActivos.
+ * - Guarda en multi_pedidos_estado_local + asignaciones_multi_pedido (compartido entre operadoras).
+ * - Re-renderiza la tarjeta de activos, actualiza badges, regresa a la tab 'Mis Pedidos'.
+ *
+ * Decisión: pedidos compartidos → no se elimina de la lista de disponibles para otras tabletas;
+ * solo se elimina LOCALMENTE en esta tablet porque ya está en sus activos.
+ */
+function tomarPedidoDisponible(pedidoId) {
+    const pedidosERP = safeLocalGet('pedidos_erp', []);
+    const pedido = pedidosERP.find(p => String(p.id) === String(pedidoId));
+    if (!pedido) {
+        mostrarToast('Pedido no encontrado', 'error');
+        return;
+    }
+
+    // Evitar duplicados (race condition: doble click)
+    const yaEsta = operadoraState.pedidosActivos.some(p => String(p.pedidoId) === String(pedidoId));
+    if (yaEsta) {
+        mostrarToast('Este pedido ya está en tu lista', 'warning');
+        return;
+    }
+
+    // Determinar el proceso que va a trabajar esta operadora (el primero pendiente del área)
+    const areaTablet = (CONFIG_ESTACION.area || '').toLowerCase().trim();
+    let procesoMatch = null;
+    let primerProducto = null;
+    (pedido.productos || []).some(prod => {
+        const procs = prod.avanceProcesos || [];
+        return procs.some(proc => {
+            const procEstado = (proc.estado || 'pendiente').toLowerCase();
+            if (procEstado === 'completado') return false;
+            // Match suave (heredamos la misma lógica simplificada del filtrado)
+            const nombre = (proc.nombre || '').toLowerCase();
+            if (nombre.includes(areaTablet)) {
+                procesoMatch = proc;
+                primerProducto = prod;
+                return true;
+            }
+            return false;
+        });
+    });
+
+    // Si no hubo match por nombre, intentar via catálogo db
+    if (!procesoMatch) {
+        try {
+            if (typeof db !== 'undefined' && db && db.data && Array.isArray(db.data.procesos) && Array.isArray(db.data.areas)) {
+                const areaMia = db.data.areas.find(a => (a.nombre || '').toLowerCase().trim() === areaTablet);
+                if (areaMia) {
+                    const procIdsArea = new Set(db.data.procesos.filter(p => p.areaId === areaMia.id).map(p => p.id));
+                    (pedido.productos || []).some(prod => {
+                        const procs = prod.avanceProcesos || [];
+                        return procs.some(proc => {
+                            const procEstado = (proc.estado || 'pendiente').toLowerCase();
+                            if (procEstado === 'completado') return false;
+                            if (procIdsArea.has(proc.procesoId)) {
+                                procesoMatch = proc;
+                                primerProducto = prod;
+                                return true;
+                            }
+                            return false;
+                        });
+                    });
+                }
+            }
+        } catch (e) { DEBUG_MODE && console.warn('[V2] Error en fallback proceso:', e); }
+    }
+
+    if (!procesoMatch) {
+        // Fallback final: primer proceso no completado del primer producto
+        const prod0 = (pedido.productos || [])[0];
+        const procs0 = (prod0 && prod0.avanceProcesos) || [];
+        procesoMatch = procs0.find(pr => (pr.estado || 'pendiente').toLowerCase() !== 'completado');
+        primerProducto = prod0;
+    }
+
+    if (!procesoMatch) {
+        mostrarToast('Este pedido no tiene procesos pendientes', 'warning');
+        return;
+    }
+
+    // Calcular meta = cantidad del producto, descontando lo ya completado en este proceso
+    const cantidadProducto = (primerProducto && primerProducto.cantidad) || 0;
+    const yaCompletadas = procesoMatch.completadas || 0;
+
+    // Construir entrada compatible con pedidosActivos (ver state inicial en operadoraState)
+    const nuevaEntrada = {
+        id: `${pedido.id}-pull-${Date.now()}`,
+        pedidoId: pedido.id,
+        codigo: pedido.codigo || String(pedido.id),
+        cliente: pedido.cliente || pedido.clienteNombre || 'Cliente',
+        producto: (primerProducto && (primerProducto.nombre || primerProducto.productoNombre)) || '',
+        imagen: pedido.imagen || (primerProducto && primerProducto.imagen) || '',
+        procesoNombre: procesoMatch.nombre || 'Proceso',
+        procesoId: procesoMatch.procesoId || null,
+        piezasCapturadas: yaCompletadas,
+        piezasMeta: cantidadProducto || 100,
+        procesoIniciado: false,
+        procesoEnPausa: false,
+        tiempoProcesoAcumulado: 0,
+        pausaGeneral: false,
+        prioridad: pedido.prioridad || 'media',
+        fechaAsignacion: new Date().toISOString(),
+        fechaEntrega: pedido.fechaEntrega || null,
+        operadores: [],
+        // Marca: este pedido vino por pull-flow V2 (no por asignación manual)
+        v2PullFlow: true,
+        // Campos específicos del área para que cargarDetallesPorArea() los pueda mostrar
+        // Tomamos del producto principal y/o del pedido (sin filtrar, cargarDetallesPorArea ignora los no relevantes)
+        ...primerProducto
+    };
+
+    operadoraState.pedidosActivos.push(nuevaEntrada);
+
+    // Persistir local + sincronizar a asignaciones_multi_pedido para visibilidad en supervisora
+    if (typeof guardarEstadoPedidosMulti === 'function') {
+        guardarEstadoPedidosMulti();
+    }
+
+    // Re-render
+    if (typeof renderizarTarjetasPedidos === 'function') renderizarTarjetasPedidos();
+    if (typeof actualizarContadorPedidos === 'function') actualizarContadorPedidos();
+
+    // Actualizar tab badge de activos
+    const badgeActivos = document.getElementById('multiTabActivosBadge');
+    if (badgeActivos) badgeActivos.textContent = operadoraState.pedidosActivos.length;
+
+    // Refrescar la lista de disponibles (este pedido ya no aparecerá para esta tablet)
+    if (typeof cargarPedidosDisponibles === 'function') cargarPedidosDisponibles();
+
+    mostrarToast(`Pedido #${nuevaEntrada.codigo} agregado a tu lista`, 'success');
+
+    // Volver a la tab 'Mis Pedidos' para que vea el resultado
+    if (typeof switchMultiTab === 'function') switchMultiTab('activos');
+
+    DEBUG_MODE && console.log('[V2] Pedido tomado por pull-flow:', nuevaEntrada);
+}
+
+/**
+ * V2 (Paso 2.5): Inicia el auto-refresh de la lista de disponibles + listener sync-update.
+ * Se invoca una sola vez al entrar al modo multi-pedido.
+ */
+function iniciarAutoRefreshDisponibles() {
+    // Evitar duplicar intervalos
+    if (window._v2DisponiblesInterval) {
+        clearInterval(window._v2DisponiblesInterval);
+    }
+
+    // Auto-refresh cada 15 segundos (solo si la tab disponibles está visible)
+    window._v2DisponiblesInterval = setInterval(function() {
+        const cont = document.getElementById('multiDisponiblesContainer');
+        if (cont && cont.style.display !== 'none' && typeof cargarPedidosDisponibles === 'function') {
+            cargarPedidosDisponibles();
+        } else if (typeof cargarPedidosDisponibles === 'function') {
+            // Aunque no esté visible, refrescar el badge en background
+            const lista = cargarPedidosDisponibles();
+            actualizarBadgeDisponibles(lista.length);
+        }
+    }, 15000);
+
+    // Listener de sync-update para reaccionar inmediatamente a cambios remotos
+    if (!window._v2SyncListener) {
+        window._v2SyncListener = function(e) {
+            const key = e && e.detail && e.detail.key;
+            if (key === 'pedidos_erp' || key === 'asignaciones_multi_pedido') {
+                DEBUG_MODE && console.log('[V2] sync-update recibido (' + key + '), refrescando disponibles');
+                if (typeof cargarPedidosDisponibles === 'function') {
+                    cargarPedidosDisponibles();
+                }
+            }
+        };
+        window.addEventListener('sync-update', window._v2SyncListener);
+    }
+
+    DEBUG_MODE && console.log('[V2] Auto-refresh de pedidos disponibles iniciado (cada 15s + sync)');
+}
+
+/**
+ * V2: Cambia entre tabs 'activos' (Mis Pedidos) y 'disponibles' (lista pull).
+ * Muestra/oculta los contenedores correspondientes.
+ */
+function switchMultiTab(tab) {
+    // Actualizar estado visual de los tabs
+    document.querySelectorAll('.multi-pedido-tabs .pedido-tab').forEach(function(btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-multi-tab') === tab);
+    });
+
+    const contActivos = document.getElementById('multiPedidosContainer');
+    const contDisponibles = document.getElementById('multiDisponiblesContainer');
+    const capturaRapida = document.getElementById('capturaRapidaMulti');
+
+    if (tab === 'disponibles') {
+        if (contActivos) contActivos.style.display = 'none';
+        if (capturaRapida) capturaRapida.style.display = 'none';
+        if (contDisponibles) contDisponibles.style.display = 'block';
+        // Cargar la lista al cambiar de tab (lógica real en 2.2-2.3)
+        if (typeof cargarPedidosDisponibles === 'function') {
+            cargarPedidosDisponibles();
+        }
+    } else {
+        if (contDisponibles) contDisponibles.style.display = 'none';
+        if (contActivos) contActivos.style.display = '';
+        // capturaRapida la maneja su propia lógica de selección
+    }
+}
+
+/**
+ * V2: Refresca manualmente la lista de pedidos disponibles.
+ * Stub en 2.1; lógica real en 2.2-2.3.
+ */
+function refrescarPedidosDisponibles() {
+    if (typeof cargarPedidosDisponibles === 'function') {
+        cargarPedidosDisponibles();
+        mostrarToast('Buscando pedidos disponibles para tu área...', 'info');
+    } else {
+        DEBUG_MODE && console.log('[V2] cargarPedidosDisponibles aún no implementada (Paso 2.2 pendiente)');
+    }
 }
 
 // ========================================

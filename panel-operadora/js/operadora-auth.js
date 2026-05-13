@@ -18,6 +18,62 @@ const CONFIG_ESTACION = {
     nombre: localStorage.getItem('estacion_nombre') || 'Estación 1'
 };
 
+// ========================================
+// FEATURE FLAG: ERP MULTIFUNDAS V2 (Pull flow + multi-pedido generalizado)
+// ========================================
+// Cuando está activo, todas las áreas usan el modo multi-pedido (no solo Calidad/Empaque),
+// la operadora puede tomar pedidos de una lista pull, y la asignación de supervisora es opcional.
+// Se controla globalmente via localStorage('multifundas_v2_enabled') o por estación
+// via localStorage('multifundas_v2_estaciones') = '["C1","C2",...]'.
+//
+// Default: false (modo legacy, sin cambios)
+// Para activar piloto en C1: localStorage.setItem('multifundas_v2_enabled', 'true')
+//                            o localStorage.setItem('multifundas_v2_estaciones', '["C1"]')
+function isMultifundasV2Enabled() {
+    try {
+        // 1. Flag global
+        if (localStorage.getItem('multifundas_v2_enabled') === 'true') {
+            return true;
+        }
+        // 2. Flag por estación específica (lista blanca)
+        var estaciones = localStorage.getItem('multifundas_v2_estaciones');
+        if (estaciones) {
+            var lista = JSON.parse(estaciones);
+            if (Array.isArray(lista) && lista.indexOf(CONFIG_ESTACION.id) !== -1) {
+                return true;
+            }
+        }
+    } catch (e) {
+        console.warn('[V2] Error leyendo feature flag:', e);
+    }
+    return false;
+}
+
+// Exponer en window para que operadora.js y la consola puedan consultarlo
+window.MULTIFUNDAS_V2 = {
+    isEnabled: isMultifundasV2Enabled,
+    // Helper para activar/desactivar desde consola en piloto
+    enable: function() {
+        localStorage.setItem('multifundas_v2_enabled', 'true');
+        console.log('[V2] Modo V2 ACTIVADO globalmente. Recarga la página.');
+    },
+    disable: function() {
+        localStorage.removeItem('multifundas_v2_enabled');
+        localStorage.removeItem('multifundas_v2_estaciones');
+        console.log('[V2] Modo V2 DESACTIVADO. Recarga la página.');
+    },
+    enableForStation: function(estacionId) {
+        var lista = JSON.parse(localStorage.getItem('multifundas_v2_estaciones') || '[]');
+        if (lista.indexOf(estacionId) === -1) {
+            lista.push(estacionId);
+            localStorage.setItem('multifundas_v2_estaciones', JSON.stringify(lista));
+        }
+        console.log('[V2] Modo V2 activado para estación:', estacionId);
+    }
+};
+
+DEBUG_MODE && console.log('[V2] Feature flag check - habilitado:', isMultifundasV2Enabled(), 'para estación', CONFIG_ESTACION.id);
+
 // Base de datos de operadoras (fallback local si no hay Supabase)
 function getOperadorasDB() {
     const saved = localStorage.getItem('operadoras_db');

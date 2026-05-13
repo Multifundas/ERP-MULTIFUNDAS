@@ -412,15 +412,23 @@ function getAreaConfig() {
 // VALIDACIONES ESPECÍFICAS POR ÁREA
 // ========================================
 
-function validarCapturaArea(cantidad) {
+/**
+ * Valida una captura según las reglas del área de la estación.
+ * @param {number} cantidad - Cantidad a capturar.
+ * @param {object} [pedido] - V2: pedido específico en modo multi. Si se omite,
+ *                            usa operadoraState.procesoActual (legacy).
+ * @returns {{valido: boolean, mensaje?: string}}
+ */
+function validarCapturaArea(cantidad, pedido) {
     const area = CONFIG_ESTACION.area;
+    // V2: fuente de datos: pedido (modo multi) o procesoActual (legacy)
+    const fuente = pedido || (typeof operadoraState !== 'undefined' ? operadoraState.procesoActual : null) || {};
 
-    // Validaciones específicas
     switch(area) {
         case 'empaque':
             // En empaque, generalmente se capturan paquetes completos
-            const pzasPorPaquete = operadoraState.procesoActual?.cantidadPorPaquete || 1;
-            if (cantidad % pzasPorPaquete !== 0) {
+            const pzasPorPaquete = fuente.cantidadPorPaquete || 1;
+            if (pzasPorPaquete > 1 && cantidad % pzasPorPaquete !== 0) {
                 return {
                     valido: false,
                     mensaje: `En empaque, captura múltiplos de ${pzasPorPaquete} (piezas por paquete)`
@@ -430,8 +438,8 @@ function validarCapturaArea(cantidad) {
 
         case 'corte':
             // En corte, se capturan por capas
-            const capas = operadoraState.procesoActual?.capas || 1;
-            if (cantidad > capas * 10) {
+            const capas = fuente.capas || 1;
+            if (capas > 1 && cantidad > capas * 10) {
                 return {
                     valido: false,
                     mensaje: `Cantidad muy alta para ${capas} capas. Verifica.`

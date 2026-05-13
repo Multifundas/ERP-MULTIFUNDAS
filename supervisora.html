@@ -86,6 +86,10 @@
                 <i class="fas fa-industry"></i>
                 <span>Vista Planta</span>
             </button>
+            <button class="nav-tab" onclick="showSection('timeline')" data-section="timeline">
+                <i class="fas fa-stream"></i>
+                <span>Timeline</span>
+            </button>
             <button class="nav-tab" onclick="showSection('dashboard')" data-section="dashboard">
                 <i class="fas fa-chart-line"></i>
                 <span>Mi Dashboard</span>
@@ -110,6 +114,16 @@
 
         <!-- Sección: Vista Planta (existente) -->
         <div id="section-planta" class="coco-section active">
+            <!-- V2 (Fase 4): Banner educativo - asignación es opcional con pull-flow -->
+            <div class="v2-banner-pull" id="v2BannerPull" style="background:linear-gradient(90deg,#dbeafe,#ede9fe);border-left:4px solid #6366f1;padding:10px 16px;margin:8px 12px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <span style="font-size:0.92rem;color:#1e293b;">
+                    <i class="fas fa-info-circle" style="color:#6366f1"></i>
+                    <strong>Modo pull activo:</strong> las operadoras pueden tomar pedidos disponibles para su área sin asignación manual. Asignar manualmente sigue funcionando si lo necesitas.
+                </span>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('v2BannerPull').style.display='none';" title="Ocultar">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
             <!-- Main Content -->
             <div class="supervisora-main">
             <!-- Sidebar izquierdo - Pedidos del día (ampliado) -->
@@ -219,6 +233,35 @@
         </div>
         </div>
         <!-- Fin Sección Vista Planta -->
+
+        <!-- V2 (Fase 4): Sección Timeline de actividad -->
+        <div id="section-timeline" class="coco-section">
+            <div class="timeline-container" style="padding:20px;max-width:1100px;margin:0 auto;">
+                <div class="timeline-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+                    <h2 style="margin:0;"><i class="fas fa-stream"></i> Timeline de Actividad</h2>
+                    <div class="timeline-controls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                        <label style="font-size:0.85rem;">Filtrar por:</label>
+                        <input type="date" id="timelineFiltroFecha" onchange="refrescarTimeline()" style="padding:6px;border-radius:6px;border:1px solid #cbd5e1;">
+                        <select id="timelineFiltroTipo" onchange="refrescarTimeline()" style="padding:6px;border-radius:6px;border:1px solid #cbd5e1;">
+                            <option value="todos">Todos los eventos</option>
+                            <option value="produccion">Solo producción</option>
+                            <option value="procesos">Solo procesos</option>
+                            <option value="tiempos_muertos">Solo tiempos muertos</option>
+                            <option value="turnos">Solo turnos</option>
+                        </select>
+                        <select id="timelineFiltroArea" onchange="refrescarTimeline()" style="padding:6px;border-radius:6px;border:1px solid #cbd5e1;">
+                            <option value="todas">Todas las áreas</option>
+                            <!-- Se llenan dinámicamente -->
+                        </select>
+                        <input type="text" id="timelineFiltroBusqueda" placeholder="Buscar operadora o pedido..." oninput="refrescarTimeline()" style="padding:6px;border-radius:6px;border:1px solid #cbd5e1;">
+                        <button class="btn btn-secondary" onclick="refrescarTimeline()"><i class="fas fa-sync-alt"></i></button>
+                    </div>
+                </div>
+                <div id="timelineLista" class="timeline-lista">
+                    <p class="text-muted" style="text-align:center;padding:40px;">Cargando timeline...</p>
+                </div>
+            </div>
+        </div>
 
         <!-- Sección: Dashboard Personalizado de Coco -->
         <div id="section-dashboard" class="coco-section">

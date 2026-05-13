@@ -195,8 +195,22 @@ function showNuevoPedidoModal() {
     const clientes = db.getClientes();
     const productos = db.getProductos();
 
+    // V2: resetear estado del modo express y rutas editadas al abrir
+    rutasEditadasPorProducto = {};
+    rutaExpressActual = [];
+
     const content = `
         <form id="nuevoPedidoForm">
+            <!-- V2: Toggle Modo Express -->
+            <div class="form-group v2-modo-express-toggle" style="border:1px dashed #cbd5e1;padding:10px;border-radius:8px;margin-bottom:14px;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="toggleModoExpress" onchange="toggleModoExpress()">
+                    <i class="fas fa-bolt" style="color:#f59e0b"></i>
+                    <strong>Pedido Express</strong>
+                    <small class="text-muted">(sin producto formal — define cliente, descripción, cantidad y ruta de procesos)</small>
+                </label>
+            </div>
+
             <div class="form-row">
                 <div class="form-group">
                     <label># Pedido *</label>
@@ -210,12 +224,37 @@ function showNuevoPedidoModal() {
                     </select>
                 </div>
             </div>
-            <div class="form-group">
+
+            <!-- Bloque modo normal: lista de productos del cliente -->
+            <div class="form-group" id="modoNormalBlock">
                 <label>Productos</label>
                 <div id="productosContainer">
                     <p class="text-muted">Seleccione un cliente para ver sus productos</p>
                 </div>
             </div>
+
+            <!-- V2: Bloque modo express -->
+            <div class="form-group" id="modoExpressBlock" style="display:none;">
+                <label><i class="fas fa-bolt" style="color:#f59e0b"></i> Definición rápida del pedido</label>
+                <div class="form-row">
+                    <div class="form-group" style="flex:2">
+                        <label>Descripción / Producto *</label>
+                        <input type="text" id="expressDescripcion" placeholder="Ej: Funda especial sin catálogo">
+                    </div>
+                    <div class="form-group">
+                        <label>Cantidad *</label>
+                        <input type="number" id="expressCantidad" min="1" placeholder="100">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-route"></i> Ruta de procesos *</label>
+                    <p class="text-muted text-small">Arma la secuencia de procesos por los que debe pasar este pedido</p>
+                    <div id="rutaExpressContainer">
+                        <!-- Se renderiza dinámicamente -->
+                    </div>
+                </div>
+            </div>
+
             <div class="form-row">
                 <div class="form-group">
                     <label>Prioridad *</label>
@@ -257,6 +296,203 @@ function showNuevoPedidoModal() {
     openModal('Nuevo Pedido', content, savePedido);
 }
 
+// ========================================
+// V2 (Fase 3): Rutas editables + Modo Express
+// ========================================
+
+// Estado de rutas editadas por producto (id producto → array de procesos)
+// Si el admin no edita la ruta de un producto, se usa producto.rutaProcesos por default.
+let rutasEditadasPorProducto = {};
+
+// Ruta del modo express (cuando no hay producto formal)
+let rutaExpressActual = [];
+
+/**
+ * V2: Toggle entre modo normal (con productos) y modo express (sin producto formal).
+ */
+function toggleModoExpress() {
+    const toggle = document.getElementById('toggleModoExpress');
+    const modoNormal = document.getElementById('modoNormalBlock');
+    const modoExpress = document.getElementById('modoExpressBlock');
+    if (!toggle) return;
+
+    if (toggle.checked) {
+        if (modoNormal) modoNormal.style.display = 'none';
+        if (modoExpress) modoExpress.style.display = '';
+        // Inicializar ruta express con un paso vacío
+        if (rutaExpressActual.length === 0) {
+            rutaExpressActual = [];
+        }
+        renderRutaExpress();
+    } else {
+        if (modoExpress) modoExpress.style.display = 'none';
+        if (modoNormal) modoNormal.style.display = '';
+    }
+}
+
+/**
+ * V2: Renderiza la ruta editable del modo express dentro de #rutaExpressContainer.
+ */
+function renderRutaExpress() {
+    const container = document.getElementById('rutaExpressContainer');
+    if (!container) return;
+    const procesosCatalogo = db.getProcesos();
+
+    let html = '<div class="ruta-pasos-list">';
+    rutaExpressActual.forEach((paso, idx) => {
+        html += renderPasoRutaHTML(paso, idx, procesosCatalogo, 'express');
+    });
+    html += '</div>';
+    html += `
+        <button type="button" class="btn btn-secondary btn-sm" onclick="agregarPasoRutaExpress()" style="margin-top:8px;">
+            <i class="fas fa-plus"></i> Agregar proceso
+        </button>
+    `;
+    container.innerHTML = html;
+}
+
+/**
+ * V2: Renderiza la ruta editable para un producto específico (modo normal).
+ * Se llama cuando el admin hace click en "Editar ruta" en un producto marcado.
+ */
+function renderRutaProducto(productoId) {
+    const container = document.getElementById(`rutaProducto_${productoId}`);
+    if (!container) return;
+    const procesosCatalogo = db.getProcesos();
+    const ruta = rutasEditadasPorProducto[productoId] || [];
+
+    let html = '<div class="ruta-pasos-list">';
+    ruta.forEach((paso, idx) => {
+        html += renderPasoRutaHTML(paso, idx, procesosCatalogo, 'producto', productoId);
+    });
+    html += '</div>';
+    html += `
+        <button type="button" class="btn btn-secondary btn-sm" onclick="agregarPasoRutaProducto(${productoId})" style="margin-top:8px;">
+            <i class="fas fa-plus"></i> Agregar proceso
+        </button>
+    `;
+    container.innerHTML = html;
+}
+
+/**
+ * V2: HTML para un paso individual de la ruta (reusable entre express y producto).
+ */
+function renderPasoRutaHTML(paso, idx, procesosCatalogo, contexto, productoId) {
+    const procesoIdActual = paso.procesoId || '';
+    const onChangeFn = contexto === 'express'
+        ? `actualizarPasoRutaExpress(${idx}, this)`
+        : `actualizarPasoRutaProducto(${productoId}, ${idx}, this)`;
+    const onMoverArriba = contexto === 'express'
+        ? `moverPasoRutaExpress(${idx}, -1)`
+        : `moverPasoRutaProducto(${productoId}, ${idx}, -1)`;
+    const onMoverAbajo = contexto === 'express'
+        ? `moverPasoRutaExpress(${idx}, 1)`
+        : `moverPasoRutaProducto(${productoId}, ${idx}, 1)`;
+    const onQuitar = contexto === 'express'
+        ? `quitarPasoRutaExpress(${idx})`
+        : `quitarPasoRutaProducto(${productoId}, ${idx})`;
+
+    return `
+        <div class="ruta-paso" style="display:flex;align-items:center;gap:6px;padding:6px;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:4px;">
+            <span style="min-width:24px;font-weight:bold;color:#667eea;">${idx + 1}.</span>
+            <select onchange="${onChangeFn}" style="flex:1;">
+                <option value="">— Selecciona proceso —</option>
+                ${procesosCatalogo.map(p => `<option value="${p.id}" ${String(p.id) === String(procesoIdActual) ? 'selected' : ''}>${S(p.nombre)}</option>`).join('')}
+            </select>
+            <button type="button" class="btn-icon-small" title="Subir" onclick="${onMoverArriba}"><i class="fas fa-arrow-up"></i></button>
+            <button type="button" class="btn-icon-small" title="Bajar" onclick="${onMoverAbajo}"><i class="fas fa-arrow-down"></i></button>
+            <button type="button" class="btn-icon-small" title="Quitar" onclick="${onQuitar}" style="color:#ef4444;"><i class="fas fa-times"></i></button>
+        </div>
+    `;
+}
+
+// ----- Acciones ruta express -----
+function agregarPasoRutaExpress() {
+    rutaExpressActual.push({ procesoId: '', nombre: '', orden: rutaExpressActual.length + 1 });
+    renderRutaExpress();
+}
+
+function quitarPasoRutaExpress(idx) {
+    rutaExpressActual.splice(idx, 1);
+    renderRutaExpress();
+}
+
+function moverPasoRutaExpress(idx, direccion) {
+    const nuevoIdx = idx + direccion;
+    if (nuevoIdx < 0 || nuevoIdx >= rutaExpressActual.length) return;
+    const [item] = rutaExpressActual.splice(idx, 1);
+    rutaExpressActual.splice(nuevoIdx, 0, item);
+    renderRutaExpress();
+}
+
+function actualizarPasoRutaExpress(idx, selectEl) {
+    const procesoId = selectEl.value;
+    const proc = db.getProceso(parseInt(procesoId));
+    if (rutaExpressActual[idx]) {
+        rutaExpressActual[idx].procesoId = procesoId;
+        rutaExpressActual[idx].nombre = proc ? proc.nombre : '';
+    }
+}
+
+// ----- Acciones ruta por producto -----
+function agregarPasoRutaProducto(productoId) {
+    if (!rutasEditadasPorProducto[productoId]) {
+        rutasEditadasPorProducto[productoId] = [];
+    }
+    const ruta = rutasEditadasPorProducto[productoId];
+    ruta.push({ procesoId: '', nombre: '', orden: ruta.length + 1 });
+    renderRutaProducto(productoId);
+}
+
+function quitarPasoRutaProducto(productoId, idx) {
+    const ruta = rutasEditadasPorProducto[productoId] || [];
+    ruta.splice(idx, 1);
+    renderRutaProducto(productoId);
+}
+
+function moverPasoRutaProducto(productoId, idx, direccion) {
+    const ruta = rutasEditadasPorProducto[productoId] || [];
+    const nuevoIdx = idx + direccion;
+    if (nuevoIdx < 0 || nuevoIdx >= ruta.length) return;
+    const [item] = ruta.splice(idx, 1);
+    ruta.splice(nuevoIdx, 0, item);
+    renderRutaProducto(productoId);
+}
+
+function actualizarPasoRutaProducto(productoId, idx, selectEl) {
+    const procesoId = selectEl.value;
+    const proc = db.getProceso(parseInt(procesoId));
+    const ruta = rutasEditadasPorProducto[productoId] || [];
+    if (ruta[idx]) {
+        ruta[idx].procesoId = procesoId;
+        ruta[idx].nombre = proc ? proc.nombre : '';
+    }
+}
+
+/**
+ * V2: Toggle UI de "Editar ruta" para un producto en el modal de nuevo pedido.
+ */
+function toggleEditarRutaProducto(productoId) {
+    const wrapper = document.getElementById(`rutaWrapper_${productoId}`);
+    if (!wrapper) return;
+    if (wrapper.style.display === 'none' || wrapper.style.display === '') {
+        // Inicializar con la ruta default del producto si no existe edición previa
+        if (!rutasEditadasPorProducto[productoId]) {
+            const productoCatalogo = db.getProductos().find(p => p.id === productoId);
+            const rutaBase = (productoCatalogo && productoCatalogo.rutaProcesos) || (productoCatalogo && productoCatalogo.procesos) || [];
+            rutasEditadasPorProducto[productoId] = rutaBase.map((proc, i) => ({
+                procesoId: proc.procesoId || proc.id || '',
+                nombre: proc.nombre || '',
+                orden: proc.orden || i + 1
+            }));
+        }
+        wrapper.style.display = 'block';
+        renderRutaProducto(productoId);
+    } else {
+        wrapper.style.display = 'none';
+    }
+}
+
 function updateProductosCliente(clienteId) {
     const container = document.getElementById('productosContainer');
     if (!clienteId) {
@@ -272,7 +508,7 @@ function updateProductosCliente(clienteId) {
     }
 
     container.innerHTML = productos.map(p => `
-        <div class="producto-pedido-row">
+        <div class="producto-pedido-row" style="flex-wrap:wrap;">
             <input type="checkbox" name="producto_${p.id}" id="prod_${p.id}"
                    data-precio="${p.precioVenta || 0}"
                    onchange="calcularPresupuestoPedido()">
@@ -283,6 +519,14 @@ function updateProductosCliente(clienteId) {
             <input type="number" name="cantidad_${p.id}" placeholder="Cant" min="1"
                    class="cantidad-input" data-precio="${p.precioVenta || 0}"
                    onchange="calcularPresupuestoPedido()" oninput="calcularPresupuestoPedido()">
+            <!-- V2: botón para editar ruta de procesos de este producto en el pedido -->
+            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditarRutaProducto(${p.id})" title="Editar ruta de procesos para este pedido">
+                <i class="fas fa-route"></i> Ruta
+            </button>
+            <div id="rutaWrapper_${p.id}" style="display:none;width:100%;margin-top:6px;padding:8px;background:#f8fafc;border-radius:6px;">
+                <small class="text-muted"><i class="fas fa-info-circle"></i> Editar ruta sobreescribe la ruta default del producto solo para este pedido.</small>
+                <div id="rutaProducto_${p.id}"></div>
+            </div>
         </div>
     `).join('');
 
@@ -403,43 +647,108 @@ async function savePedido() {
         return;
     }
 
+    // V2: detectar modo express
+    const toggleExpress = document.getElementById('toggleModoExpress');
+    const esExpress = !!(toggleExpress && toggleExpress.checked);
+
     const productos = [];
     const allProductos = db.getProductosByCliente(clienteId);
-
     const procesosCatalogo = db.getProcesos();
 
-    allProductos.forEach(p => {
-        const checked = form.querySelector(`input[name="producto_${p.id}"]`).checked;
-        const cantidad = parseInt(form.querySelector(`input[name="cantidad_${p.id}"]`).value);
-        if (checked && cantidad > 0) {
-            // Generar avanceProcesos desde rutaProcesos del producto
-            const rutaProcesos = p.rutaProcesos || p.procesos || [];
-            const avanceProcesos = rutaProcesos.map((proc, i) => {
-                // rutaProcesos puede tener procesoId o solo nombre
-                const procesoInfo = proc.procesoId
-                    ? procesosCatalogo.find(pr => pr.id == proc.procesoId)
-                    : procesosCatalogo.find(pr => pr.nombre === proc.nombre);
-                return {
-                    procesoId: proc.procesoId || proc.id || `rp_${i}`,
-                    procesoOrden: proc.orden || i + 1,
-                    nombre: proc.nombre || procesoInfo?.nombre || `Proceso ${i + 1}`,
-                    completadas: 0,
-                    estado: 'pendiente'
-                };
-            });
+    if (esExpress) {
+        // V2: Modo Express — un único "producto" sintético sin productoId
+        const descripcion = (document.getElementById('expressDescripcion')?.value || '').trim();
+        const cantidad = parseInt(document.getElementById('expressCantidad')?.value || '0');
 
-            productos.push({
-                productoId: p.id,
-                cantidad,
-                completadas: 0,
-                precioUnitario: p.precioVenta || 0,
-                avanceProcesos: avanceProcesos
-            });
+        if (!descripcion) {
+            alert('Ingrese una descripción para el pedido express');
+            return;
         }
-    });
+        if (!cantidad || cantidad <= 0) {
+            alert('Ingrese una cantidad válida para el pedido express');
+            return;
+        }
+        // Validar ruta: al menos un proceso con procesoId definido
+        const rutaValida = rutaExpressActual.filter(r => r.procesoId);
+        if (rutaValida.length === 0) {
+            alert('El pedido express debe tener al menos un proceso en la ruta');
+            return;
+        }
+
+        const avanceProcesos = rutaValida.map((proc, i) => {
+            const procInfo = procesosCatalogo.find(pr => String(pr.id) === String(proc.procesoId));
+            return {
+                procesoId: proc.procesoId,
+                procesoOrden: i + 1,
+                nombre: proc.nombre || (procInfo && procInfo.nombre) || `Proceso ${i + 1}`,
+                completadas: 0,
+                estado: 'pendiente'
+            };
+        });
+
+        productos.push({
+            productoId: null,
+            productoNombre: descripcion,
+            nombre: descripcion,
+            descripcion: descripcion,
+            cantidad,
+            completadas: 0,
+            precioUnitario: 0,
+            avanceProcesos: avanceProcesos,
+            esExpress: true
+        });
+    } else {
+        // Modo normal: productos del catálogo del cliente
+        allProductos.forEach(p => {
+            const checked = form.querySelector(`input[name="producto_${p.id}"]`).checked;
+            const cantidad = parseInt(form.querySelector(`input[name="cantidad_${p.id}"]`).value);
+            if (checked && cantidad > 0) {
+                // V2: si el admin editó la ruta, usar esa; si no, usar la del producto
+                const rutaEditada = rutasEditadasPorProducto[p.id];
+                let rutaProcesos;
+                if (rutaEditada && rutaEditada.length > 0) {
+                    rutaProcesos = rutaEditada.filter(r => r.procesoId);
+                    if (rutaProcesos.length === 0) {
+                        alert(`La ruta editada del producto "${p.nombre}" no tiene procesos válidos`);
+                        throw new Error('Ruta inválida');
+                    }
+                } else {
+                    rutaProcesos = p.rutaProcesos || p.procesos || [];
+                }
+
+                // V2: validar que el producto tenga al menos un proceso
+                if (!rutaProcesos || rutaProcesos.length === 0) {
+                    alert(`El producto "${p.nombre}" no tiene ruta de procesos definida. Edita la ruta antes de continuar.`);
+                    throw new Error('Producto sin ruta');
+                }
+
+                const avanceProcesos = rutaProcesos.map((proc, i) => {
+                    const procesoInfo = proc.procesoId
+                        ? procesosCatalogo.find(pr => pr.id == proc.procesoId)
+                        : procesosCatalogo.find(pr => pr.nombre === proc.nombre);
+                    return {
+                        procesoId: proc.procesoId || proc.id || `rp_${i}`,
+                        procesoOrden: proc.orden || i + 1,
+                        nombre: proc.nombre || procesoInfo?.nombre || `Proceso ${i + 1}`,
+                        completadas: 0,
+                        estado: 'pendiente'
+                    };
+                });
+
+                productos.push({
+                    productoId: p.id,
+                    cantidad,
+                    completadas: 0,
+                    precioUnitario: p.precioVenta || 0,
+                    avanceProcesos: avanceProcesos,
+                    rutaPersonalizada: !!(rutaEditada && rutaEditada.length > 0)
+                });
+            }
+        });
+    }
 
     if (productos.length === 0) {
-        alert('Seleccione al menos un producto con cantidad');
+        alert(esExpress ? 'Complete los datos del pedido express' : 'Seleccione al menos un producto con cantidad');
         return;
     }
 
@@ -466,6 +775,7 @@ async function savePedido() {
         fechaEntrega: formData.get('fechaEntrega'),
         notas: formData.get('notas'),
         presupuestoEstimado: presupuestoEstimado,
+        esExpress: esExpress,
         imagenesApoyo: imagenesApoyoPedido.map(img => ({
             nombre: img.nombre,
             data: img.data
@@ -576,6 +886,18 @@ window.updateProductosEditPedido = updateProductosEditPedido;
 window.renderEditProductos = renderEditProductos;
 window.toggleEditProductoFields = toggleEditProductoFields;
 window.duplicatePedido = duplicatePedido;
+
+// V2 (Fase 3): exponer funciones de ruta editable + modo express
+window.toggleModoExpress = toggleModoExpress;
+window.toggleEditarRutaProducto = toggleEditarRutaProducto;
+window.agregarPasoRutaExpress = agregarPasoRutaExpress;
+window.quitarPasoRutaExpress = quitarPasoRutaExpress;
+window.moverPasoRutaExpress = moverPasoRutaExpress;
+window.actualizarPasoRutaExpress = actualizarPasoRutaExpress;
+window.agregarPasoRutaProducto = agregarPasoRutaProducto;
+window.quitarPasoRutaProducto = quitarPasoRutaProducto;
+window.moverPasoRutaProducto = moverPasoRutaProducto;
+window.actualizarPasoRutaProducto = actualizarPasoRutaProducto;
 
 function viewPedido(id) {
     const pedido = db.getPedido(id);
